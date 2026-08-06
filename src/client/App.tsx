@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DashboardAction, HomeAssistantState } from '../shared/entities';
 import * as browserApi from './api';
 import { booleanLabel, homeLabel, temperatureNumber, temperatureValue } from './dashboardModel';
@@ -19,7 +19,7 @@ interface CardProps {
 }
 
 const Card = ({ title, status, children, error }: CardProps) => (
-  <section role="group" aria-label={title}>
+  <section className={`card card-${title.toLowerCase().replaceAll(' ', '-')}`} role="group" aria-label={title}>
     <h2>{title}</h2>
     <p role="status" aria-live="polite" aria-label={`${title} status`}>{status}</p>
     {children}
@@ -31,6 +31,19 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [repairOpen, setRepairOpen] = useState(false);
+  const repairButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!repairOpen) return;
+    closeButton.current?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setRepairOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [repairOpen]);
+
+  useEffect(() => { if (!repairOpen) repairButton.current?.focus(); }, [repairOpen]);
 
   useEffect(() => {
     let active = true;
@@ -69,7 +82,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   };
 
   return (
-    <main>
+    <main className="dashboard">
       <h1>Smarthjem</h1>
       {errors.load && <p role="alert">{errors.load}</p>}
       <Card title="Hjemmestatus" status={homeLabel(states.home)} error={errors.home}>
@@ -95,8 +108,9 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
         <button type="button" aria-label="Øk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(1)}>+</button>
       </Card>
       <Card title="Reparer smarthuset" status="Ikke startet">
-        <button type="button">Reparer smarthuset</button>
+        <button ref={repairButton} className="repair-button" type="button" onClick={() => setRepairOpen(true)}>Reparer smarthuset</button>
       </Card>
+      {repairOpen && <div className="modal-backdrop" role="presentation"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><div><h2 id="repair-title">Reparer smarthuset</h2><button ref={closeButton} type="button" onClick={() => setRepairOpen(false)}>Lukk</button></div><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/" /></section></div>}
     </main>
   );
 }

@@ -87,4 +87,27 @@ describe('App', () => {
     confirm({ states: { climate: state('climate.room', 'cool', { temperature: 22 }) } });
     await waitFor(() => expect(within(coolingCard).getByText('22 °C')).toBeInTheDocument());
   });
+
+  it('opens the repair panel with the Home Assistant iframe and moves focus to close', async () => {
+    render(<App api={createApi({})} />);
+
+    const repairButton = screen.getByRole('button', { name: 'Reparer smarthuset' });
+    fireEvent.click(repairButton);
+
+    const dialog = screen.getByRole('dialog', { name: 'Reparer smarthuset' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(within(dialog).getByTitle('Reparer smarthuset')).toHaveAttribute('src', 'http://192.168.1.127:8080/');
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Lukk' })).toHaveFocus());
+  });
+
+  it('closes the repair panel with Escape and restores focus to its invoker', () => {
+    render(<App api={createApi({})} />);
+
+    const repairButton = screen.getByRole('button', { name: 'Reparer smarthuset' });
+    fireEvent.click(repairButton);
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Reparer smarthuset' }), { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Reparer smarthuset' })).not.toBeInTheDocument();
+    expect(repairButton).toHaveFocus();
+  });
 });
