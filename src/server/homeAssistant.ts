@@ -49,6 +49,8 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return prototype === Object.prototype || prototype === null;
 };
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
 export class HomeAssistantClient {
   public constructor(
     private readonly baseUrl: string,
@@ -103,18 +105,20 @@ export class HomeAssistantClient {
       const maxTemperature = climate.attributes.max_temp;
       const hasMinTemperature = Object.prototype.hasOwnProperty.call(climate.attributes, 'min_temp');
       const hasMaxTemperature = Object.prototype.hasOwnProperty.call(climate.attributes, 'max_temp');
+      const minBound = isFiniteNumber(minTemperature) ? minTemperature : undefined;
+      const maxBound = isFiniteNumber(maxTemperature) ? maxTemperature : undefined;
       if (
-        (hasMinTemperature && (typeof minTemperature !== 'number' || !Number.isFinite(minTemperature)))
-        || (hasMaxTemperature && (typeof maxTemperature !== 'number' || !Number.isFinite(maxTemperature)))
-        || (hasMinTemperature && hasMaxTemperature && minTemperature > maxTemperature)
+        (hasMinTemperature && minBound === undefined)
+        || (hasMaxTemperature && maxBound === undefined)
+        || (minBound !== undefined && maxBound !== undefined && minBound > maxBound)
       ) {
         throw communicationError();
       }
       const clampedTemperature = Math.max(
-        hasMinTemperature ? minTemperature as number : -Infinity,
+        minBound ?? -Infinity,
         Math.min(
           temperature,
-          hasMaxTemperature ? maxTemperature as number : Infinity,
+          maxBound ?? Infinity,
         ),
       );
 
@@ -157,7 +161,11 @@ export class HomeAssistantClient {
     ) {
       throw communicationError();
     }
-    return payload as HomeAssistantState;
+    return {
+      entity_id: payload.entity_id,
+      state: payload.state,
+      attributes: payload.attributes,
+    };
   }
 
   private headers(): Record<string, string> {
