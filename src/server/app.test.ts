@@ -1,0 +1,107 @@
+import request from 'supertest';
+import { describe, expect, it, vi } from 'vitest';
+import { createApp, type DashboardClient } from './app';
+
+const confirmedGuestMode = {
+  states: {
+    guestMode: { entity_id: 'input_boolean.toggle', state: 'on', attributes: {} },
+  },
+};
+
+const dashboardStates = {
+  states: {
+    home: { entity_id: 'input_select.home_state', state: 'Hjemme', attributes: {} },
+    guestMode: { entity_id: 'input_boolean.toggle', state: 'on', attributes: {} },
+    morning: { entity_id: 'automation.morning', state: 'off', attributes: {} },
+    evening: { entity_id: 'script.evening', state: 'off', attributes: {} },
+    night: { entity_id: 'script.night', state: 'off', attributes: {} },
+    cooling: { entity_id: 'automation.cooling', state: 'on', attributes: {} },
+    climate: { entity_id: 'climate.test', state: 'heat', attributes: {} },
+  },
+};
+
+const createClient = (): DashboardClient => ({
+  getDashboardStates: vi.fn(),
+  execute: vi.fn(),
+  setTemperature: vi.fn(),
+});
+
+describe('dashboard API', () => {
+  it('returns a health status', async () => {
+    const response = await request(createApp(createClient())).get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
+  it('returns dashboard states from the client', async () => {
+    const client = createClient();
+    vi.mocked(client.getDashboardStates).mockResolvedValue(dashboardStates);
+
+    const response = await request(createApp(client)).get('/api/states');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(dashboardStates);
+  });
+
+  it('executes a known guestMode action and returns the confirmed state', async () => {
+    const client = createClient();
+    vi.mocked(client.execute).mockResolvedValue(confirmedGuestMode);
+
+    const response = await request(createApp(client)).post('/api/actions/guestMode').send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(confirmedGuestMode);
+    expect(client.execute).toHaveBeenCalledWith('guestMode', undefined);
+  });
+
+  it('returns 404 for an unknown action without invoking the client', async () => {
+    const client = createClient();
+
+    const response = await request(createApp(client)).post('/api/actions/turn_on').send({});
+
+    expect(response.status).toBe(404);
+    expect(client.execute).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an invalid home option without invoking the client', async () => {
+    const client = createClient();
+
+    const response = await request(createApp(client)).post('/api/actions/home').send({ option: 'Away' });
+
+    expect(response.status).toBe(400);
+    expect(client.execute).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an invalid temperature without invoking the client', async () => {
+    const client = createClient();
+
+    const response = await request(createApp(client)).post('/api/temperature').send({ temperature: '21' });
+
+    expect(response.status).toBe(400);
+    expect(client.setTemperature).not.toHaveBeenCalled();
+  });
+
+  it('normalizes client errors without leaking their detail', async () => {
+    const client = createClient();
+    vi.mocked(client.execute).mockRejectedValue(new Error('upstream token: secret-123'));
+
+    const response = await request(createApp(client)).post('/api/actions/guestMode').send({});
+
+    expect(response.status).toBe(502);
+    expect(response.body).toEqual({ error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' });
+    expect(response.text).not.toContain('secret-123');
+  });
+
+  it('forwards a valid temperature to the client', async () => {
+    const client = createClient();
+    const result = { states: { climate: { entity_id: 'climate.test', state: 'heat', attributes: {} } } };
+    vi.mocked(client.setTemperature).mockResolvedValue(result);
+
+    const response = await request(createApp(client)).post('/api/temperature').send({ temperature: 21.5 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(result);
+    expect(client.setTemperature).toHaveBeenCalledWith(21.5);
+  });
+});
