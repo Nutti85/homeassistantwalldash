@@ -13,13 +13,15 @@ const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 
 interface CardProps {
   title: string;
+  status: string;
   children: React.ReactNode;
   error?: string;
 }
 
-const Card = ({ title, children, error }: CardProps) => (
+const Card = ({ title, status, children, error }: CardProps) => (
   <section role="group" aria-label={title}>
     <h2>{title}</h2>
+    <p role="status" aria-live="polite" aria-label={`${title} status`}>{status}</p>
     {children}
     {error && <p role="alert">{error}</p>}
   </section>
@@ -70,35 +72,29 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     <main>
       <h1>Smarthjem</h1>
       {errors.load && <p role="alert">{errors.load}</p>}
-      <Card title="Hjemmestatus" error={errors.home}>
-        <p>{homeLabel(states.home)}</p>
+      <Card title="Hjemmestatus" status={homeLabel(states.home)} error={errors.home}>
         <button type="button" disabled={pending.home} onClick={() => action('home', 'Hjemme')}>Hjemme</button>
         <button type="button" disabled={pending.home} onClick={() => action('home', 'Borte')}>Borte</button>
       </Card>
-      <Card title="Gjestemodus" error={errors.guestMode}>
-        <p>{booleanLabel(states.guestMode)}</p>
+      <Card title="Gjestemodus" status={booleanLabel(states.guestMode)} error={errors.guestMode}>
         <button type="button" disabled={pending.guestMode} onClick={() => action('guestMode')}>Gjestemodus</button>
       </Card>
-      <Card title="Morgenmodus" error={errors.morning}>
-        <p>{booleanLabel(states.morning)}</p>
+      <Card title="Morgenmodus" status={booleanLabel(states.morning)} error={errors.morning}>
         <button type="button" disabled={pending.morning} onClick={() => action('morning')}>Morgenmodus</button>
       </Card>
-      <Card title="Kveldsmodus" error={errors.evening}>
-        <p>{booleanLabel(states.evening)}</p>
+      <Card title="Kveldsmodus" status={booleanLabel(states.evening)} error={errors.evening}>
         <button type="button" disabled={pending.evening} onClick={() => action('evening')}>Kveldsmodus</button>
       </Card>
-      <Card title="Nattamodus" error={errors.night}>
-        <p>{booleanLabel(states.night)}</p>
+      <Card title="Nattamodus" status={booleanLabel(states.night)} error={errors.night}>
         <button type="button" disabled={pending.night} onClick={() => action('night')}>Nattamodus</button>
       </Card>
-      <Card title="Kjøl huset" error={errors.cooling || errors.temperature}>
-        <p>{booleanLabel(states.cooling)}</p>
+      <Card title="Kjøl huset" status={`${booleanLabel(states.cooling)} ${temperatureValue(states.climate)}`} error={errors.cooling || errors.temperature}>
         <button type="button" disabled={pending.cooling} onClick={() => action('cooling')}>Kjøl huset</button>
         <button type="button" aria-label="Senk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(-1)}>−</button>
-        <output>{temperatureValue(states.climate)}</output>
+        <output aria-label="Temperatur">{temperatureValue(states.climate)}</output>
         <button type="button" aria-label="Øk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(1)}>+</button>
       </Card>
-      <Card title="Reparer smarthuset">
+      <Card title="Reparer smarthuset" status="Ikke startet">
         <button type="button">Reparer smarthuset</button>
       </Card>
     </main>

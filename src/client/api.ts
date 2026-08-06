@@ -6,6 +6,27 @@ export interface DashboardResponse {
 
 const fallbackError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const isHomeAssistantState = (value: unknown): value is HomeAssistantState => (
+  isPlainObject(value)
+  && typeof value.entity_id === 'string'
+  && typeof value.state === 'string'
+  && isPlainObject(value.attributes)
+);
+
+const isDashboardResponse = (value: unknown): value is DashboardResponse => (
+  isPlainObject(value)
+  && isPlainObject(value.states)
+  && Object.values(value.states).every(isHomeAssistantState)
+);
+
 const readResponse = async (response: Response): Promise<DashboardResponse> => {
   const body: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
@@ -15,7 +36,10 @@ const readResponse = async (response: Response): Promise<DashboardResponse> => {
     throw new Error(fallbackError);
   }
 
-  return body as DashboardResponse;
+  if (!isDashboardResponse(body)) {
+    throw new Error(fallbackError);
+  }
+  return body;
 };
 
 const request = async (path: string, init?: RequestInit): Promise<DashboardResponse> => {

@@ -30,6 +30,7 @@ describe('App', () => {
     fireEvent.click(guestCard().getByRole('button', { name: 'Gjestemodus' }));
     expect(guestCard().getByText('Av')).toBeInTheDocument();
     await waitFor(() => expect(guestCard().getByText('På')).toBeInTheDocument());
+    expect(guestCard().getByRole('status', { name: 'Gjestemodus status' })).toHaveTextContent('På');
   });
 
   it('calls home with the selected option', async () => {
@@ -79,7 +80,7 @@ describe('App', () => {
     render(<App api={api} />);
 
     const coolingCard = await screen.findByRole('group', { name: 'Kjøl huset' });
-    expect(within(coolingCard).getByText('21 °C')).toBeInTheDocument();
+    expect(within(coolingCard).getByLabelText('Temperatur')).toHaveTextContent('21 °C');
     fireEvent.click(within(coolingCard).getByRole('button', { name: 'Øk temperatur' }));
     expect(api.setTemperature).toHaveBeenCalledWith(22);
     expect(within(coolingCard).getByText('21 °C')).toBeInTheDocument();
