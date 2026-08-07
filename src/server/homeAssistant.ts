@@ -61,9 +61,13 @@ export class HomeAssistantClient {
         throw communicationError();
       }
       const entityId = this.entities[action];
-      if (action === 'cooling') {
-        const cooling = await this.getState(entityId);
-        service = cooling.state === 'on' ? 'automation/turn_off' : 'automation/turn_on';
+      if (action === 'cooling' || action === 'guestMode') {
+        const current = await this.getState(entityId);
+        if (action === 'cooling') {
+          service = current.state === 'on' ? 'automation/turn_off' : 'automation/turn_on';
+        } else {
+          service = current.state === 'on' ? 'input_boolean/turn_off' : 'input_boolean/turn_on';
+        }
       }
       await this.request(service, { entity_id: entityId });
       return { states: { [action]: await this.getState(entityId) } };

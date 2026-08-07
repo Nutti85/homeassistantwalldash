@@ -24,6 +24,7 @@ describe('HomeAssistantClient', () => {
 
   it('turns on guest mode and returns its fresh state', async () => {
     const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('input_boolean.gjest', 'off'))
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         entity_id: 'input_boolean.gjest',
@@ -35,12 +36,12 @@ describe('HomeAssistantClient', () => {
     const result = await client.execute('guestMode');
 
     expect(fetcher).toHaveBeenNthCalledWith(
-      1,
+      2,
       'http://ha:8123/api/services/input_boolean/turn_on',
       expect.objectContaining({ method: 'POST' }),
     );
     expect(fetcher).toHaveBeenNthCalledWith(
-      2,
+      3,
       'http://ha:8123/api/states/input_boolean.gjest',
       expect.objectContaining({ method: 'GET' }),
     );
@@ -53,6 +54,19 @@ describe('HomeAssistantClient', () => {
         },
       },
     });
+  });
+
+  it('turns guest mode off when its confirmed state is on', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('input_boolean.gjest', 'on'))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('input_boolean.gjest', 'off'));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'test-token', fetcher).execute('guestMode');
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/states/input_boolean.gjest', expect.objectContaining({ method: 'GET' }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/input_boolean/turn_off', expect.objectContaining({ method: 'POST' }));
+    expect(result.states).toMatchObject({ guestMode: { state: 'off' } });
   });
 
   it('selects Borte for home mode', async () => {
@@ -116,13 +130,14 @@ describe('HomeAssistantClient', () => {
 
   it('sends server-side authorization and JSON headers', async () => {
     const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('input_boolean.gjest', 'off'))
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
-      .mockResolvedValueOnce(stateResponse('input_boolean.gjest'));
+      .mockResolvedValueOnce(stateResponse('input_boolean.gjest', 'on'));
 
     await new HomeAssistantClient('http://ha:8123', 'a-real-secret', fetcher).execute('guestMode');
 
-    const postRequest = fetcher.mock.calls[0][1] as RequestInit;
-    const getRequest = fetcher.mock.calls[1][1] as RequestInit;
+    const getRequest = fetcher.mock.calls[0][1] as RequestInit;
+    const postRequest = fetcher.mock.calls[1][1] as RequestInit;
     expect(postRequest.headers).toMatchObject({
       Authorization: 'Bearer a-real-secret',
       'Content-Type': 'application/json',
