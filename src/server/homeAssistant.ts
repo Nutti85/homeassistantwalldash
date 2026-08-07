@@ -59,15 +59,15 @@ export class HomeAssistantClient {
   ) {}
 
   public async getDashboardStates(): Promise<DashboardStates> {
-    try {
-      const states = {} as Record<DashboardStateKey, HomeAssistantState>;
-      for (const [key, entityId] of Object.entries(dashboardEntities) as [DashboardStateKey, string][]) {
+    const states = {} as Record<DashboardStateKey, HomeAssistantState>;
+    for (const [key, entityId] of Object.entries(dashboardEntities) as [DashboardStateKey, string][]) {
+      try {
         states[key] = await this.getState(entityId);
+      } catch {
+        states[key] = { entity_id: entityId, state: 'unavailable', attributes: {} };
       }
-      return { states };
-    } catch {
-      throw communicationError();
     }
+    return { states };
   }
 
   public async execute(action: DashboardAction, option?: 'Hjemme' | 'Borte'): Promise<CommandResult> {
