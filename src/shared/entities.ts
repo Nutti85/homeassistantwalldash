@@ -6,7 +6,7 @@ export const morningEntityId = 'automation.modus_god_morgen';
 export const eveningEntityId = 'script.1572988362234';
 export const nightEntityId = 'script.1569099501074';
 export const coolingEntityId = 'automation.klima_automatisk_kjoling_optimalisert';
-export const climateEntityId = 'climate.daikinap19531_room_temperature';
+export const climateEntityId = 'climate.stue';
 export const outdoorEntityId = 'sensor.indoor_ute_temperature';
 
 export type DashboardAction = 'home' | 'guestMode' | 'morning' | 'evening' | 'night' | 'cooling';
