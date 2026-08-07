@@ -24,6 +24,8 @@ services:
       HA_URL: ${HA_URL}
       HA_TOKEN: ${HA_TOKEN}
       HA_GUEST_MODE_ENTITY_ID: ${HA_GUEST_MODE_ENTITY_ID:-input_boolean.gjest}
+      HA_GUEST_VOUCHER_SENSOR_ID: ${HA_GUEST_VOUCHER_SENSOR_ID:-sensor.67647a4bca314858fac0f8fc_voucher}
+      HA_GUEST_VOUCHER_CREATE_BUTTON_ID: ${HA_GUEST_VOUCHER_CREATE_BUTTON_ID:-button.67647a4bca314858fac0f8fc_create}
       GIT_SYNC_REPO: ${GIT_SYNC_REPO:-https://github.com/Nutti85/homeassistantwalldash.git}
       GIT_SYNC_BRANCH: ${GIT_SYNC_BRANCH:-main}
       PORT: "3000"

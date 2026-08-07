@@ -12,6 +12,7 @@ const dashboardStates = {
   states: {
     home: { entity_id: 'input_select.home_state', state: 'Hjemme', attributes: {} },
     guestMode: { entity_id: 'input_boolean.toggle', state: 'on', attributes: {} },
+    guestVoucher: { entity_id: 'sensor.voucher', state: 'K7M9-P2Q4', attributes: {} },
     morning: { entity_id: 'automation.morning', state: 'off', attributes: {} },
     evening: { entity_id: 'script.evening', state: 'off', attributes: {} },
     night: { entity_id: 'script.night', state: 'off', attributes: {} },
@@ -56,6 +57,16 @@ describe('dashboard API', () => {
     expect(client.execute).toHaveBeenCalledWith('guestMode', undefined);
   });
 
+  it('executes the guest-voucher action', async () => {
+    const client = createClient();
+    vi.mocked(client.execute).mockResolvedValue({ states: { guestVoucher: { entity_id: 'sensor.voucher', state: 'K7M9-P2Q4', attributes: {} } } });
+
+    const response = await request(createApp(client)).post('/api/actions/guestVoucher').send({});
+
+    expect(response.status).toBe(200);
+    expect(client.execute).toHaveBeenCalledWith('guestVoucher', undefined);
+  });
+
   it('returns 404 for an unknown action without invoking the client', async () => {
     const client = createClient();
 
@@ -69,6 +80,44 @@ describe('dashboard API', () => {
     const client = createClient();
 
     const response = await request(createApp(client)).post('/api/actions/home').send({ option: 'Away' });
+
+    expect(response.status).toBe(400);
+    expect(client.execute).not.toHaveBeenCalled();
+  });
+
+  it('forwards a heat-pump mode to the dashboard client', async () => {
+    const client = createClient();
+    vi.mocked(client.execute).mockResolvedValue({ states: {} });
+
+    const response = await request(createApp(client)).post('/api/actions/heatPump').send({ mode: 'heat_cool' });
+
+    expect(response.status).toBe(200);
+    expect(client.execute).toHaveBeenCalledWith('heatPump', 'heat_cool');
+  });
+
+  it('rejects an invalid heat-pump mode without invoking the client', async () => {
+    const client = createClient();
+
+    const response = await request(createApp(client)).post('/api/actions/heatPump').send({ mode: 'dry' });
+
+    expect(response.status).toBe(400);
+    expect(client.execute).not.toHaveBeenCalled();
+  });
+
+  it('forwards a fan speed to the dashboard client', async () => {
+    const client = createClient();
+    vi.mocked(client.execute).mockResolvedValue({ states: {} });
+
+    const response = await request(createApp(client)).post('/api/actions/fanSpeed').send({ fanMode: 'quiet' });
+
+    expect(response.status).toBe(200);
+    expect(client.execute).toHaveBeenCalledWith('fanSpeed', 'quiet');
+  });
+
+  it('rejects an unsupported fan speed', async () => {
+    const client = createClient();
+
+    const response = await request(createApp(client)).post('/api/actions/fanSpeed').send({ fanMode: 'turbo' });
 
     expect(response.status).toBe(400);
     expect(client.execute).not.toHaveBeenCalled();

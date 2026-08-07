@@ -5,6 +5,7 @@ import {
   coolingStateKey,
   eveningStateKey,
   guestModeStateKey,
+  guestVoucherStateKey,
   homeStateKey,
   morningStateKey,
   nightStateKey,
@@ -18,8 +19,8 @@ const stateResponse = (entityId: string, state = 'on', attributes: Record<string
 
 describe('HomeAssistantClient', () => {
   it('exports stable dashboard state keys', () => {
-    expect([homeStateKey, guestModeStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
-      .toEqual(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+    expect([homeStateKey, guestModeStateKey, guestVoucherStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
+      .toEqual(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
   it('turns on guest mode and returns its fresh state', async () => {
@@ -67,6 +68,19 @@ describe('HomeAssistantClient', () => {
     expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/states/input_boolean.gjest', expect.objectContaining({ method: 'GET' }));
     expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/input_boolean/turn_off', expect.objectContaining({ method: 'POST' }));
     expect(result.states).toMatchObject({ guestMode: { state: 'off' } });
+  });
+
+  it('creates a guest voucher and returns the latest confirmed code', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('sensor.67647a4bca314858fac0f8fc_voucher', 'K7M9-P2Q4'));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute('guestVoucher');
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/services/button/press', expect.objectContaining({
+      body: JSON.stringify({ entity_id: 'button.67647a4bca314858fac0f8fc_create' }),
+    }));
+    expect(result.states).toMatchObject({ guestVoucher: { state: 'K7M9-P2Q4' } });
   });
 
   it('selects Borte for home mode', async () => {
@@ -128,6 +142,42 @@ describe('HomeAssistantClient', () => {
     expect(result.states).toMatchObject({ cooling: { state: 'on' } });
   });
 
+  it.each([
+    ['cool', 'automation/turn_on'],
+    ['heat', 'automation/turn_off'],
+    ['heat_cool', 'automation/turn_off'],
+    ['fan_only', 'automation/turn_off'],
+  ] as const)('sets heat-pump mode %s and uses %s for the cooling automation', async (mode, automationService) => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('automation.klima_automatisk_kjoling_optimalisert', mode === 'cool' ? 'on' : 'off'))
+      .mockResolvedValueOnce(stateResponse('climate.stue', mode));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute('heatPump', mode);
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, `http://ha:8123/api/services/${automationService}`, expect.objectContaining({
+      body: JSON.stringify({ entity_id: 'automation.klima_automatisk_kjoling_optimalisert' }),
+    }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/climate/set_hvac_mode', expect.objectContaining({
+      body: JSON.stringify({ entity_id: 'climate.stue', hvac_mode: mode }),
+    }));
+    expect(result.states).toMatchObject({ cooling: { state: mode === 'cool' ? 'on' : 'off' }, climate: { state: mode } });
+  });
+
+  it.each(['quiet', 'medium', 'strong'] as const)('sets fan speed %s and returns the confirmed climate state', async (fanMode) => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('climate.stue', 'heat', { fan_mode: fanMode }));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute('fanSpeed', fanMode);
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/services/climate/set_fan_mode', expect.objectContaining({
+      body: JSON.stringify({ entity_id: 'climate.stue', fan_mode: fanMode }),
+    }));
+    expect(result.states).toMatchObject({ climate: { attributes: { fan_mode: fanMode } } });
+  });
+
   it('sends server-side authorization and JSON headers', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(stateResponse('input_boolean.gjest', 'off'))
@@ -148,10 +198,11 @@ describe('HomeAssistantClient', () => {
     });
   });
 
-  it('gets all seven dashboard entities', async () => {
+  it('gets all dashboard entities including the guest voucher', async () => {
     const entityIds = [
       'input_select.home_state',
       'input_boolean.gjest',
+      'sensor.67647a4bca314858fac0f8fc_voucher',
       'automation.modus_god_morgen',
       'script.1572988362234',
       'script.1569099501074',
@@ -165,7 +216,7 @@ describe('HomeAssistantClient', () => {
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
-    expect(Object.keys(result.states)).toEqual(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+    expect(Object.keys(result.states)).toEqual(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
   it.each([

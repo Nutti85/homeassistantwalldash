@@ -1,10 +1,11 @@
-import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, type HomeAssistantState } from '../shared/entities';
+import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, guestVoucherCreateButtonEntityId, type FanSpeed, type HeatPumpMode, type HomeAssistantState } from '../shared/entities';
 
 type DashboardStates = { states: Record<DashboardStateKey, HomeAssistantState> };
 type CommandResult = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 
-const services: Record<Exclude<DashboardAction, 'home'>, string> = {
+const services: Record<Exclude<DashboardAction, 'home' | 'heatPump' | 'fanSpeed'>, string> = {
   guestMode: 'input_boolean/turn_on',
+  guestVoucher: 'button/press',
   morning: 'automation/trigger',
   evening: 'script/turn_on',
   night: 'script/turn_on',
@@ -29,6 +30,7 @@ export class HomeAssistantClient {
     private readonly token: string,
     private readonly fetcher: typeof fetch = fetch,
     private readonly entities: DashboardEntityIds = defaultDashboardEntityIds,
+    private readonly guestVoucherCreateButtonId: string = guestVoucherCreateButtonEntityId,
   ) {}
 
   public async getDashboardStates(): Promise<DashboardStates> {
@@ -43,7 +45,7 @@ export class HomeAssistantClient {
     return { states };
   }
 
-  public async execute(action: DashboardAction, option?: 'Hjemme' | 'Borte'): Promise<CommandResult> {
+  public async execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<CommandResult> {
     try {
       if (action === 'home') {
         if (option !== 'Hjemme' && option !== 'Borte') {
@@ -56,7 +58,42 @@ export class HomeAssistantClient {
         return { states: { home: await this.getState(this.entities.home) } };
       }
 
-      let service = services[action as Exclude<DashboardAction, 'home'>];
+      if (action === 'heatPump') {
+        if (option !== 'cool' && option !== 'heat' && option !== 'heat_cool' && option !== 'fan_only') {
+          throw communicationError();
+        }
+        await this.request(option === 'cool' ? 'automation/turn_on' : 'automation/turn_off', {
+          entity_id: this.entities.cooling,
+        });
+        await this.request('climate/set_hvac_mode', {
+          entity_id: this.entities.climate,
+          hvac_mode: option,
+        });
+        return {
+          states: {
+            cooling: await this.getState(this.entities.cooling),
+            climate: await this.getState(this.entities.climate),
+          },
+        };
+      }
+
+      if (action === 'fanSpeed') {
+        if (option !== 'quiet' && option !== 'medium' && option !== 'strong') {
+          throw communicationError();
+        }
+        await this.request('climate/set_fan_mode', {
+          entity_id: this.entities.climate,
+          fan_mode: option,
+        });
+        return { states: { climate: await this.getState(this.entities.climate) } };
+      }
+
+      if (action === 'guestVoucher') {
+        await this.request(services.guestVoucher, { entity_id: this.guestVoucherCreateButtonId });
+        return { states: { guestVoucher: await this.getState(this.entities.guestVoucher) } };
+      }
+
+      let service = services[action as Exclude<DashboardAction, 'home' | 'heatPump' | 'fanSpeed'>];
       if (!service) {
         throw communicationError();
       }

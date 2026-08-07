@@ -1,17 +1,17 @@
 import express, { type Express, type Request, type Response } from 'express';
 import type { HomeAssistantClient } from './homeAssistant';
-import type { DashboardAction } from '../shared/entities';
+import type { DashboardAction, FanSpeed, HeatPumpMode } from '../shared/entities';
 
 type DashboardActionResult = Awaited<ReturnType<HomeAssistantClient['execute']>>;
 type DashboardStates = Awaited<ReturnType<HomeAssistantClient['getDashboardStates']>>;
 
 export interface DashboardClient {
   getDashboardStates(): Promise<DashboardStates>;
-  execute(action: DashboardAction, option?: 'Hjemme' | 'Borte'): Promise<DashboardActionResult>;
+  execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<DashboardActionResult>;
   setTemperature(temperature: number): Promise<DashboardActionResult>;
 }
 
-const actions = new Set<DashboardAction>(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling']);
+const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed']);
 const updateError = { error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -19,6 +19,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const isHomeOption = (value: unknown): value is 'Hjemme' | 'Borte' => value === 'Hjemme' || value === 'Borte';
+const isHeatPumpMode = (value: unknown): value is HeatPumpMode => value === 'cool' || value === 'heat' || value === 'heat_cool' || value === 'fan_only';
+const isFanSpeed = (value: unknown): value is FanSpeed => value === 'quiet' || value === 'medium' || value === 'strong';
 
 const sendClientError = (_error: unknown, response: Response): void => {
   response.status(502).json(updateError);
@@ -58,13 +60,32 @@ export const createApp = (client: DashboardClient): Express => {
         response.sendStatus(400);
         return;
       }
+    } else if (action === 'heatPump') {
+      if (!isHeatPumpMode(body.mode)) {
+        response.sendStatus(400);
+        return;
+      }
+    } else if (action === 'fanSpeed') {
+      if (!isFanSpeed(body.fanMode)) {
+        response.sendStatus(400);
+        return;
+      }
     } else if (Object.keys(body).length !== 0) {
       response.sendStatus(400);
       return;
     }
 
     try {
-      response.json(await client.execute(action as DashboardAction, action === 'home' ? body.option as 'Hjemme' | 'Borte' : undefined));
+      response.json(await client.execute(
+        action as DashboardAction,
+        action === 'home'
+          ? body.option as 'Hjemme' | 'Borte'
+          : action === 'heatPump'
+            ? body.mode as HeatPumpMode
+            : action === 'fanSpeed'
+              ? body.fanMode as FanSpeed
+              : undefined,
+      ));
     } catch (error) {
       sendClientError(error, response);
     }

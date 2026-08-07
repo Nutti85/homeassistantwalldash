@@ -16,8 +16,10 @@ const port = Number(process.env.PORT ?? 3000);
 const entities = {
   ...defaultDashboardEntityIds,
   guestMode: process.env.HA_GUEST_MODE_ENTITY_ID?.trim() || defaultDashboardEntityIds.guestMode,
+  guestVoucher: process.env.HA_GUEST_VOUCHER_SENSOR_ID?.trim() || defaultDashboardEntityIds.guestVoucher,
 };
-const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities));
+const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
+const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId));
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

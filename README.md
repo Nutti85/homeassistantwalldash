@@ -22,6 +22,8 @@ npm run start
    - `HA_TOKEN` = en Home Assistant long-lived access token
    - `DASHBOARD_PORT` = ønsket ekstern port, for eksempel `3000`
    - `HA_GUEST_MODE_ENTITY_ID` = riktig Gjestemodus-entity. Standard er `input_boolean.gjest`.
+   - `HA_GUEST_VOUCHER_SENSOR_ID` = voucher-sensoren. Standard er `sensor.67647a4bca314858fac0f8fc_voucher`.
+   - `HA_GUEST_VOUCHER_CREATE_BUTTON_ID` = knappen som oppretter voucher. Standard er `button.67647a4bca314858fac0f8fc_create`.
    - `GIT_SYNC_REPO` = `https://github.com/Nutti85/homeassistantwalldash.git`
    - `GIT_SYNC_BRANCH` = `main`
 3. Deploy stacken og åpne `http://<proxmox-eller-portainer-vert>:<DASHBOARD_PORT>` fra tableten.

@@ -1,4 +1,4 @@
-import type { DashboardAction, HomeAssistantState } from '../shared/entities';
+import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState } from '../shared/entities';
 
 export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
@@ -56,11 +56,11 @@ export const getStates = async (): Promise<DashboardResponse> => request('/api/s
 
 export const runAction = async (
   action: DashboardAction,
-  option?: 'Hjemme' | 'Borte',
+  option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed,
 ): Promise<DashboardResponse> => request(`/api/actions/${action}`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(action === 'home' ? { option } : {}),
+  body: JSON.stringify(action === 'home' ? { option } : action === 'heatPump' ? { mode: option } : action === 'fanSpeed' ? { fanMode: option } : {}),
 });
 
 export const setTemperature = async (temperature: number): Promise<DashboardResponse> => request('/api/temperature', {
