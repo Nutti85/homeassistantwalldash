@@ -14,15 +14,16 @@ const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 interface CardProps {
   title: string;
   status: string;
+  icon: string;
   children: React.ReactNode;
   error?: string;
 }
 
-const Card = ({ title, status, children, error }: CardProps) => (
+const Card = ({ title, status, icon, children, error }: CardProps) => (
   <section className={`card card-${title.toLowerCase().replaceAll(' ', '-')}`} role="group" aria-label={title}>
-    <h2>{title}</h2>
-    <p role="status" aria-live="polite" aria-label={`${title} status`}>{status}</p>
-    {children}
+    <div className="card-heading"><span className="card-icon" aria-hidden="true">{icon}</span><h2>{title}</h2></div>
+    <p className="card-status" role="status" aria-live="polite" aria-label={`${title} status`}>{status}</p>
+    <div className="card-actions">{children}</div>
     {error && <p role="alert">{error}</p>}
   </section>
 );
@@ -43,7 +44,11 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [repairOpen]);
 
-  useEffect(() => { if (!repairOpen) repairButton.current?.focus(); }, [repairOpen]);
+  const wasRepairOpen = useRef(false);
+  useEffect(() => {
+    if (!repairOpen && wasRepairOpen.current) repairButton.current?.focus();
+    wasRepairOpen.current = repairOpen;
+  }, [repairOpen]);
 
   useEffect(() => {
     let active = true;
@@ -83,31 +88,29 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
 
   return (
     <main className="dashboard">
-      <h1>Smarthjem</h1>
+      <header className="dashboard-header"><div><p className="eyebrow">HJEMMEKONTROLL</p><h1>Smarthjem</h1><p className="subtitle">Rask kontroll av husets viktigste moduser</p></div><div className="live-indicator"><span aria-hidden="true" />Live status</div></header>
       {errors.load && <p role="alert">{errors.load}</p>}
-      <Card title="Hjemmestatus" status={homeLabel(states.home)} error={errors.home}>
+      <Card title="Hjemmestatus" icon="⌂" status={homeLabel(states.home)} error={errors.home}>
         <button type="button" disabled={pending.home} onClick={() => action('home', 'Hjemme')}>Hjemme</button>
         <button type="button" disabled={pending.home} onClick={() => action('home', 'Borte')}>Borte</button>
       </Card>
-      <Card title="Gjestemodus" status={booleanLabel(states.guestMode)} error={errors.guestMode}>
+      <Card title="Gjestemodus" icon="♙" status={booleanLabel(states.guestMode)} error={errors.guestMode}>
         <button type="button" disabled={pending.guestMode} onClick={() => action('guestMode')}>Gjestemodus</button>
       </Card>
-      <Card title="Morgenmodus" status={booleanLabel(states.morning)} error={errors.morning}>
+      <Card title="Morgenmodus" icon="☀" status={booleanLabel(states.morning)} error={errors.morning}>
         <button type="button" disabled={pending.morning} onClick={() => action('morning')}>Morgenmodus</button>
       </Card>
-      <Card title="Kveldsmodus" status={booleanLabel(states.evening)} error={errors.evening}>
+      <Card title="Kveldsmodus" icon="◐" status={booleanLabel(states.evening)} error={errors.evening}>
         <button type="button" disabled={pending.evening} onClick={() => action('evening')}>Kveldsmodus</button>
       </Card>
-      <Card title="Nattamodus" status={booleanLabel(states.night)} error={errors.night}>
+      <Card title="Nattamodus" icon="☾" status={booleanLabel(states.night)} error={errors.night}>
         <button type="button" disabled={pending.night} onClick={() => action('night')}>Nattamodus</button>
       </Card>
-      <Card title="Kjøl huset" status={`${booleanLabel(states.cooling)} ${temperatureValue(states.climate)}`} error={errors.cooling || errors.temperature}>
+      <Card title="Kjøl huset" icon="❄" status={booleanLabel(states.cooling)} error={errors.cooling || errors.temperature}>
         <button type="button" disabled={pending.cooling} onClick={() => action('cooling')}>Kjøl huset</button>
-        <button type="button" aria-label="Senk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(-1)}>−</button>
-        <output aria-label="Temperatur">{temperatureValue(states.climate)}</output>
-        <button type="button" aria-label="Øk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(1)}>+</button>
+        <div className="temperature-control"><button type="button" aria-label="Senk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(-1)}>−</button><output aria-label="Temperatur">{temperatureValue(states.climate)}</output><button type="button" aria-label="Øk temperatur" disabled={pending.temperature || coolingTemperature === undefined} onClick={() => adjustTemperature(1)}>+</button></div>
       </Card>
-      <Card title="Reparer smarthuset" status="Ikke startet">
+      <Card title="Reparer smarthuset" icon="⚠" status="Åpner hjelp og diagnostikk">
         <button ref={repairButton} className="repair-button" type="button" onClick={() => setRepairOpen(true)}>Reparer smarthuset</button>
       </Card>
       {repairOpen && <div className="modal-backdrop" role="presentation"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><div><h2 id="repair-title">Reparer smarthuset</h2><button ref={closeButton} type="button" onClick={() => setRepairOpen(false)}>Lukk</button></div><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/" /></section></div>}
