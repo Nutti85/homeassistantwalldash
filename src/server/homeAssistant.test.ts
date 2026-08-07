@@ -72,7 +72,6 @@ describe('HomeAssistantClient', () => {
     ['morning', 'automation/trigger', 'automation.modus_god_morgen'],
     ['evening', 'script/turn_on', 'script.1572988362234'],
     ['night', 'script/turn_on', 'script.1569099501074'],
-    ['cooling', 'automation/turn_on', 'automation.klima_automatisk_kjoling_optimalisert'],
   ] as const)('routes %s through its fixed service and entity', async (action, service, entityId) => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
@@ -85,6 +84,34 @@ describe('HomeAssistantClient', () => {
       body: JSON.stringify({ entity_id: entityId }),
     }));
     expect(result.states).toMatchObject({ [action]: { entity_id: entityId } });
+  });
+
+  it('turns cooling off when its confirmed automation state is on', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('automation.klima_automatisk_kjoling_optimalisert', 'on'))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('automation.klima_automatisk_kjoling_optimalisert', 'off'));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute('cooling');
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/states/automation.klima_automatisk_kjoling_optimalisert', expect.objectContaining({ method: 'GET' }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/automation/turn_off', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ entity_id: 'automation.klima_automatisk_kjoling_optimalisert' }),
+    }));
+    expect(result.states).toMatchObject({ cooling: { state: 'off' } });
+  });
+
+  it('turns cooling on when its confirmed automation state is off', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('automation.klima_automatisk_kjoling_optimalisert', 'off'))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('automation.klima_automatisk_kjoling_optimalisert', 'on'));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute('cooling');
+
+    expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/automation/turn_on', expect.objectContaining({ method: 'POST' }));
+    expect(result.states).toMatchObject({ cooling: { state: 'on' } });
   });
 
   it('sends server-side authorization and JSON headers', async () => {

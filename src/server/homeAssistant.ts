@@ -56,11 +56,15 @@ export class HomeAssistantClient {
         return { states: { home: await this.getState(this.entities.home) } };
       }
 
-      const service = services[action as Exclude<DashboardAction, 'home'>];
+      let service = services[action as Exclude<DashboardAction, 'home'>];
       if (!service) {
         throw communicationError();
       }
       const entityId = this.entities[action];
+      if (action === 'cooling') {
+        const cooling = await this.getState(entityId);
+        service = cooling.state === 'on' ? 'automation/turn_off' : 'automation/turn_on';
+      }
       await this.request(service, { entity_id: entityId });
       return { states: { [action]: await this.getState(entityId) } };
     } catch {
