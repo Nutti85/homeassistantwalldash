@@ -72,12 +72,13 @@ describe('HomeAssistantClient', () => {
 
   it('creates a guest voucher and returns the latest confirmed code', async () => {
     const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('sensor.67647a4bca314858fac0f8fc_voucher', 'OLD-CODE', { create_time: '2026-08-07T20:00:00' }))
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
-      .mockResolvedValueOnce(stateResponse('sensor.67647a4bca314858fac0f8fc_voucher', 'K7M9-P2Q4'));
+      .mockResolvedValueOnce(stateResponse('sensor.67647a4bca314858fac0f8fc_voucher', 'K7M9-P2Q4', { create_time: '2026-08-08T00:00:00' }));
 
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute('guestVoucher');
 
-    expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/services/button/press', expect.objectContaining({
+    expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/button/press', expect.objectContaining({
       body: JSON.stringify({ entity_id: 'button.67647a4bca314858fac0f8fc_create' }),
     }));
     expect(result.states).toMatchObject({ guestVoucher: { state: 'K7M9-P2Q4' } });

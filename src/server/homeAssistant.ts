@@ -89,8 +89,9 @@ export class HomeAssistantClient {
       }
 
       if (action === 'guestVoucher') {
+        const previousVoucher = await this.getState(this.entities.guestVoucher);
         await this.request(services.guestVoucher, { entity_id: this.guestVoucherCreateButtonId });
-        return { states: { guestVoucher: await this.getState(this.entities.guestVoucher) } };
+        return { states: { guestVoucher: await this.waitForChangedState(this.entities.guestVoucher, previousVoucher) } };
       }
 
       let service = services[action as Exclude<DashboardAction, 'home' | 'heatPump' | 'fanSpeed'>];
@@ -196,6 +197,20 @@ export class HomeAssistantClient {
       state: payload.state,
       attributes: payload.attributes,
     };
+  }
+
+  private async waitForChangedState(entityId: string, previous: HomeAssistantState): Promise<HomeAssistantState> {
+    const previousCreateTime = previous.attributes.create_time;
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      const current = await this.getState(entityId);
+      if (current.state !== previous.state || current.attributes.create_time !== previousCreateTime) {
+        return current;
+      }
+      if (attempt < 14) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
+    throw communicationError();
   }
 
   private headers(): Record<string, string> {
