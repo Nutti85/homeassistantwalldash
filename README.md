@@ -21,10 +21,10 @@ npm run start
    - `HA_URL` = `http://192.168.1.78:8123`
    - `HA_TOKEN` = en Home Assistant long-lived access token
    - `DASHBOARD_PORT` = ønsket ekstern port, for eksempel `3000`
-   - `HA_GUEST_MODE_ENTITY_ID` = riktig Gjestemodus-entity. Standard er `input_boolean.toggle`.
+   - `HA_GUEST_MODE_ENTITY_ID` = riktig Gjestemodus-entity. Standard er `input_boolean.gjest`.
 3. Deploy stacken og åpne `http://<proxmox-eller-portainer-vert>:<DASHBOARD_PORT>` fra tableten.
 
-`HA_GUEST_MODE_ENTITY_ID` er nødvendig i denne installasjonen fordi `input_boolean.toggle` ikke finnes. Entiteten må være en `input_boolean`; dashboardet kaller `input_boolean.turn_on` og leser deretter samme entity tilbake som bekreftelse.
+`HA_GUEST_MODE_ENTITY_ID` kan overstyres dersom du vil bruke en annen Gjestemodus-entitet. Entiteten må være en `input_boolean`; dashboardet kaller `input_boolean.turn_on` og leser deretter samme entity tilbake som bekreftelse.
 
 ## Temperatur
 

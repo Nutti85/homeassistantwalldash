@@ -1,7 +1,7 @@
 export const dashboardTitle = 'Smarthjem';
 
 export const homeStateEntityId = 'input_select.home_state';
-export const guestModeEntityId = 'input_boolean.toggle';
+export const guestModeEntityId = 'input_boolean.gjest';
 export const morningEntityId = 'automation.modus_god_morgen';
 export const eveningEntityId = 'script.1572988362234';
 export const nightEntityId = 'script.1569099501074';

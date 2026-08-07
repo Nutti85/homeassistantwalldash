@@ -25,7 +25,7 @@ describe('HomeAssistantClient', () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        entity_id: 'input_boolean.toggle',
+        entity_id: 'input_boolean.gjest',
         state: 'on',
         attributes: {},
       }), { status: 200 }));
@@ -40,13 +40,13 @@ describe('HomeAssistantClient', () => {
     );
     expect(fetcher).toHaveBeenNthCalledWith(
       2,
-      'http://ha:8123/api/states/input_boolean.toggle',
+      'http://ha:8123/api/states/input_boolean.gjest',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(result).toEqual({
       states: {
         guestMode: {
-          entity_id: 'input_boolean.toggle',
+          entity_id: 'input_boolean.gjest',
           state: 'on',
           attributes: {},
         },
@@ -89,7 +89,7 @@ describe('HomeAssistantClient', () => {
   it('sends server-side authorization and JSON headers', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
-      .mockResolvedValueOnce(stateResponse('input_boolean.toggle'));
+      .mockResolvedValueOnce(stateResponse('input_boolean.gjest'));
 
     await new HomeAssistantClient('http://ha:8123', 'a-real-secret', fetcher).execute('guestMode');
 
@@ -108,7 +108,7 @@ describe('HomeAssistantClient', () => {
   it('gets all seven dashboard entities', async () => {
     const entityIds = [
       'input_select.home_state',
-      'input_boolean.toggle',
+      'input_boolean.gjest',
       'automation.modus_god_morgen',
       'script.1572988362234',
       'script.1569099501074',

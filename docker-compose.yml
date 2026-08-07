@@ -8,7 +8,7 @@ services:
     environment:
       HA_URL: ${HA_URL}
       HA_TOKEN: ${HA_TOKEN}
-      HA_GUEST_MODE_ENTITY_ID: ${HA_GUEST_MODE_ENTITY_ID:-input_boolean.toggle}
+      HA_GUEST_MODE_ENTITY_ID: ${HA_GUEST_MODE_ENTITY_ID:-input_boolean.gjest}
       PORT: "3000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
