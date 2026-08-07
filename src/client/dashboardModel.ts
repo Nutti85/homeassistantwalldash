@@ -25,5 +25,9 @@ export const temperatureNumber = (state: HomeAssistantState | undefined): number
 
 export const temperatureValue = (state: HomeAssistantState | undefined): string => {
   const value = temperatureNumber(state);
-  return value === undefined ? unavailableLabel : `${value} °C`;
+  if (value !== undefined) return `${value} °C`;
+  const currentTemperature = state?.attributes.current_temperature;
+  return typeof currentTemperature === 'number' && Number.isFinite(currentTemperature)
+    ? `${currentTemperature} °C nå · settpunkt mangler`
+    : unavailableLabel;
 };

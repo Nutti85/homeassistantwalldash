@@ -10,6 +10,11 @@ describe('dashboard state presentation', () => {
     expect(temperatureValue({ entity_id: 'climate.room', state: 'cool', attributes: { temperature: 21 } })).toBe('21 °C');
   });
 
+  it('shows the measured room temperature without pretending it is a setpoint', () => {
+    expect(temperatureValue({ entity_id: 'climate.room', state: 'fan_only', attributes: { current_temperature: 22 } }))
+      .toBe('22 °C nå · settpunkt mangler');
+  });
+
   it('handles unavailable state safely in Norwegian', () => {
     expect(temperatureValue({ entity_id: 'climate.room', state: 'unavailable', attributes: {} })).toBe('Ikke tilgjengelig');
   });

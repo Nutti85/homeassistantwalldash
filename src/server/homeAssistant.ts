@@ -1,42 +1,14 @@
-import {
-  climateEntityId,
-  climateStateKey,
-  coolingEntityId,
-  coolingStateKey,
-  eveningEntityId,
-  eveningStateKey,
-  guestModeEntityId,
-  guestModeStateKey,
-  homeStateEntityId,
-  homeStateKey,
-  type DashboardAction,
-  type DashboardStateKey,
-  type HomeAssistantState,
-  morningEntityId,
-  morningStateKey,
-  nightEntityId,
-  nightStateKey,
-} from '../shared/entities';
+import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, type HomeAssistantState } from '../shared/entities';
 
 type DashboardStates = { states: Record<DashboardStateKey, HomeAssistantState> };
 type CommandResult = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 
-const dashboardEntities: Record<DashboardStateKey, string> = {
-  [homeStateKey]: homeStateEntityId,
-  [guestModeStateKey]: guestModeEntityId,
-  [morningStateKey]: morningEntityId,
-  [eveningStateKey]: eveningEntityId,
-  [nightStateKey]: nightEntityId,
-  [coolingStateKey]: coolingEntityId,
-  [climateStateKey]: climateEntityId,
-};
-
-const commands: Record<Exclude<DashboardAction, 'home'>, { service: string; entityId: string }> = {
-  guestMode: { service: 'input_boolean/turn_on', entityId: guestModeEntityId },
-  morning: { service: 'automation/trigger', entityId: morningEntityId },
-  evening: { service: 'script/turn_on', entityId: eveningEntityId },
-  night: { service: 'script/turn_on', entityId: nightEntityId },
-  cooling: { service: 'automation/turn_on', entityId: coolingEntityId },
+const services: Record<Exclude<DashboardAction, 'home'>, string> = {
+  guestMode: 'input_boolean/turn_on',
+  morning: 'automation/trigger',
+  evening: 'script/turn_on',
+  night: 'script/turn_on',
+  cooling: 'automation/turn_on',
 };
 
 const communicationError = () => new Error('Kunne ikke kommunisere med Home Assistant');
@@ -56,11 +28,12 @@ export class HomeAssistantClient {
     private readonly baseUrl: string,
     private readonly token: string,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly entities: DashboardEntityIds = defaultDashboardEntityIds,
   ) {}
 
   public async getDashboardStates(): Promise<DashboardStates> {
     const states = {} as Record<DashboardStateKey, HomeAssistantState>;
-    for (const [key, entityId] of Object.entries(dashboardEntities) as [DashboardStateKey, string][]) {
+    for (const [key, entityId] of Object.entries(this.entities) as [DashboardStateKey, string][]) {
       try {
         states[key] = await this.getState(entityId);
       } catch {
@@ -77,18 +50,19 @@ export class HomeAssistantClient {
           throw communicationError();
         }
         await this.request('input_select/select_option', {
-          entity_id: homeStateEntityId,
+          entity_id: this.entities.home,
           option,
         });
-        return { states: { home: await this.getState(homeStateEntityId) } };
+        return { states: { home: await this.getState(this.entities.home) } };
       }
 
-      const command = commands[action as Exclude<DashboardAction, 'home'>];
-      if (!command) {
+      const service = services[action as Exclude<DashboardAction, 'home'>];
+      if (!service) {
         throw communicationError();
       }
-      await this.request(command.service, { entity_id: command.entityId });
-      return { states: { [action]: await this.getState(command.entityId) } };
+      const entityId = this.entities[action];
+      await this.request(service, { entity_id: entityId });
+      return { states: { [action]: await this.getState(entityId) } };
     } catch {
       throw communicationError();
     }
@@ -100,7 +74,7 @@ export class HomeAssistantClient {
     }
 
     try {
-      const climate = await this.getState(climateEntityId);
+      const climate = await this.getState(this.entities.climate);
       const minTemperature = climate.attributes.min_temp;
       const maxTemperature = climate.attributes.max_temp;
       const hasMinTemperature = Object.prototype.hasOwnProperty.call(climate.attributes, 'min_temp');
@@ -123,10 +97,10 @@ export class HomeAssistantClient {
       );
 
       await this.request('climate/set_temperature', {
-        entity_id: climateEntityId,
+        entity_id: this.entities.climate,
         temperature: clampedTemperature,
       });
-      return { states: { climate: await this.getState(climateEntityId) } };
+      return { states: { climate: await this.getState(this.entities.climate) } };
     } catch {
       throw communicationError();
     }

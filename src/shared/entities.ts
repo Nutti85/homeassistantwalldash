@@ -19,6 +19,18 @@ export const climateStateKey = 'climate';
 export type DashboardStateKey = typeof homeStateKey | typeof guestModeStateKey | typeof morningStateKey
   | typeof eveningStateKey | typeof nightStateKey | typeof coolingStateKey | typeof climateStateKey;
 
+export type DashboardEntityIds = Record<DashboardStateKey, string>;
+
+export const defaultDashboardEntityIds: DashboardEntityIds = {
+  home: homeStateEntityId,
+  guestMode: guestModeEntityId,
+  morning: morningEntityId,
+  evening: eveningEntityId,
+  night: nightEntityId,
+  cooling: coolingEntityId,
+  climate: climateEntityId,
+};
+
 export interface HomeAssistantState {
   entity_id: string;
   state: string;
