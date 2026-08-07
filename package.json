@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "start": "tsx src/server/index.ts",
+    "start": "node --import tsx src/server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
