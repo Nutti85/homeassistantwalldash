@@ -15,6 +15,7 @@ services:
           git reset --hard "origin/$${GIT_SYNC_BRANCH}"
         fi
         npm ci
+        npm run build
         exec npm run start
     restart: unless-stopped
     ports:
