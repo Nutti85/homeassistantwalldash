@@ -7,6 +7,7 @@ export const eveningEntityId = 'script.1572988362234';
 export const nightEntityId = 'script.1569099501074';
 export const coolingEntityId = 'automation.klima_automatisk_kjoling_optimalisert';
 export const climateEntityId = 'climate.daikinap19531_room_temperature';
+export const outdoorEntityId = 'sensor.indoor_ute_temperature';
 
 export type DashboardAction = 'home' | 'guestMode' | 'morning' | 'evening' | 'night' | 'cooling';
 export const homeStateKey = 'home';
@@ -16,8 +17,9 @@ export const eveningStateKey = 'evening';
 export const nightStateKey = 'night';
 export const coolingStateKey = 'cooling';
 export const climateStateKey = 'climate';
+export const outdoorStateKey = 'outdoor';
 export type DashboardStateKey = typeof homeStateKey | typeof guestModeStateKey | typeof morningStateKey
-  | typeof eveningStateKey | typeof nightStateKey | typeof coolingStateKey | typeof climateStateKey;
+  | typeof eveningStateKey | typeof nightStateKey | typeof coolingStateKey | typeof climateStateKey | typeof outdoorStateKey;
 
 export type DashboardEntityIds = Record<DashboardStateKey, string>;
 
@@ -29,6 +31,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   night: nightEntityId,
   cooling: coolingEntityId,
   climate: climateEntityId,
+  outdoor: outdoorEntityId,
 };
 
 export interface HomeAssistantState {

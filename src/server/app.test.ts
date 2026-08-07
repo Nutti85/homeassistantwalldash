@@ -17,6 +17,7 @@ const dashboardStates = {
     night: { entity_id: 'script.night', state: 'off', attributes: {} },
     cooling: { entity_id: 'automation.cooling', state: 'on', attributes: {} },
     climate: { entity_id: 'climate.test', state: 'heat', attributes: {} },
+    outdoor: { entity_id: 'sensor.outdoor', state: '20', attributes: {} },
   },
 };
 

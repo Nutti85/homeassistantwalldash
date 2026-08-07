@@ -8,6 +8,7 @@ import {
   homeStateKey,
   morningStateKey,
   nightStateKey,
+  outdoorStateKey,
 } from '../shared/entities';
 
 const stateResponse = (entityId: string, state = 'on', attributes: Record<string, unknown> = {}) => new Response(
@@ -17,8 +18,8 @@ const stateResponse = (entityId: string, state = 'on', attributes: Record<string
 
 describe('HomeAssistantClient', () => {
   it('exports stable dashboard state keys', () => {
-    expect([homeStateKey, guestModeStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey])
-      .toEqual(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling', 'climate']);
+    expect([homeStateKey, guestModeStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
+      .toEqual(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
   it('turns on guest mode and returns its fresh state', async () => {
@@ -114,6 +115,7 @@ describe('HomeAssistantClient', () => {
       'script.1569099501074',
       'automation.klima_automatisk_kjoling_optimalisert',
       'climate.daikinap19531_room_temperature',
+      'sensor.indoor_ute_temperature',
     ];
     const fetcher = vi.fn();
     entityIds.forEach((entityId) => fetcher.mockResolvedValueOnce(stateResponse(entityId)));
@@ -121,7 +123,7 @@ describe('HomeAssistantClient', () => {
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
-    expect(Object.keys(result.states)).toEqual(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling', 'climate']);
+    expect(Object.keys(result.states)).toEqual(['home', 'guestMode', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
   it.each([
