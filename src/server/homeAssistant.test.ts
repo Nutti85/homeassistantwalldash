@@ -217,6 +217,21 @@ describe('HomeAssistantClient', () => {
     } } });
   });
 
+  it('switches a fan-only climate to cool before setting its temperature', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(stateResponse('climate.daikinap19531_room_temperature', 'fan_only', { min_temp: 18, max_temp: 32, current_temperature: 25, hvac_modes: ['fan_only', 'cool'] }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('climate.daikinap19531_room_temperature', 'cool', { min_temp: 18, max_temp: 32, temperature: 25, current_temperature: 25 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(stateResponse('climate.daikinap19531_room_temperature', 'cool', { min_temp: 18, max_temp: 32, temperature: 24, current_temperature: 25 }));
+
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).setTemperature(24);
+
+    expect(fetcher).toHaveBeenNthCalledWith(2, 'http://ha:8123/api/services/climate/set_hvac_mode', expect.objectContaining({ body: JSON.stringify({ entity_id: 'climate.daikinap19531_room_temperature', hvac_mode: 'cool' }) }));
+    expect(fetcher).toHaveBeenNthCalledWith(4, 'http://ha:8123/api/services/climate/set_temperature', expect.objectContaining({ body: JSON.stringify({ entity_id: 'climate.daikinap19531_room_temperature', temperature: 24 }) }));
+    expect(result.states).toMatchObject({ climate: { state: 'cool', attributes: { temperature: 24 } } });
+  });
+
   it.each([
     ['a nonnumeric minimum', { min_temp: '16', max_temp: 24 }],
     ['a non-finite maximum', { min_temp: 16, max_temp: Number.POSITIVE_INFINITY }],

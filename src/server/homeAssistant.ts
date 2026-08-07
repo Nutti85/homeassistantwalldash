@@ -82,7 +82,18 @@ export class HomeAssistantClient {
     }
 
     try {
-      const climate = await this.getState(this.entities.climate);
+      let climate = await this.getState(this.entities.climate);
+      if (climate.state === 'fan_only') {
+        const modes = climate.attributes.hvac_modes;
+        if (!Array.isArray(modes) || !modes.includes('cool')) {
+          throw communicationError();
+        }
+        await this.request('climate/set_hvac_mode', {
+          entity_id: this.entities.climate,
+          hvac_mode: 'cool',
+        });
+        climate = await this.getState(this.entities.climate);
+      }
       const minTemperature = climate.attributes.min_temp;
       const maxTemperature = climate.attributes.max_temp;
       const hasMinTemperature = Object.prototype.hasOwnProperty.call(climate.attributes, 'min_temp');
