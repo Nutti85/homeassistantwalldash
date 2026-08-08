@@ -53,6 +53,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     ? `${states.climate.attributes.current_temperature}°C`
     : temperatureValue(states.climate);
   const guestOn = states.guestMode?.state === 'on';
+  const homeMode = states.homeMode?.state && !['unknown', 'unavailable'].includes(states.homeMode.state) ? states.homeMode.state : '—';
   const guestVoucher = states.guestVoucher?.state;
   const hasGuestVoucher = Boolean(guestVoucher && !['unknown', 'unavailable'].includes(guestVoucher));
   const coolingOn = states.cooling?.state === 'on';
@@ -76,7 +77,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     {errors.load && <p className="load-error" role="alert">{errors.load}</p>}
     <div className="stitch-grid">
       <section className="stitch-card home-card" role="group" aria-label="Hjemmestatus">
-        <div className="card-top"><div className="icon-tile"><Icon filled>{states.home?.state === 'Borte' ? 'sensor_door' : 'home'}</Icon></div></div>
+        <div className="card-top"><div className="icon-tile"><Icon filled>{states.home?.state === 'Borte' ? 'sensor_door' : 'home'}</Icon></div><output className="home-mode-preview" aria-label="Husmodus">{homeMode}</output></div>
         <div className="card-bottom"><h2>Status</h2><div className="segmented"><button type="button" className={states.home?.state === 'Hjemme' ? 'selected' : ''} disabled={pending.home} onClick={() => action('home', 'Hjemme')}>Hjemme</button><button type="button" className={states.home?.state === 'Borte' ? 'selected' : ''} disabled={pending.home} onClick={() => action('home', 'Borte')}>Borte</button></div>{errors.home && <p role="alert">{errors.home}</p>}</div>
       </section>
       <section className={`stitch-card guest-card ${guestOn ? 'guest-active' : ''}`} role="group" aria-label="Gjestemodus">

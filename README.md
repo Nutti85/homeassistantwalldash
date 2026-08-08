@@ -21,6 +21,7 @@ npm run start
    - `HA_URL` = `http://192.168.1.78:8123`
    - `HA_TOKEN` = en Home Assistant long-lived access token
    - `DASHBOARD_PORT` = ønsket ekstern port, for eksempel `3000`
+   - `HA_HOME_MODE_ENTITY_ID` = husmodus-entiteten. Standard er `input_select.home_mode`.
    - `HA_GUEST_MODE_ENTITY_ID` = riktig Gjestemodus-entity. Standard er `input_boolean.gjest`.
    - `HA_GUEST_VOUCHER_SENSOR_ID` = voucher-sensoren. Standard er `sensor.67647a4bca314858fac0f8fc_voucher`.
    - `HA_GUEST_VOUCHER_CREATE_BUTTON_ID` = knappen som oppretter voucher. Standard er `button.67647a4bca314858fac0f8fc_create`.

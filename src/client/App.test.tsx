@@ -62,6 +62,12 @@ describe('App', () => {
     await waitFor(() => expect(api.runAction).toHaveBeenCalledWith('home', 'Borte'));
   });
 
+  it('shows the confirmed house-mode value in the status card', async () => {
+    render(<App api={createApi({ homeMode: state('input_select.home_mode', 'Ettermiddag') })} />);
+
+    expect(await screen.findByLabelText('Husmodus')).toHaveTextContent('Ettermiddag');
+  });
+
   it('opens the repair panel and restores focus after Escape', async () => {
     render(<App api={createApi({})} />);
 

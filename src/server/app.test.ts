@@ -11,6 +11,7 @@ const confirmedGuestMode = {
 const dashboardStates = {
   states: {
     home: { entity_id: 'input_select.home_state', state: 'Hjemme', attributes: {} },
+    homeMode: { entity_id: 'input_select.home_mode', state: 'Ettermiddag', attributes: {} },
     guestMode: { entity_id: 'input_boolean.toggle', state: 'on', attributes: {} },
     guestVoucher: { entity_id: 'sensor.voucher', state: 'K7M9-P2Q4', attributes: {} },
     morning: { entity_id: 'automation.morning', state: 'off', attributes: {} },

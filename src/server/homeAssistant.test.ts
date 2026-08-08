@@ -7,6 +7,7 @@ import {
   guestModeStateKey,
   guestVoucherStateKey,
   homeStateKey,
+  homeModeStateKey,
   morningStateKey,
   nightStateKey,
   outdoorStateKey,
@@ -19,8 +20,8 @@ const stateResponse = (entityId: string, state = 'on', attributes: Record<string
 
 describe('HomeAssistantClient', () => {
   it('exports stable dashboard state keys', () => {
-    expect([homeStateKey, guestModeStateKey, guestVoucherStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
-      .toEqual(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+    expect([homeStateKey, homeModeStateKey, guestModeStateKey, guestVoucherStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
+      .toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
   it('turns on guest mode and returns its fresh state', async () => {
@@ -202,6 +203,7 @@ describe('HomeAssistantClient', () => {
   it('gets all dashboard entities including the guest voucher', async () => {
     const entityIds = [
       'input_select.home_state',
+      'input_select.home_mode',
       'input_boolean.gjest',
       'sensor.67647a4bca314858fac0f8fc_voucher',
       'automation.modus_god_morgen',
@@ -217,7 +219,7 @@ describe('HomeAssistantClient', () => {
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
-    expect(Object.keys(result.states)).toEqual(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+    expect(Object.keys(result.states)).toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
   it.each([

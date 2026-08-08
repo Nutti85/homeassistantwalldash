@@ -15,6 +15,7 @@ if (!haUrl || !haToken) {
 const port = Number(process.env.PORT ?? 3000);
 const entities = {
   ...defaultDashboardEntityIds,
+  homeMode: process.env.HA_HOME_MODE_ENTITY_ID?.trim() || defaultDashboardEntityIds.homeMode,
   guestMode: process.env.HA_GUEST_MODE_ENTITY_ID?.trim() || defaultDashboardEntityIds.guestMode,
   guestVoucher: process.env.HA_GUEST_VOUCHER_SENSOR_ID?.trim() || defaultDashboardEntityIds.guestVoucher,
 };
