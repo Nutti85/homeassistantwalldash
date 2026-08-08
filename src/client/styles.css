@@ -71,3 +71,232 @@
   .temperature-panel p { margin-top: 6px; }
   .repair-fab { height: 44px; padding: 0 18px; }
 }
+
+/* Nordic semantic color theme. Geometry remains defined by the rules above. */
+:root {
+  --bg: #0e141b;
+  --surface: #18212b;
+  --surface-secondary: #111a23;
+  --surface-control: #222d38;
+  --border: #34414d;
+  --text-primary: #f1f5f7;
+  --text-secondary: #aeb9c3;
+  --accent: #55bfa9;
+  --accent-surface: #17483f;
+  --cool: #78b7e8;
+  --heat: #f2b84b;
+  --evening: #d99a62;
+  --night: #a995d8;
+  --success: #69c38c;
+  --danger: #e68178;
+  --danger-hover: #f0958c;
+  --disabled: #6f7b86;
+  color: var(--text-primary);
+  background: var(--bg);
+}
+
+body,
+.repair-frame {
+  background: var(--bg);
+}
+
+.stitch-card,
+.repair-modal {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.stitch-header h1,
+.stepper output,
+.temperature-panel strong,
+.repair-modal h2,
+.guest-voucher output {
+  color: var(--text-primary);
+}
+
+.outdoor .material-symbols-outlined,
+.icon-tile,
+.card-bottom p,
+.climate-heading p,
+.muted-status,
+.temperature-panel > span,
+.stepper output small,
+.temperature-panel p,
+.temperature-panel em,
+.repair-modal header button,
+.guest-voucher p,
+.fan-speed-section > span,
+.fan-speed-section > small,
+.heat-pump-modes button small {
+  color: var(--text-secondary);
+}
+
+.load-error,
+.repair-modal header > div {
+  color: var(--danger);
+}
+
+.icon-tile,
+.pill,
+.climate-action button,
+.stepper button,
+.guest-voucher button,
+.heat-pump-modes button,
+.fan-speed-modes button {
+  border-color: var(--border);
+  background: var(--surface-control);
+}
+
+.segmented,
+.temperature-panel,
+.guest-voucher {
+  border-color: var(--border);
+  background: var(--surface-secondary);
+}
+
+.pill,
+.segmented button,
+.climate-action button,
+.stepper button,
+.guest-voucher button,
+.heat-pump-modes button,
+.fan-speed-modes button {
+  color: var(--text-primary);
+}
+
+.pill-active,
+.segmented button.selected,
+.toggle-on,
+.climate-action .toggle.toggle-on,
+.heat-pump-modes button.selected,
+.fan-speed-modes button.selected {
+  border-color: var(--accent);
+  background: var(--accent-surface);
+}
+
+.segmented button.selected {
+  color: var(--text-primary);
+}
+
+.pill-active,
+.guest-icon-active,
+.guest-status-on,
+.climate-action span {
+  color: var(--accent);
+}
+
+.segmented button {
+  border: 1px solid transparent;
+}
+
+.segmented button:not(.selected) {
+  color: var(--text-secondary);
+}
+
+button:focus-visible {
+  outline-color: var(--accent);
+}
+
+.toggle,
+.climate-action .toggle {
+  border-color: var(--border);
+  background: var(--surface-control);
+}
+
+.toggle-on,
+.climate-action .toggle.toggle-on {
+  border-color: var(--accent);
+  background: var(--accent-surface);
+}
+
+.toggle span {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+}
+
+.home-card,
+.climate-card {
+  box-shadow: 0 0 20px rgb(85 191 169 / 12%);
+}
+
+.home-card::after {
+  background: var(--accent);
+  opacity: .12;
+}
+
+.guest-active {
+  box-shadow: 0 0 20px rgb(85 191 169 / 16%);
+}
+
+.guest-icon-active,
+.climate-icon {
+  background: var(--accent-surface);
+  color: var(--accent);
+}
+
+.scene-card {
+  border-color: var(--border);
+}
+
+.scene-card:hover,
+.repair-modal header button:hover,
+.guest-voucher button:hover {
+  background: var(--surface-control);
+}
+
+.scene-icon.morning {
+  color: var(--heat);
+}
+
+.scene-icon.evening {
+  color: var(--evening);
+}
+
+.scene-icon.night {
+  color: var(--night);
+}
+
+.climate-card::before {
+  background: linear-gradient(135deg, rgb(23 72 63 / 18%), transparent);
+}
+
+.heat-pump-modes button:nth-child(1) .material-symbols-outlined {
+  color: var(--cool);
+}
+
+.heat-pump-modes button:nth-child(2) .material-symbols-outlined {
+  color: var(--heat);
+}
+
+.heat-pump-modes button:nth-child(3) .material-symbols-outlined,
+.heat-pump-modes button:nth-child(4) .material-symbols-outlined,
+.climate-icon .material-symbols-outlined {
+  color: var(--accent);
+}
+
+.heat-pump-modes button.selected small {
+  color: var(--text-primary);
+}
+
+.fan-speed-modes button:disabled {
+  border-color: var(--border);
+  background: var(--surface-control);
+  color: var(--disabled);
+}
+
+.home-mode-preview {
+  border-color: var(--border);
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.repair-fab {
+  background: var(--danger);
+  color: var(--bg);
+  box-shadow: 0 0 20px rgb(230 129 120 / 18%), 0 8px 20px rgb(0 0 0 / 30%);
+}
+
+.repair-fab:hover {
+  background: var(--danger-hover);
+}
