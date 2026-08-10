@@ -184,13 +184,12 @@ function WeatherOverview({ states, regular, onDetails }: { states: Record<string
   const current = currentTemperatureNumber(states.weatherDaily) ?? currentTemperatureNumber(states.outdoor);
   const condition = stateValue(states.weatherDaily) ?? daily[0]?.condition;
   const summary = stateValue(states.weatherSummary);
-  return <section className={`card weather-card ${regular ? 'weather-regular' : ''}`} aria-labelledby="weather-title">
+  return <section className={`card weather-card ${regular ? 'weather-regular' : ''}`} aria-labelledby={regular ? undefined : 'weather-title'} role={regular ? 'button' : undefined} tabIndex={regular ? 0 : undefined} aria-label={regular ? 'Åpne detaljert vær' : undefined} onClick={regular ? onDetails : undefined} onKeyDown={regular ? (event) => { if ((event.key === 'Enter' || event.key === ' ') && onDetails) { event.preventDefault(); onDetails(); } } : undefined}>
     <div className="weather-top">
       <div className="weather-now"><WeatherGlyph condition={condition} large/><div><h2 id="weather-title">{fmt(current, '°C')}</h2><span>{conditionLabel(condition)}</span></div></div>
-      {regular ? <div className="weather-summary"><h3><Icon>auto_awesome</Icon>AI-generert værmelding</h3><p>{summary || '— Værmelding ikke tilgjengelig'}</p></div> : <ForecastStrip points={daily}/>} 
+      {regular ? <div className="weather-summary"><p>{summary || '— Værmelding ikke tilgjengelig'}</p></div> : <ForecastStrip points={daily}/>} 
     </div>
     {regular && <WeatherChart points={hourly}/>} 
-    {regular && <button type="button" className="card-link" onClick={onDetails} aria-label="Åpne detaljert vær">Detaljer <Icon>arrow_forward</Icon></button>}
   </section>;
 }
 

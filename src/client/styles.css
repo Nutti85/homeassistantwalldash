@@ -264,6 +264,25 @@ body{min-width:0}
 .weather-regular .weather-chart{height:auto;min-height:0;flex:1 1 auto}
 .weather-regular .chart-legend{order:2;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:10px}
 .weather-regular .weather-chart{order:1}
+
+/* Give the regular dashboard's weather graph its own wide column.  The
+   current conditions and forecast text stay together beneath the icon. */
+@media(min-width:801px){
+  .regular-layout{grid-template-rows:minmax(235px,1.2fr) minmax(225px,1.05fr) minmax(110px,.5fr)}
+  .regular-layout>.weather-regular{grid-template-columns:minmax(190px,26%) minmax(0,1fr);grid-template-rows:minmax(0,1fr);column-gap:14px}
+  .weather-regular .weather-top{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:flex-start;gap:16px;min-width:0}
+  .weather-regular .weather-summary{width:100%}
+  .weather-regular .weather-summary p{margin-top:0;-webkit-line-clamp:5;max-height:7.4em}
+  .weather-regular .weather-now{gap:12px}
+  .weather-regular .weather-now>.material-symbols-outlined{font-size:68px}
+  .weather-regular .weather-now h2{font-size:38px}
+  .weather-regular .weather-now span{font-size:15px}
+  .weather-regular .weather-chart-wrap{grid-column:2;grid-row:1;align-self:stretch;height:100%;margin:0;padding:0;overflow:hidden}
+  .weather-regular .weather-chart{min-height:0;height:auto;flex:1 1 auto}
+  .weather-regular .chart-legend{margin-top:7px;font-size:12px}
+  .weather-regular .weather-chart .axis-label{font-size:15px}
+  .weather-regular .weather-chart .time-label{font-size:17px}
+}
 .chart-legend .probability:before{height:0;border-top:2px solid #8fd4fa}
 .chart-legend .gust:before{height:0;border-top:2px dashed #bba9ff}
 .chart-legend .cloud:before{height:4px;background:#aeb4b3}
