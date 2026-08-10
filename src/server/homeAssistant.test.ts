@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HomeAssistantClient } from './homeAssistant';
+import { findBroadcastBody, HomeAssistantClient } from './homeAssistant';
 import {
   climateStateKey,
   coolingStateKey,
@@ -212,6 +212,10 @@ describe('HomeAssistantClient', () => {
       'automation.klima_automatisk_kjoling_optimalisert',
       'climate.stue',
       'sensor.indoor_ute_temperature',
+      'input_number.toggle_security_mode',
+      'lock.aqara_smart_lock_u200_2',
+      'sensor.weather_hourly',
+      'sensor.weather_daily',
     ];
     const fetcher = vi.fn();
     entityIds.forEach((entityId) => fetcher.mockResolvedValueOnce(stateResponse(entityId)));
@@ -219,7 +223,33 @@ describe('HomeAssistantClient', () => {
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
-    expect(Object.keys(result.states)).toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+    expect(Object.keys(result.states)).toHaveLength(27);
+    expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
+  });
+
+  it('finds the AI weather summary in the broadcast service trace node', () => {
+    expect(findBroadcastBody({
+      trace: {
+        'action/9': {
+          params: {
+            domain: 'rest_command',
+            service: 'klara_inbox_broadcast',
+            service_data: { title: 'Kveldsvær', body: 'I natt blir det rolig og tørt.' },
+          },
+        },
+      },
+    })).toBe('I natt blir det rolig og tørt.');
+  });
+
+  it.each([
+    ['securityMode', 'script/turn_on', 'script.toggle_security_mode_script', 'securityMode', 'input_number.toggle_security_mode'],
+    ['lockDoor', 'lock/lock', 'lock.aqara_smart_lock_u200_2', 'frontDoorLock', 'lock.aqara_smart_lock_u200_2'],
+    ['unlockDoor', 'lock/unlock', 'lock.aqara_smart_lock_u200_2', 'frontDoorLock', 'lock.aqara_smart_lock_u200_2'],
+  ] as const)('runs fixed %s action and confirms its entity', async (action, service, serviceEntity, key, confirmedEntity) => {
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 200 })).mockResolvedValueOnce(stateResponse(confirmedEntity));
+    const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).execute(action);
+    expect(fetcher).toHaveBeenNthCalledWith(1, `http://ha:8123/api/services/${service}`, expect.objectContaining({ body: JSON.stringify({ entity_id: serviceEntity }) }));
+    expect(result.states[key]).toMatchObject({ entity_id: confirmedEntity });
   });
 
   it.each([

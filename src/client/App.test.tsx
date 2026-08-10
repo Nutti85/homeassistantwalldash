@@ -3,79 +3,104 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import App, { type DashboardApi } from './App';
 
-const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({
-  entity_id,
-  state: value,
-  attributes,
+const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
+const baseStates: Record<string, HomeAssistantState> = {
+  guestMode: state('input_boolean.gjest', 'on'), guestVoucher: state('sensor.voucher', 'K7M9-P2Q4'),
+  frontDoorLock: state('lock.front', 'locked'), securityMode: state('input_number.security', '2'),
+  climate: state('climate.stue', 'heat', { temperature: 22, current_temperature: 24.6, fan_mode: 'quiet' }),
+  outdoor: state('sensor.outdoor', '17'), weatherDaily: state('sensor.daily', 'rainy', { forecast: [] }),
+  weatherHourly: state('sensor.hourly', 'rainy', { forecast: [] }), weatherSummary: state('sensor.summary', 'Regn i kveld.'),
+  repairHealth: state('binary_sensor.health', 'ok'),
+};
+const createApi = (overrides: Record<string, HomeAssistantState> = {}): DashboardApi => ({
+  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), runAction: vi.fn(), setTemperature: vi.fn(),
 });
-
-const createApi = (states: Record<string, HomeAssistantState>): DashboardApi => ({
-  getStates: vi.fn().mockResolvedValue({ states }),
-  runAction: vi.fn(),
-  setTemperature: vi.fn(),
-});
-
-const guestCard = () => within(screen.getByRole('group', { name: 'Gjestemodus' }));
-
+const selectMode = async (name: 'Gjest' | 'Barn' | 'Vanlig') => fireEvent.click(await screen.findByRole('tab', { name }));
 afterEach(cleanup);
 
-describe('App', () => {
-  it('shows the guest network instructions and confirmed voucher code', async () => {
-    const api = createApi({
-      guestMode: state('input_boolean.gjest', 'on'),
-      guestVoucher: state('sensor.voucher', 'K7M9-P2Q4'),
-    });
-    render(<App api={api} />);
-
-    expect(await guestCard().findByText(/Koble til WiFi/)).toHaveTextContent('GH_Guest');
-    expect(guestCard().getByLabelText('Tilgangskode')).toHaveTextContent('K7M9-P2Q4');
-    expect(guestCard().getByText('Gyldig for gjeldende gjest.')).toBeInTheDocument();
+describe('redesigned dashboard', () => {
+  it('starts in Vanlig and never exposes guest Wi-Fi there', async () => {
+    render(<App api={createApi()} />);
+    expect(await screen.findByRole('tab', { name: 'Vanlig' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByText('Gjeste-WiFi')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 3 })).toEqual(expect.arrayContaining([]));
   });
 
-  it('creates a new voucher and renders the confirmed code', async () => {
-    const api = createApi({ guestVoucher: state('sensor.voucher', 'K7M9-P2Q4') });
-    (api.runAction as ReturnType<typeof vi.fn>).mockResolvedValue({ states: { guestVoucher: state('sensor.voucher', 'T8L3-R6V1') } });
-    render(<App api={api} />);
-
-    fireEvent.click(await guestCard().findByRole('button', { name: 'Ny kode' }));
-    await waitFor(() => expect(api.runAction).toHaveBeenCalledWith('guestVoucher', undefined));
-    await waitFor(() => expect(guestCard().getByLabelText('Tilgangskode')).toHaveTextContent('T8L3-R6V1'));
+  it('renders exactly one guest Wi-Fi card and confirmed voucher in Gjest', async () => {
+    render(<App api={createApi()} />); await selectMode('Gjest');
+    expect(screen.getAllByText('Gjeste-WiFi')).toHaveLength(1);
+    expect(screen.getByLabelText('Tilgangskode')).toHaveTextContent('K7M9-P2Q4');
+    expect(await screen.findByAltText('QR-kode for gjestenettverket')).toHaveAttribute('src', expect.stringContaining('data:image/svg+xml'));
   });
 
-  it('turns guest mode on from the aligned switch', async () => {
-    const api = createApi({ guestMode: state('input_boolean.gjest', 'off') });
-    (api.runAction as ReturnType<typeof vi.fn>).mockResolvedValue({ states: { guestMode: state('input_boolean.gjest', 'on') } });
-    render(<App api={api} />);
-
-    const guestSwitch = await guestCard().findByRole('switch');
-    fireEvent.click(guestSwitch);
-    await waitFor(() => expect(guestSwitch).toHaveAttribute('aria-checked', 'true'));
+  it('keeps owner, guest and admin information out of Barn', async () => {
+    render(<App api={createApi({ repairHealth: state('binary_sensor.health', 'problem') })} />); await selectMode('Barn');
+    ['Gjeste-WiFi', 'GH_Guest', 'Energi i dag', 'Andreas', 'Hege', 'Kalender', 'Reparer smarthuset'].forEach((text) => expect(screen.queryByText(text)).not.toBeInTheDocument());
+    expect(screen.getByText('Hva skal vi gjøre?')).toBeInTheDocument();
   });
 
-  it('calls home with the selected option', async () => {
-    const api = createApi({ home: state('input_select.home_state', 'Hjemme') });
-    (api.runAction as ReturnType<typeof vi.fn>).mockResolvedValue({ states: { home: state('input_select.home_state', 'Borte') } });
-    render(<App api={api} />);
-
-    const homeCard = await screen.findByRole('group', { name: 'Hjemmestatus' });
-    fireEvent.click(within(homeCard).getByRole('button', { name: 'Borte' }));
-    await waitFor(() => expect(api.runAction).toHaveBeenCalledWith('home', 'Borte'));
-  });
-
-  it('shows the confirmed house-mode value in the status card', async () => {
-    render(<App api={createApi({ homeMode: state('input_select.home_mode', 'Ettermiddag') })} />);
-
-    expect(await screen.findByLabelText('Husmodus')).toHaveTextContent('Ettermiddag');
-  });
-
-  it('opens the repair panel and restores focus after Escape', async () => {
-    render(<App api={createApi({})} />);
-
-    const repairButton = screen.getByRole('button', { name: 'Reparer smarthuset' });
-    fireEvent.click(repairButton);
+  it('shows repair only for an unhealthy configured source and restores focus', async () => {
+    const { rerender } = render(<App api={createApi()} />);
+    expect(await screen.findByText('Hei! Alt er i orden med smarthuset.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reparer smarthuset' })).not.toBeInTheDocument();
+    rerender(<App api={createApi({ repairHealth: state('binary_sensor.health', 'problem') })} />);
+    const repair = await screen.findByRole('button', { name: 'Reparer smarthuset' });
+    fireEvent.click(repair);
     const dialog = screen.getByRole('dialog', { name: 'Systemreparasjon (8080)' });
     expect(within(dialog).getByTitle('Reparer smarthuset')).toHaveAttribute('src', 'http://192.168.1.127:8080/');
     fireEvent.keyDown(dialog, { key: 'Escape' });
-    expect(repairButton).toHaveFocus();
+    expect(repair).toHaveFocus();
+  });
+
+  it.each([['1','Mode: Armert'],['2','Mode: Notifikasjoner'],['3','Mode: Deaktivert'],['other','Mode: Ukjent']])('maps security %s', async (value, label) => {
+    render(<App api={createApi({ securityMode: state('input_number.security', value) })} />);
+    expect(await screen.findByText(label)).toBeInTheDocument();
+  });
+
+  it('uses fixed lock action and renders the confirmed result', async () => {
+    const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: { frontDoorLock: state('lock.front', 'unlocked') } });
+    render(<App api={api} />); fireEvent.click(await screen.findByRole('button', { name: 'Lås opp' }));
+    await waitFor(() => expect(api.runAction).toHaveBeenCalledWith('unlockDoor', undefined));
+    expect(await screen.findByText('Ulåst')).toBeInTheDocument();
+  });
+
+  it.each([['Morgen','morning'],['Kveld','evening'],['Natt','night']] as const)('preserves %s scene intent', async (label, action) => {
+    const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: {} }); render(<App api={api}/>);
+    fireEvent.click(await screen.findByRole('button', { name: label })); await waitFor(() => expect(api.runAction).toHaveBeenCalledWith(action, undefined));
+  });
+
+  it('shows populated and unavailable AI summary states', async () => {
+    const { rerender } = render(<App api={createApi()} />); expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
+    rerender(<App api={createApi({ weatherSummary: state('', 'unavailable') })} />);
+    expect(await screen.findByText('— Værmelding ikke tilgjengelig')).toBeInTheDocument();
+  });
+
+  it('opens detailed weather and switches its tabs', async () => {
+    render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Åpne detaljert vær' }));
+    expect(screen.getByRole('heading', { name: 'Detaljert vær' })).toBeInTheDocument();
+    const week = screen.getByRole('tab', { name: 'Neste 7 dager' }); fireEvent.click(week); expect(week).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('shows all weather series together in one accessible graph', async () => {
+    const forecast = Array.from({ length: 9 }, (_, index) => ({
+      datetime: new Date(Date.parse('2026-08-10T21:00:00+02:00') + index * 3 * 60 * 60 * 1000).toISOString(),
+      temperature: 12 + index, precipitation: index < 3 ? index / 2 : 0,
+      precipitation_probability: Math.max(0, 90 - index * 12), wind_speed: 2 + index / 3,
+      wind_gust_speed: 4 + index / 2, cloud_coverage: 75 - index * 7,
+    }));
+    render(<App api={createApi({ weatherHourly: state('sensor.hourly', 'rainy', { forecast }) })} />);
+    expect(await screen.findByRole('img', { name: /Samlet graf/ })).toBeInTheDocument();
+    const graph = screen.getByRole('img', { name: /Samlet graf/ });
+    expect(graph).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+    expect(Array.from(graph.querySelectorAll('.axis-right')).map((label) => label.textContent)).toEqual(['100%', '75%', '50%', '25%', '0%']);
+    const legend = screen.getByLabelText('Tegnforklaring');
+    ['Temperatur', 'Nedbør', 'Sannsynlighet', 'Vind', 'Kast', 'Skydekke'].forEach((label) => expect(within(legend).getByText(label)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Temperatur/ })).not.toBeInTheDocument();
+  });
+
+  it('shows camera fallback and accessible controls', async () => {
+    render(<App api={createApi()} />); expect(await screen.findByText('— Kamera ikke tilgjengelig')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Slå på lyd' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vis kamera i fullskjerm' })).toBeInTheDocument();
   });
 });

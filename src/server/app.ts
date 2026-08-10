@@ -9,9 +9,10 @@ export interface DashboardClient {
   getDashboardStates(): Promise<DashboardStates>;
   execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<DashboardActionResult>;
   setTemperature(temperature: number): Promise<DashboardActionResult>;
+  getCameraImage?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
 }
 
-const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed']);
+const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
 const updateError = { error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -37,6 +38,16 @@ export const createApp = (client: DashboardClient): Express => {
   app.get('/api/states', async (_request: Request, response: Response) => {
     try {
       response.json(await client.getDashboardStates());
+    } catch (error) {
+      sendClientError(error, response);
+    }
+  });
+
+  app.get('/api/camera', async (_request: Request, response: Response) => {
+    if (!client.getCameraImage) { response.sendStatus(404); return; }
+    try {
+      const image = await client.getCameraImage();
+      response.type(image.contentType).send(Buffer.from(image.bytes));
     } catch (error) {
       sendClientError(error, response);
     }

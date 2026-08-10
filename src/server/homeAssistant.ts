@@ -1,15 +1,50 @@
 import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, guestVoucherCreateButtonEntityId, type FanSpeed, type HeatPumpMode, type HomeAssistantState } from '../shared/entities';
 
-type DashboardStates = { states: Record<DashboardStateKey, HomeAssistantState> };
+type DashboardStates = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 type CommandResult = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 
-const services: Record<Exclude<DashboardAction, 'home' | 'heatPump' | 'fanSpeed'>, string> = {
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+export const findBroadcastBody = (value: unknown): string | undefined => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const body = findBroadcastBody(item);
+      if (body) return body;
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) return undefined;
+
+  const serviceData = value.service_data;
+  if (
+    value.domain === 'rest_command'
+    && value.service === 'klara_inbox_broadcast'
+    && isRecord(serviceData)
+    && typeof serviceData.body === 'string'
+    && serviceData.body.trim()
+  ) {
+    return serviceData.body.trim();
+  }
+
+  for (const child of Object.values(value)) {
+    const body = findBroadcastBody(child);
+    if (body) return body;
+  }
+  return undefined;
+};
+
+const services: Partial<Record<DashboardAction, string>> = {
   guestMode: 'input_boolean/turn_on',
   guestVoucher: 'button/press',
   morning: 'automation/trigger',
   evening: 'script/turn_on',
   night: 'script/turn_on',
   cooling: 'automation/turn_on',
+  securityMode: 'script/turn_on',
+  lockDoor: 'lock/lock',
+  unlockDoor: 'lock/unlock',
 };
 
 const communicationError = () => new Error('Kunne ikke kommunisere med Home Assistant');
@@ -31,18 +66,92 @@ export class HomeAssistantClient {
     private readonly fetcher: typeof fetch = fetch,
     private readonly entities: DashboardEntityIds = defaultDashboardEntityIds,
     private readonly guestVoucherCreateButtonId: string = guestVoucherCreateButtonEntityId,
+    private readonly weatherAutomationTraceId = '',
   ) {}
 
   public async getDashboardStates(): Promise<DashboardStates> {
     const states = {} as Record<DashboardStateKey, HomeAssistantState>;
     for (const [key, entityId] of Object.entries(this.entities) as [DashboardStateKey, string][]) {
+      if (!entityId) {
+        states[key] = { entity_id: '', state: 'unavailable', attributes: {} };
+        continue;
+      }
       try {
         states[key] = await this.getState(entityId);
       } catch {
         states[key] = { entity_id: entityId, state: 'unavailable', attributes: {} };
       }
     }
+    if (this.weatherAutomationTraceId) {
+      try {
+        const summary = await this.getWeatherSummaryFromTrace();
+        if (summary) states.weatherSummary = summary;
+      } catch {
+        // Keep the unavailable summary state when the trace is not reachable.
+      }
+    }
     return { states };
+  }
+
+  private async getWeatherSummaryFromTrace(): Promise<HomeAssistantState | undefined> {
+    const trace = await this.callTrace('trace/list');
+    if (!Array.isArray(trace)) return undefined;
+    const runs = trace.filter(isRecord).sort((left, right) => {
+      const leftStart = isRecord(left.timestamp) && typeof left.timestamp.start === 'string' ? left.timestamp.start : '';
+      const rightStart = isRecord(right.timestamp) && typeof right.timestamp.start === 'string' ? right.timestamp.start : '';
+      return rightStart.localeCompare(leftStart);
+    });
+    const runIdValue = runs.find((run) => typeof run.run_id === 'string')?.run_id;
+    if (typeof runIdValue !== 'string') return undefined;
+    const runId = runIdValue;
+    const fullTrace = await this.callTrace('trace/get', runId);
+    const body = findBroadcastBody(fullTrace);
+    if (!body) return undefined;
+    return {
+      entity_id: `automation.${this.weatherAutomationTraceId}`,
+      state: body,
+      attributes: { source: 'automation trace', automation_id: this.weatherAutomationTraceId },
+    };
+  }
+
+  private async callTrace(type: 'trace/list' | 'trace/get', runId?: string): Promise<unknown> {
+    const websocketUrl = `${this.baseUrl.replace(/^http/, 'ws')}/api/websocket`;
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(websocketUrl);
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        socket.close();
+        callback();
+      };
+      const fail = () => finish(() => reject(communicationError()));
+      socket.addEventListener('error', fail);
+      socket.addEventListener('close', () => { if (!settled) reject(communicationError()); });
+      socket.addEventListener('message', (event) => {
+        let message: unknown;
+        try { message = JSON.parse(String(event.data)); } catch { fail(); return; }
+        if (!isRecord(message)) return;
+        if (message.type === 'auth_required') {
+          socket.send(JSON.stringify({ type: 'auth', access_token: this.token }));
+          return;
+        }
+        if (message.type === 'auth_ok') {
+          socket.send(JSON.stringify({
+            id: 1,
+            type,
+            domain: 'automation',
+            item_id: this.weatherAutomationTraceId,
+            ...(runId ? { run_id: runId } : {}),
+          }));
+          return;
+        }
+        if (message.type === 'result' && message.id === 1) {
+          if (message.success !== true) { fail(); return; }
+          finish(() => resolve(message.result));
+        }
+      });
+    });
   }
 
   public async execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<CommandResult> {
@@ -90,8 +199,16 @@ export class HomeAssistantClient {
 
       if (action === 'guestVoucher') {
         const previousVoucher = await this.getState(this.entities.guestVoucher);
-        await this.request(services.guestVoucher, { entity_id: this.guestVoucherCreateButtonId });
+        await this.request('button/press', { entity_id: this.guestVoucherCreateButtonId });
         return { states: { guestVoucher: await this.waitForChangedState(this.entities.guestVoucher, previousVoucher) } };
+      }
+
+      if (action === 'securityMode' || action === 'lockDoor' || action === 'unlockDoor') {
+        const entityKey = action === 'securityMode' ? 'securityMode' : 'frontDoorLock';
+        const service = action === 'securityMode' ? 'script/turn_on' : action === 'lockDoor' ? 'lock/lock' : 'lock/unlock';
+        const serviceEntityId = action === 'securityMode' ? 'script.toggle_security_mode_script' : this.entities.frontDoorLock;
+        await this.request(service, { entity_id: serviceEntityId });
+        return { states: { [entityKey]: await this.getState(this.entities[entityKey]) } };
       }
 
       let service = services[action as Exclude<DashboardAction, 'home' | 'heatPump' | 'fanSpeed'>];
@@ -112,6 +229,16 @@ export class HomeAssistantClient {
     } catch {
       throw communicationError();
     }
+  }
+
+  public async getCameraImage(): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+    if (!this.entities.doorbellCamera) throw communicationError();
+    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy/${this.entities.doorbellCamera}`, {
+      method: 'GET',
+      headers: this.headers(),
+    });
+    if (!response.ok) throw communicationError();
+    return { bytes: await response.arrayBuffer(), contentType: response.headers.get('content-type') || 'image/jpeg' };
   }
 
   public async setTemperature(temperature: number): Promise<CommandResult> {
