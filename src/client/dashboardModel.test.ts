@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { forecastPoints, homeLabel, temperatureValue } from './dashboardModel';
+import { calendarEventOccursOnDay, calendarEvents, forecastPoints, homeLabel, temperatureValue, wasteDaysUntil } from './dashboardModel';
 
 describe('dashboard state presentation', () => {
   it('uses Home Assistant returned state for the home label', () => {
@@ -25,5 +25,16 @@ describe('dashboard state presentation', () => {
       precipitation_probability: 65, wind_speed: 3.8, wind_gust_speed: 9, cloud_coverage: 42,
     }] } });
     expect(point).toMatchObject({ precipitationProbability: 65, windGustSpeed: 9, cloudCoverage: 42 });
+  });
+
+  it('reads garbage days and collection type from a combined sensor state', () => {
+    expect(wasteDaysUntil({ entity_id: 'sensor.garbage', state: '7, Matavfall', attributes: {} })).toBe(7);
+  });
+
+  it('reads Outlook calendar data and includes an all-day event on each covered day', () => {
+    const [event] = calendarEvents({ entity_id: 'calendar.felles', state: 'on', attributes: { data: [{ summary: 'Planleggingsdag', start: '2026-08-10', end: '2026-08-12', all_day: true }] } });
+    expect(event).toMatchObject({ title: 'Planleggingsdag', allDay: true });
+    expect(calendarEventOccursOnDay(event, '2026-08-11')).toBe(true);
+    expect(calendarEventOccursOnDay(event, '2026-08-12')).toBe(false);
   });
 });

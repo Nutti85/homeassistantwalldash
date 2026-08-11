@@ -239,6 +239,10 @@ describe('HomeAssistantClient', () => {
       'lock.aqara_smart_lock_u200_2',
       'sensor.weather_hourly',
       'sensor.weather_daily',
+      'sensor.next_garbage_collection',
+      'sensor.ee14199_range_electric',
+      'sensor.ee14199_state_of_charge',
+      'calendar.outlook_andreas_felles',
     ];
     const fetcher = vi.fn();
     entityIds.forEach((entityId) => fetcher.mockResolvedValueOnce(stateResponse(entityId)));
@@ -246,7 +250,7 @@ describe('HomeAssistantClient', () => {
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
-    expect(Object.keys(result.states)).toHaveLength(27);
+    expect(Object.keys(result.states)).toHaveLength(29);
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
   });
 

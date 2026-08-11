@@ -10,7 +10,7 @@ export const dashboardStateKeys = [
   'home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night',
   'cooling', 'climate', 'outdoor', 'securityMode', 'frontDoorLock', 'doorbellCamera',
   'weatherHourly', 'weatherDaily', 'weatherSummary', 'energyToday', 'roomLiving',
-  'roomBedroom', 'roomBathroom', 'waste', 'carAndreasRange', 'carHegeRange',
+  'roomBedroom', 'roomBathroom', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
   'andreasTravelTime', 'hegeTravelTime', 'calendar', 'repairHealth',
 ] as const;
 
@@ -51,12 +51,14 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   roomLiving: '',
   roomBedroom: '',
   roomBathroom: '',
-  waste: '',
-  carAndreasRange: '',
+  waste: 'sensor.next_garbage_collection',
+  carAndreasRange: 'sensor.ee14199_range_electric',
+  carAndreasBattery: 'sensor.ee14199_state_of_charge',
   carHegeRange: '',
+  carHegeBattery: '',
   andreasTravelTime: '',
   hegeTravelTime: '',
-  calendar: '',
+  calendar: 'calendar.outlook_andreas_felles',
   repairHealth: '',
 };
 

@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState } from '../shared/entities';
 import * as browserApi from './api';
 import {
-  conditionIcon, conditionLabel, currentTemperatureNumber, forecastPoints, isRepairNeeded,
+  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, wasteDaysUntil,
   securityPresentation, stateValue, temperatureNumber, type ForecastPoint,
 } from './dashboardModel';
 
@@ -274,6 +274,24 @@ function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
   </div>;
 }
 
+function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState> }) {
+  const rooms = [['Stue', states.roomLiving], ['Soverom', states.roomBedroom], ['Bad', states.roomBathroom]] as const;
+  const events = calendarEvents(states.calendar);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const days = [{ label: 'I dag', key: calendarDayKey(today.toISOString()) }, { label: 'I morgen', key: calendarDayKey(tomorrow.toISOString()) }];
+  const wasteDays = wasteDaysUntil(states.waste);
+  const wasteTypes = typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : typeof states.waste?.attributes.collection_type === 'string' ? states.waste.attributes.collection_type : stateValue(states.waste)?.replace(/^\s*\d+\s*,\s*/, '') || 'Ikke tilgjengelig';
+  return <div className="metric-row">
+    <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section>
+    <section className="card metric rooms"><h3>Rom</h3>{rooms.map(([label, value]) => <p key={label}><span>{label}</span><strong>{reading(value, ' °C')}</strong></p>)}</section>
+    <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong></div><p>{wasteTypes}</p></section>
+    <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carAndreasBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section>
+    <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carHegeBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section>
+    <section className="card metric calendar"><h3>Kalender</h3>{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}</section>
+  </div>;
+}
+
 function QrCode({ payload }: { payload?: string }) {
   const [url, setUrl] = useState('');
   useEffect(() => { let active = true; if (!payload) { setUrl(''); return; } QRCode.toString(payload, { type: 'svg', width: 220, margin: 1, color: { dark: '#111111', light: '#f4efe7' } }).then((svg) => { if (active) setUrl(`data:image/svg+xml,${encodeURIComponent(svg)}`); }); return () => { active = false; }; }, [payload]);
@@ -289,7 +307,7 @@ function RegularDashboard({ states, pending, errors, action, adjust, showWeather
   return <EditableDashboard mode="regular" editing={editing} layout={layout} updateLayout={updateLayout} children={[
     { id: 'access', label: 'Adgang', content: <div className="upper-left"><DoorCard state={states.frontDoorLock} pending={pending.lockDoor || pending.unlockDoor} action={action} error={errors.lockDoor || errors.unlockDoor}/><SecurityCard state={states.securityMode} pending={pending.securityMode} action={() => action('securityMode')} error={errors.securityMode}/></div> },
     { id: 'weather', label: 'Vær', content: <WeatherOverview states={states} regular onDetails={showWeather}/> }, { id: 'doorbell', label: 'Ringeklokke', content: <Doorbell available={Boolean(stateValue(states.doorbellCamera))}/> },
-    { id: 'scenes', label: 'Scener', content: <Scenes action={action} pending={pending} errors={errors}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, { id: 'metrics', label: 'Oversikt', content: <Metrics states={states}/> },
+    { id: 'scenes', label: 'Scener', content: <Scenes action={action} pending={pending} errors={errors}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, { id: 'metrics', label: 'Oversikt', content: <MetricsUpdated states={states}/> },
   ]}/>;
 }
 

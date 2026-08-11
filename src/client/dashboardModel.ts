@@ -6,6 +6,49 @@ const unavailableStates = new Set(['unknown', 'unavailable', 'none', '']);
 export const stateValue = (state: HomeAssistantState | undefined): string | undefined =>
   state && !unavailableStates.has(state.state.toLowerCase()) ? state.state : undefined;
 
+const validDate = (value: unknown): string | undefined => typeof value === 'string' && value && !Number.isNaN(Date.parse(value)) ? value : undefined;
+
+export interface CalendarEvent { title: string; start: string; end?: string; allDay: boolean }
+
+export const calendarEvents = (state: HomeAssistantState | undefined): CalendarEvent[] => {
+  const attributes = state?.attributes ?? {};
+  const rawEvents = Array.isArray(attributes.events) ? attributes.events : Array.isArray(attributes.data) ? attributes.data : [attributes];
+  return rawEvents.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const start = validDate(row.start ?? row.start_time ?? row.begin);
+    if (!start) return [];
+    const end = validDate(row.end ?? row.end_time ?? row.finish);
+    const title = [row.title, row.summary, row.message, row.description].find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? 'Uten tittel';
+    return [{ title, start, end, allDay: row.all_day === true }];
+  }).sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
+};
+
+const localDateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+export const calendarDayKey = (value: string): string => localDateKey(new Date(value));
+export const formatCalendarTime = (value: string | undefined): string => value ? new Date(value).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
+export const calendarEventOccursOnDay = (event: CalendarEvent, dayKey: string): boolean => {
+  const startDay = calendarDayKey(event.start);
+  if (!event.end) return startDay === dayKey;
+  const endDay = calendarDayKey(event.end);
+  return startDay === endDay ? startDay === dayKey : startDay <= dayKey && dayKey < endDay;
+};
+
+export const wasteDaysUntil = (state: HomeAssistantState | undefined): number | undefined => {
+  const explicit = state?.attributes.days_until ?? state?.attributes.days;
+  const numeric = Number(explicit ?? stateValue(state));
+  if (Number.isFinite(numeric)) return Math.max(0, Math.ceil(numeric));
+  const value = stateValue(state);
+  const leadingNumber = value?.match(/^\s*(\d+)/)?.[1];
+  if (leadingNumber) return Number(leadingNumber);
+  if (!value || Number.isNaN(Date.parse(value))) return undefined;
+  const today = new Date();
+  const target = new Date(value);
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const startTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  return Math.max(0, Math.ceil((startTarget - startToday) / 86_400_000));
+};
+
 export const homeLabel = (state: Pick<HomeAssistantState, 'state'> | undefined): string =>
   !state || unavailableStates.has(state.state.toLowerCase()) ? unavailableLabel : state.state;
 

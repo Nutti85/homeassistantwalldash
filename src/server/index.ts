@@ -29,12 +29,14 @@ const entities = {
   roomLiving: process.env.HA_ROOM_LIVING_ENTITY_ID?.trim() || '',
   roomBedroom: process.env.HA_ROOM_BEDROOM_ENTITY_ID?.trim() || '',
   roomBathroom: process.env.HA_ROOM_BATHROOM_ENTITY_ID?.trim() || '',
-  waste: process.env.HA_WASTE_ENTITY_ID?.trim() || '',
-  carAndreasRange: process.env.HA_CAR_ANDREAS_RANGE_ENTITY_ID?.trim() || '',
+  waste: process.env.HA_WASTE_ENTITY_ID?.trim() || 'sensor.next_garbage_collection',
+  carAndreasRange: process.env.HA_CAR_ANDREAS_RANGE_ENTITY_ID?.trim() || defaultDashboardEntityIds.carAndreasRange,
+  carAndreasBattery: process.env.HA_CAR_ANDREAS_BATTERY_ENTITY_ID?.trim() || defaultDashboardEntityIds.carAndreasBattery,
   carHegeRange: process.env.HA_CAR_HEGE_RANGE_ENTITY_ID?.trim() || '',
+  carHegeBattery: process.env.HA_CAR_HEGE_BATTERY_ENTITY_ID?.trim() || '',
   andreasTravelTime: process.env.HA_ANDREAS_TRAVEL_TIME_ENTITY_ID?.trim() || '',
   hegeTravelTime: process.env.HA_HEGE_TRAVEL_TIME_ENTITY_ID?.trim() || '',
-  calendar: process.env.HA_CALENDAR_ENTITY_ID?.trim() || '',
+  calendar: process.env.HA_CALENDAR_ENTITY_ID?.trim() || defaultDashboardEntityIds.calendar,
   repairHealth: process.env.HA_REPAIR_HEALTH_ENTITY_ID?.trim() || '',
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();

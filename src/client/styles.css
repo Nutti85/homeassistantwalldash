@@ -435,3 +435,5 @@ body{min-width:0}
   .regular-layout .fan-group>div{gap:6px}
   .regular-layout .fan-group button{min-height:38px;padding:0 4px;font-size:12px}
 }
+/* Calendar entries show today and tomorrow with title and time range. */
+.calendar-day{margin-top:7px}.calendar-day>strong{display:block;color:var(--mint);font-size:13px}.calendar-day p{display:flex;justify-content:space-between;gap:6px;margin-top:5px}.calendar-day p b{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:500}.calendar-day p span{white-space:nowrap;font-size:12px}
