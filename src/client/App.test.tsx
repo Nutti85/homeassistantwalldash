@@ -111,7 +111,14 @@ describe('redesigned dashboard', () => {
 
   it('shows camera fallback and accessible controls', async () => {
     render(<App api={createApi()} />); expect(await screen.findByText('— Kamera ikke tilgjengelig')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Slå på lyd' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Vis kamera i fullskjerm' })).toBeInTheDocument();
+  });
+
+  it('uses the live stream and falls back to a still image when it fails', async () => {
+    render(<App api={createApi({ doorbellCamera: state('camera.ringeklokke_fluent', 'idle') })} />);
+    const camera = await screen.findByRole('img', { name: 'Direktevideo fra ringeklokke' });
+    expect(camera).toHaveAttribute('src', '/api/camera/stream');
+    fireEvent.error(camera);
+    expect(await screen.findByRole('img', { name: 'Siste bilde fra ringeklokke' })).toHaveAttribute('src', '/api/camera?frame=fallback');
   });
 });

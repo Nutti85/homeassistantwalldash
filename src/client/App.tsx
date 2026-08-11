@@ -252,10 +252,12 @@ function SecurityCard({ state, pending, action, error }: { state?: HomeAssistant
 }
 
 function Doorbell({ available }: { available: boolean }) {
-  const [muted, setMuted] = useState(true);
-  const [frame, setFrame] = useState(0);
-  useEffect(() => { if (!available) return; const timer = window.setInterval(() => setFrame((value) => value + 1), 5000); return () => window.clearInterval(timer); }, [available]);
-  return <section className="card doorbell-card" aria-labelledby="doorbell-title"><h2 id="doorbell-title">Ringeklokke</h2><div className="camera-frame">{available ? <img src={`/api/camera?frame=${frame}`} alt="Direktebilde fra ringeklokke"/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}<span className="live-badge">LIVE</span><div className="camera-controls"><button type="button" aria-label={muted ? 'Slå på lyd' : 'Demp lyd'} onClick={() => setMuted(!muted)}><Icon>{muted ? 'volume_off' : 'volume_up'}</Icon></button><button type="button" aria-label="Vis kamera i fullskjerm" onClick={() => document.querySelector('.camera-frame')?.requestFullscreen?.()}><Icon>fullscreen</Icon></button></div></div></section>;
+  const [source, setSource] = useState<'stream' | 'snapshot' | 'unavailable'>('stream');
+  useEffect(() => { setSource('stream'); }, [available]);
+  const cameraAvailable = available && source !== 'unavailable';
+  const stream = source === 'stream';
+  const imageSource = stream ? '/api/camera/stream' : '/api/camera?frame=fallback';
+  return <section className="card doorbell-card" aria-labelledby="doorbell-title"><h2 id="doorbell-title">Ringeklokke</h2><div className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={stream ? 'Direktevideo fra ringeklokke' : 'Siste bilde fra ringeklokke'} onError={() => setSource((current) => current === 'stream' ? 'snapshot' : 'unavailable')}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">{stream ? 'LIVE' : 'BILDE'}</span>}<div className="camera-controls"><button type="button" aria-label="Vis kamera i fullskjerm" onClick={() => document.querySelector('.camera-frame')?.requestFullscreen?.()}><Icon>fullscreen</Icon></button></div></div></section>;
 }
 
 const reading = (state: HomeAssistantState | undefined, unit = '') => stateValue(state) ? `${stateValue(state)}${unit}` : '—';

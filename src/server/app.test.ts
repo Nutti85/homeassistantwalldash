@@ -155,4 +155,19 @@ describe('dashboard API', () => {
     expect(response.body).toEqual(result);
     expect(client.setTemperature).toHaveBeenCalledWith(21.5);
   });
+
+  it('proxies a camera stream without caching it', async () => {
+    const client = createClient();
+    client.getCameraStream = vi.fn().mockResolvedValue({
+      body: new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1, 2, 3])); controller.close(); } }),
+      contentType: 'application/octet-stream',
+    });
+
+    const response = await request(createApp(client)).get('/api/camera/stream');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['content-type']).toContain('application/octet-stream');
+    expect(client.getCameraStream).toHaveBeenCalledOnce();
+  });
 });

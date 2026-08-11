@@ -241,6 +241,16 @@ export class HomeAssistantClient {
     return { bytes: await response.arrayBuffer(), contentType: response.headers.get('content-type') || 'image/jpeg' };
   }
 
+  public async getCameraStream(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }> {
+    if (!this.entities.doorbellCamera) throw communicationError();
+    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy_stream/${this.entities.doorbellCamera}`, {
+      method: 'GET',
+      headers: this.headers(),
+    });
+    if (!response.ok || !response.body) throw communicationError();
+    return { body: response.body, contentType: response.headers.get('content-type') || 'multipart/x-mixed-replace' };
+  }
+
   public async setTemperature(temperature: number): Promise<CommandResult> {
     if (!Number.isFinite(temperature)) {
       throw new Error('Ugyldig temperatur');

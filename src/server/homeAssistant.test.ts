@@ -3,6 +3,7 @@ import { findBroadcastBody, HomeAssistantClient } from './homeAssistant';
 import {
   climateStateKey,
   coolingStateKey,
+  defaultDashboardEntityIds,
   eveningStateKey,
   guestModeStateKey,
   guestVoucherStateKey,
@@ -22,6 +23,28 @@ describe('HomeAssistantClient', () => {
   it('exports stable dashboard state keys', () => {
     expect([homeStateKey, homeModeStateKey, guestModeStateKey, guestVoucherStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
       .toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+  });
+
+  it('opens the allowlisted Home Assistant camera proxy stream with server-side authorization', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { 'content-type': 'multipart/x-mixed-replace; boundary=frame' },
+    }));
+    const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, {
+      ...defaultDashboardEntityIds,
+      doorbellCamera: 'camera.ringeklokke_fluent',
+    });
+
+    const stream = await client.getCameraStream();
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://ha:8123/api/camera_proxy_stream/camera.ringeklokke_fluent',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+      }),
+    );
+    expect(stream.contentType).toContain('multipart/x-mixed-replace');
   });
 
   it('turns on guest mode and returns its fresh state', async () => {
