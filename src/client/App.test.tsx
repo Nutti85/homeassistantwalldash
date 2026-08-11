@@ -15,15 +15,25 @@ const baseStates: Record<string, HomeAssistantState> = {
 const createApi = (overrides: Record<string, HomeAssistantState> = {}): DashboardApi => ({
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), runAction: vi.fn(), setTemperature: vi.fn(),
 });
-const selectMode = async (name: 'Gjest' | 'Barn' | 'Vanlig') => fireEvent.click(await screen.findByRole('tab', { name }));
+const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => fireEvent.click(await screen.findByRole('tab', { name }));
 afterEach(cleanup);
 
 describe('redesigned dashboard', () => {
-  it('starts in Vanlig and never exposes guest Wi-Fi there', async () => {
+  it('starts in Full and never exposes guest Wi-Fi there', async () => {
     render(<App api={createApi()} />);
-    expect(await screen.findByRole('tab', { name: 'Vanlig' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('tab', { name: 'Full' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('Gjeste-WiFi')).not.toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 3 })).toEqual(expect.arrayContaining([]));
+  });
+
+  it('offers a deliberate layout editing mode with move, resize and reset controls', async () => {
+    render(<App api={createApi()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
+    expect(screen.getByRole('button', { name: 'Flytt Vær' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Endre størrelse på Vær' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tilbakestill' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Fullfør tilpassing av oppsett' }));
+    expect(screen.queryByRole('button', { name: 'Flytt Vær' })).not.toBeInTheDocument();
   });
 
   it('renders exactly one guest Wi-Fi card and confirmed voucher in Gjest', async () => {
@@ -59,7 +69,7 @@ describe('redesigned dashboard', () => {
 
   it('uses fixed lock action and renders the confirmed result', async () => {
     const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: { frontDoorLock: state('lock.front', 'unlocked') } });
-    render(<App api={api} />); fireEvent.click(await screen.findByRole('button', { name: 'Lås opp' }));
+    render(<App api={api} />); fireEvent.click(await screen.findByRole('button', { name: 'Lås opp ytterdør' }));
     await waitFor(() => expect(api.runAction).toHaveBeenCalledWith('unlockDoor', undefined));
     expect(await screen.findByText('Ulåst')).toBeInTheDocument();
   });
@@ -92,7 +102,8 @@ describe('redesigned dashboard', () => {
     expect(await screen.findByRole('img', { name: /Samlet graf/ })).toBeInTheDocument();
     const graph = screen.getByRole('img', { name: /Samlet graf/ });
     expect(graph).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
-    expect(Array.from(graph.querySelectorAll('.axis-right')).map((label) => label.textContent)).toEqual(['100%', '75%', '50%', '25%', '0%']);
+    expect(Array.from(graph.querySelectorAll('.axis-left')).map((label) => label.textContent)).toEqual(['22° · 1.0 mm', '19° · 0.8 mm', '16° · 0.5 mm', '13° · 0.3 mm', '10° · 0.0 mm']);
+    expect(Array.from(graph.querySelectorAll('.axis-right')).map((label) => label.textContent)).toEqual(['100% · 8.0 m/s', '75% · 6.0 m/s', '50% · 4.0 m/s', '25% · 2.0 m/s', '0% · 0.0 m/s']);
     const legend = screen.getByLabelText('Tegnforklaring');
     ['Temperatur', 'Nedbør', 'Sannsynlighet', 'Vind', 'Kast', 'Skydekke'].forEach((label) => expect(within(legend).getByText(label)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /Temperatur/ })).not.toBeInTheDocument();

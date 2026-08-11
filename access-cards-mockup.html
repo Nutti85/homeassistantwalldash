@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smarthjem – kompakte tilgangskort</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,100..700,0..1" rel="stylesheet">
+  <style>
+    :root{font-family:Inter,system-ui,sans-serif;color:#f1eee8;background:#060d0e}*{box-sizing:border-box}body{margin:0;min-width:960px;min-height:100vh;background:radial-gradient(circle at 48% -20%,#0a1717 0,#060d0e 58%,#04090a 100%)}.dashboard{min-height:100vh;padding:18px 28px 24px}.header{height:58px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px}.brand{font-size:28px;font-weight:600;letter-spacing:-.03em}.context{margin-top:5px;color:#c3bfba;font-size:15px}.modes{display:flex;padding:4px;border-radius:10px;background:#10191a}.mode{display:flex;align-items:center;gap:7px;padding:11px 17px;border-radius:8px;color:#c7c3bd;font-weight:500}.mode.active{color:#21130f;background:linear-gradient(135deg,#ff9678,#f47f68);box-shadow:0 4px 13px rgba(239,128,106,.16)}.clock{justify-self:end;font-size:19px}.icon{font-family:'Material Symbols Outlined';font-size:25px;line-height:1}.layout{height:calc(100vh - 100px);display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-template-rows:minmax(102px,.47fr) minmax(0,1.63fr) minmax(144px,.4fr);gap:12px;margin-top:18px}.card{min-width:0;border:1px solid rgba(180,219,213,.035);border-radius:10px;background:linear-gradient(135deg,#111c1d,#0e1718);box-shadow:0 7px 20px rgba(0,0,0,.22)}.access{grid-column:span 4;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;background:transparent;border:0;box-shadow:none}.access-card{display:grid;grid-template-rows:auto 1fr auto;padding:12px;position:relative}.access-card h2{margin:0;font-size:17px;font-weight:500}.access-card p{margin:3px 0 0;color:#aaa59f;font-size:12px}.action-icon{width:44px;height:44px;display:grid;place-items:center;border:0;border-radius:50%;background:#153126;color:#67c797;cursor:pointer;transition:transform .15s,background .15s}.action-icon:hover{transform:scale(1.05);background:#1c412f}.action-icon .icon{font-size:24px}.door-bottom{display:flex;align-items:end;justify-content:space-between;gap:8px}.hint{color:#aaa59f;font-size:10px;line-height:1.25;text-align:right}.security-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;background:#192122;color:#ffbb26}.security-icon .icon{font-size:24px}.status{align-self:end;color:#aaa59f;font-size:14px}.status strong{display:block;margin-bottom:4px;color:#f1eee8;font-size:16px;font-weight:500}.weather{grid-column:span 8;padding:20px;display:grid;grid-template-columns:27% 1fr;gap:20px}.weather-now{display:flex;gap:13px;align-items:center}.weather-now>.icon{font-size:72px;color:#dbe6e4}.weather-now h1{margin:0;font-weight:500;font-size:38px}.weather-now span{color:#aaa59f;font-size:15px}.weather p{color:#aaa59f;font-size:14px;line-height:1.5}.chart{align-self:end;height:148px;position:relative;border-bottom:1px solid rgba(255,255,255,.12);background:repeating-linear-gradient(to bottom,transparent 0,transparent 35px,rgba(255,255,255,.06) 36px)}.chart:after{content:'';position:absolute;left:8px;right:8px;top:37px;height:88px;background:linear-gradient(180deg,transparent 0 35%,rgba(229,163,19,.24) 36% 100%);clip-path:polygon(0 52%,13% 44%,26% 30%,40% 42%,53% 20%,67% 29%,80% 10%,100% 24%,100% 100%,0 100%)}.chart:before{content:'';position:absolute;z-index:1;left:8px;right:8px;top:42px;height:68px;border-top:3px solid #dfa10d;clip-path:polygon(0 49%,13% 41%,26% 27%,40% 39%,53% 17%,67% 26%,80% 7%,100% 21%,100% 26%,80% 12%,67% 31%,53% 22%,40% 44%,26% 32%,13% 46%,0 54%)}.doorbell{grid-column:span 4;padding:13px}.small-title{font-size:18px;margin:0 0 10px}.camera{height:calc(100% - 32px);display:grid;place-items:center;border-radius:8px;background:#0a1011;color:#aaa59f}.camera .icon{font-size:48px}.scenes{grid-column:span 3;padding:13px}.tiles{display:flex;gap:8px;height:calc(100% - 34px)}.tile{flex:1;display:grid;place-items:center;border-radius:8px;background:#172123;color:#aaa59f;font-size:12px}.tile .icon{display:block;margin:auto auto 4px;font-size:35px}.heat{grid-column:span 5;padding:16px}.heat h2{font-size:19px;margin:0}.heat p{color:#aaa59f}.metrics{grid-column:1/-1;display:grid;grid-template-columns:repeat(6,1fr);gap:12px;background:transparent;border:0;box-shadow:none}.metric{padding:13px}.metric h3{margin:0 0 10px;font-size:16px;font-weight:500}.metric p{margin:0;color:#aaa59f;font-size:13px}.note{position:fixed;right:24px;bottom:18px;padding:8px 12px;border:1px solid rgba(252,141,113,.5);border-radius:999px;background:#211514;color:#ffb19d;font-size:12px}
+    /* Modular grid: every track has the same height and width. Cards take
+       extra room only by spanning complete grid tracks. */
+    .layout{grid-template-rows:repeat(4,minmax(0,1fr))}
+    .access{grid-row:span 1}
+    .weather{grid-row:span 2;display:grid}
+    .weather p,.weather .chart{display:block}
+    .doorbell{grid-row:span 2}
+    .scenes,.heat,.metrics{grid-row:span 1}
+  </style>
+</head>
+<body>
+  <main class="dashboard">
+    <header class="header"><div><div class="brand">Smarthjem</div><div class="context">Hei! Alt er i orden med smarthuset.</div></div><div class="modes"><div class="mode active"><span class="icon">home</span>Full <span class="icon">check</span></div><div class="mode"><span class="icon">person</span>Gjest</div><div class="mode"><span class="icon">child_care</span>Barn</div></div><time class="clock">19:54</time></header>
+    <section class="layout">
+      <div class="access">
+        <article class="card access-card"><div><h2>Ytterdør</h2><p>Ulåst</p></div><div></div><div class="door-bottom"><button class="action-icon" aria-label="Lås ytterdør"><span class="icon">lock_open</span></button><span class="hint">Trykk på ikonet<br>for å låse</span></div></article>
+        <article class="card access-card"><div><h2>Overvåkning</h2><p>Mode: Deaktivert</p></div><div></div><div class="security-icon"><span class="icon">shield</span></div></article>
+      </div>
+      <article class="card weather"><div><div class="weather-now"><span class="icon">sunny</span><div><h1>20,7°C</h1><span>Sol</span></div></div><p>De neste 3 timene blir det tørt og mildt, 21–22 grader, med vind opp mot 5 m/s.</p></div><div class="chart"></div></article>
+      <article class="card doorbell"><h2 class="small-title">Ringeklokke</h2><div class="camera"><div><span class="icon">videocam_off</span><br>— Kamera ikke tilgjengelig</div></div></article>
+      <article class="card scenes"><h2 class="small-title">Scener</h2><div class="tiles"><div class="tile"><span><span class="icon">sunny</span>Morgen</span></div><div class="tile"><span><span class="icon">wb_twilight</span>Kveld</span></div><div class="tile"><span><span class="icon">bedtime</span>Natt</span></div></div></article>
+      <article class="card heat"><h2>Varmepumpe</h2><p>Inne 22,8°C</p></article>
+      <div class="metrics"><article class="card metric"><h3>Energi i dag</h3><p>—</p></article><article class="card metric"><h3>Rom</h3><p>Stue · Soverom · Bad</p></article><article class="card metric"><h3>Søppeltømming</h3><p>Ikke tilgjengelig</p></article><article class="card metric"><h3>Andreas</h3><p>Rekkevidde —</p></article><article class="card metric"><h3>Hege</h3><p>Rekkevidde —</p></article><article class="card metric"><h3>Kalender</h3><p>Ingen kalenderdata</p></article></div>
+    </section>
+    <div class="note">Mockup · no dashboard behavior changed</div>
+  </main>
+</body>
+</html>
