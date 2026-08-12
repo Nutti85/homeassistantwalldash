@@ -16,7 +16,7 @@ const createApi = (overrides: Record<string, HomeAssistantState> = {}): Dashboar
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), runAction: vi.fn(), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => fireEvent.click(await screen.findByRole('tab', { name }));
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
   it('starts in Full and never exposes guest Wi-Fi there', async () => {
@@ -36,6 +36,31 @@ describe('redesigned dashboard', () => {
     expect(screen.queryByRole('button', { name: 'Flytt Vær' })).not.toBeInTheDocument();
   });
 
+  it('previews a card swap while dragging and persists it only on pointer release', async () => {
+    render(<App api={createApi()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
+    const handle = screen.getByRole('button', { name: 'Flytt Varmepumpe' });
+    const grid = handle.closest('.editable-dashboard') as HTMLElement;
+    const heatpump = handle.closest('[data-layout-id="heatpump"]') as HTMLElement;
+    const calendar = grid.querySelector('[data-layout-id="calendar"]') as HTMLElement;
+    Object.defineProperty(handle, 'setPointerCapture', { value: vi.fn() });
+    Object.defineProperty(grid, 'getBoundingClientRect', { value: () => ({ left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800, x: 0, y: 0, toJSON: () => ({}) }) });
+    Object.defineProperty(calendar, 'getBoundingClientRect', { value: () => ({ left: 1000, top: 600, right: 1200, bottom: 700, width: 200, height: 100, x: 1000, y: 600, toJSON: () => ({}) }) });
+
+    const pointerEvent = (type: string, clientX: number, clientY: number) => { const event = new MouseEvent(type, { bubbles: true, clientX, clientY }); Object.defineProperty(event, 'pointerId', { value: 1 }); return event; };
+    fireEvent(handle, pointerEvent('pointerdown', 500, 350));
+    fireEvent(grid, pointerEvent('pointermove', 1100, 650));
+
+    expect(heatpump).toHaveStyle({ gridColumn: '11 / span 2', gridRow: '4 / span 1' });
+    expect(calendar).toHaveStyle({ gridColumn: '5 / span 8', gridRow: '3 / span 1' });
+    expect(localStorage.getItem('smarthjem-layout-v1-regular')).toBeNull();
+
+    fireEvent(grid, pointerEvent('pointerup', 1100, 650));
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v1-regular') ?? '{}');
+    expect(saved.heatpump).toMatchObject({ column: 11, row: 4, columns: 2, rows: 1 });
+    expect(saved.calendar).toMatchObject({ column: 5, row: 3, columns: 8, rows: 1 });
+  });
+
   it('renders exactly one guest Wi-Fi card and confirmed voucher in Gjest', async () => {
     render(<App api={createApi()} />); await selectMode('Gjest');
     expect(screen.getAllByText('Gjeste-WiFi')).toHaveLength(1);
@@ -46,12 +71,15 @@ describe('redesigned dashboard', () => {
   it('keeps owner, guest and admin information out of Barn', async () => {
     render(<App api={createApi({ repairHealth: state('binary_sensor.health', 'problem') })} />); await selectMode('Barn');
     ['Gjeste-WiFi', 'GH_Guest', 'Energi i dag', 'Andreas', 'Hege', 'Kalender', 'Reparer smarthuset'].forEach((text) => expect(screen.queryByText(text)).not.toBeInTheDocument());
-    expect(screen.getByText('Hva skal vi gjøre?')).toBeInTheDocument();
+    expect(screen.queryByText('Hva skal vi gjøre?')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
   });
 
   it('shows repair only for an unhealthy configured source and restores focus', async () => {
     const { rerender } = render(<App api={createApi()} />);
-    expect(await screen.findByText('Hei! Alt er i orden med smarthuset.')).toBeInTheDocument();
+    expect(screen.queryByText('Hei! Alt er i orden med smarthuset.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Scener' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reparer smarthuset' })).not.toBeInTheDocument();
     rerender(<App api={createApi({ repairHealth: state('binary_sensor.health', 'problem') })} />);
     const repair = await screen.findByRole('button', { name: 'Reparer smarthuset' });
@@ -120,5 +148,20 @@ describe('redesigned dashboard', () => {
     expect(camera).toHaveAttribute('src', '/api/camera/stream');
     fireEvent.error(camera);
     expect(await screen.findByRole('img', { name: 'Siste bilde fra ringeklokke' })).toHaveAttribute('src', '/api/camera?frame=fallback');
+  });
+
+  it('refreshes Home Assistant states so an entity that returns later is rendered', async () => {
+    vi.useFakeTimers();
+    const api = createApi({ securityMode: state('input_number.security', '1') });
+    vi.mocked(api.getStates)
+      .mockResolvedValueOnce({ states: { ...baseStates, securityMode: state('input_number.security', '1') } })
+      .mockResolvedValueOnce({ states: { ...baseStates, securityMode: state('input_number.security', '3') } });
+
+    render(<App api={api} />);
+    await vi.waitFor(() => expect(screen.getByText('Mode: Armert')).toBeInTheDocument());
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(screen.getByText('Mode: Deaktivert')).toBeInTheDocument());
+    expect(api.getStates).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });

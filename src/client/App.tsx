@@ -17,6 +17,7 @@ type Mode = 'regular' | 'guest' | 'child';
 type WeatherTab = 'today' | 'week';
 type GridPlacement = { column: number; row: number; columns: number; rows: number };
 type GridLayouts = Record<string, GridPlacement>;
+type LayoutChild = { id: string; label: string; content: ReactElement };
 const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const fmt = (value: number | undefined, unit = '') => value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`;
@@ -33,14 +34,12 @@ function ModeSelector({ mode, setMode }: { mode: Mode; setMode: (mode: Mode) => 
   </div>;
 }
 
-function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing, setEditing, resetLayout }: { mode: Mode; setMode: (mode: Mode) => void; repair: boolean; openRepair: () => void; repairRef: React.RefObject<HTMLButtonElement>; editing: boolean; setEditing: (editing: boolean) => void; resetLayout: () => void }) {
+function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing, setEditing, resetLayout, action, pending, errors }: { mode: Mode; setMode: (mode: Mode) => void; repair: boolean; openRepair: () => void; repairRef: React.RefObject<HTMLButtonElement>; editing: boolean; setEditing: (editing: boolean) => void; resetLayout: () => void; action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string> }) {
   const [time, setTime] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setTime(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
-  const status = mode === 'guest' ? 'Velkommen! Gjestemodus er aktiv.' : mode === 'child' ? 'Hei! Velg hva huset skal gjøre.' : repair ? 'Hei! Huset trenger tilsyn.' : 'Hei! Alt er i orden med smarthuset.';
   return <header className="dashboard-header">
     <div className="header-identity">
-      <div className="brand">Smarthjem</div>
-      <div className="context"><span>{status}</span>{repair && mode === 'regular' && <button ref={repairRef} type="button" className="repair-inline" onClick={openRepair}><Icon>build</Icon>Reparer smarthuset</button>}</div>
+      <div className="context">{repair && mode === 'regular' && <button ref={repairRef} type="button" className="repair-inline" onClick={openRepair}><Icon>build</Icon>Reparer smarthuset</button>}{mode !== 'child' && <SceneButtons action={action} pending={pending} errors={errors} header />}</div>
     </div>
     <ModeSelector mode={mode} setMode={setMode} />
     <div className="layout-actions"><button type="button" className={editing ? 'selected' : ''} aria-label={editing ? 'Fullfør tilpassing av oppsett' : 'Tilpass oppsett'} title={editing ? 'Fullfør' : 'Tilpass oppsett'} aria-pressed={editing} onClick={() => setEditing(!editing)}><Icon>dashboard_customize</Icon></button>{editing && <><button type="button" className="reset-layout" onClick={resetLayout}>Tilbakestill</button><span className="layout-hint" role="status">Dra kort med håndtaket · endre størrelse nederst til høyre</span></>}</div>
@@ -49,11 +48,11 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
 }
 
 const defaultLayouts: Record<Mode, GridLayouts> = {
-  regular: { access: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 2 }, doorbell: { column: 1, row: 2, columns: 4, rows: 2 }, scenes: { column: 5, row: 3, columns: 3, rows: 1 }, heatpump: { column: 8, row: 3, columns: 5, rows: 1 }, metrics: { column: 1, row: 4, columns: 12, rows: 1 } },
-  guest: { guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, scenes: { column: 1, row: 2, columns: 8, rows: 1 }, heatpump: { column: 1, row: 3, columns: 8, rows: 2 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } },
+  regular: { access: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 2 }, doorbell: { column: 1, row: 2, columns: 4, rows: 2 }, heatpump: { column: 5, row: 3, columns: 8, rows: 1 }, energy: { column: 1, row: 4, columns: 2, rows: 1 }, rooms: { column: 3, row: 4, columns: 2, rows: 1 }, waste: { column: 5, row: 4, columns: 2, rows: 1 }, carAndreas: { column: 7, row: 4, columns: 2, rows: 1 }, carHege: { column: 9, row: 4, columns: 2, rows: 1 }, calendar: { column: 11, row: 4, columns: 2, rows: 1 } },
+  guest: { guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } },
   child: { guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } },
 };
-const layoutKey = (mode: Mode) => `smarthjem-layout-v1-${mode}`;
+const layoutKey = (mode: Mode) => `smarthjem-layout-${mode === 'regular' ? 'v1' : 'v2'}-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
   const columns = Math.max(1, Math.min(12, placement.columns)); const rows = Math.max(1, Math.min(8, placement.rows));
   return { columns, rows, column: Math.max(1, Math.min(13 - columns, placement.column)), row: Math.max(1, Math.min(9 - rows, placement.row)) };
@@ -62,13 +61,81 @@ const loadLayout = (mode: Mode): GridLayouts => {
   try { const saved = JSON.parse(window.localStorage.getItem(layoutKey(mode)) ?? '{}') as GridLayouts; return Object.fromEntries(Object.entries(defaultLayouts[mode]).map(([id, fallback]) => [id, saved[id] ? clampPlacement(saved[id]) : fallback])); } catch { return defaultLayouts[mode]; }
 };
 
-function EditableDashboard({ mode, editing, layout, updateLayout, children }: { mode: Mode; editing: boolean; layout: GridLayouts; updateLayout: (id: string, next: GridPlacement) => void; children: Array<{ id: string; label: string; content: ReactElement }> }) {
+function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, children }: { mode: Mode; editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void; children: LayoutChild[] }) {
   const gridRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: string; type: 'move' | 'resize'; startX: number; startY: number; placement: GridPlacement } | null>(null);
-  const start = (event: ReactPointerEvent<HTMLButtonElement>, id: string, type: 'move' | 'resize') => { if (!editing || !layout[id]) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id, type, startX: event.clientX, startY: event.clientY, placement: layout[id] }; };
-  const move = (event: ReactPointerEvent<HTMLDivElement>) => { const active = drag.current; const rect = gridRef.current?.getBoundingClientRect(); if (!active || !rect) return; const x = Math.round((event.clientX - active.startX) / (rect.width / 12)); const y = Math.round((event.clientY - active.startY) / (rect.height / 4)); const next = active.type === 'move' ? { ...active.placement, column: active.placement.column + x, row: active.placement.row + y } : { ...active.placement, columns: active.placement.columns + x, rows: active.placement.rows + y }; updateLayout(active.id, clampPlacement(next)); };
-  const end = () => { drag.current = null; };
-  return <div ref={gridRef} className={`${mode}-layout editable-dashboard ${editing ? 'is-editing' : ''}`} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>{children.map(({ id, label, content }) => { const placement = layout[id]; const style = editing ? { gridArea: 'auto', gridColumn: `${placement.column} / span ${placement.columns}`, gridRow: `${placement.row} / span ${placement.rows}` } as CSSProperties : undefined; return <div className="layout-item" data-layout-id={id} key={id} style={style}>{content}{editing && <><button type="button" className="drag-handle" aria-label={`Flytt ${label}`} title={`Flytt ${label}`} onPointerDown={(event) => start(event, id, 'move')}><Icon>drag_indicator</Icon><span>{label}</span></button><button type="button" className="resize-handle" aria-label={`Endre størrelse på ${label}`} title={`Endre størrelse på ${label}`} onPointerDown={(event) => start(event, id, 'resize')}><Icon>open_in_full</Icon></button></>}</div>; })}</div>;
+  const [draft, setDraft] = useState<GridLayouts>(layout);
+  const draftRef = useRef<GridLayouts>(layout);
+  const drag = useRef<{ id: string; type: 'move' | 'resize'; pointerId: number; startX: number; startY: number; origin: GridLayouts; vacant: GridPlacement; swapped: boolean; lastTarget?: string } | null>(null);
+
+  useEffect(() => {
+    if (drag.current) return;
+    draftRef.current = layout;
+    setDraft(layout);
+  }, [layout]);
+
+  const showDraft = (next: GridLayouts) => {
+    draftRef.current = next;
+    setDraft(next);
+  };
+
+  const start = (event: ReactPointerEvent<HTMLButtonElement>, id: string, type: 'move' | 'resize') => {
+    if (!editing || !layout[id]) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const origin = Object.fromEntries(Object.entries(layout).map(([key, placement]) => [key, { ...placement }]));
+    drag.current = { id, type, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, vacant: { ...origin[id] }, swapped: false };
+    showDraft(origin);
+  };
+
+  const move = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const active = drag.current;
+    const bounds = gridRef.current?.getBoundingClientRect();
+    if (!active || !bounds || event.pointerId !== active.pointerId) return;
+    const columnDelta = Math.round((event.clientX - active.startX) / (bounds.width / 12));
+    const rowDelta = Math.round((event.clientY - active.startY) / (bounds.height / 8));
+
+    if (active.type === 'resize') {
+      const original = active.origin[active.id];
+      showDraft({ ...draftRef.current, [active.id]: clampPlacement({ ...original, columns: original.columns + columnDelta, rows: original.rows + rowDelta }) });
+      return;
+    }
+
+    const targetId = Array.from(gridRef.current?.querySelectorAll<HTMLElement>('.layout-item[data-layout-id]') ?? [])
+      .find((element) => {
+        if (element.dataset.layoutId === active.id) return false;
+        const rect = element.getBoundingClientRect();
+        return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+      })?.dataset.layoutId;
+
+    if (targetId && targetId !== active.lastTarget && draftRef.current[targetId]) {
+      const current = draftRef.current;
+      const targetPlacement = current[targetId];
+      showDraft({ ...current, [active.id]: { ...targetPlacement }, [targetId]: { ...active.vacant } });
+      active.vacant = { ...targetPlacement };
+      active.swapped = true;
+      active.lastTarget = targetId;
+      return;
+    }
+
+    if (!targetId) active.lastTarget = undefined;
+    if (active.lastTarget) return;
+    if (active.swapped) return;
+    const original = active.origin[active.id];
+    showDraft({ ...draftRef.current, [active.id]: clampPlacement({ ...original, column: original.column + columnDelta, row: original.row + rowDelta }) });
+  };
+
+  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const active = drag.current;
+    if (!active || event.pointerId !== active.pointerId) return;
+    drag.current = null;
+    if (event.type === 'pointercancel') {
+      showDraft(layout);
+      return;
+    }
+    commitLayout(draftRef.current);
+  };
+
+  return <div ref={gridRef} className={`${mode}-layout editable-dashboard ${editing ? 'is-editing' : ''}`} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>{children.map(({ id, label, content }) => { const placement = draft[id] ?? layout[id]; const style = { gridArea: 'auto', gridColumn: `${placement.column} / span ${placement.columns}`, gridRow: `${placement.row} / span ${placement.rows}` } as CSSProperties; return <div className="layout-item" data-layout-id={id} key={id} style={style}>{content}{editing && <><button type="button" className="drag-handle" aria-label={`Flytt ${label}`} title={`Flytt ${label}`} onPointerDown={(event) => start(event, id, 'move')}><Icon>drag_indicator</Icon><span>{label}</span></button><button type="button" className="resize-handle" aria-label={`Endre størrelse på ${label}`} title={`Endre størrelse på ${label}`} onPointerDown={(event) => start(event, id, 'resize')}><Icon>open_in_full</Icon></button></>}</div>; })}</div>;
 }
 
 function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; detailed?: boolean }) {
@@ -226,8 +293,8 @@ function GuestSwitch({ on, pending, action, child = false }: { on: boolean; pend
 }
 
 const sceneMeta = { morning: ['sunny', 'Morgen'], evening: ['wb_twilight', 'Kveld'], night: ['bedtime', 'Natt'] } as const;
-function Scenes({ large = false, action, pending, errors }: { large?: boolean; action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string> }) {
-  return <section className={`card scenes-card ${large ? 'large' : ''}`} aria-labelledby="scenes-title"><h2 id="scenes-title">{large ? 'Hva skal vi gjøre?' : 'Scener'}</h2><div className="scene-buttons">{Object.entries(sceneMeta).map(([key, [icon, label]]) => <button type="button" key={key} className={`scene ${key}`} disabled={pending[key]} onClick={() => action(key as DashboardAction)}><Icon filled>{icon}</Icon><span>{label}</span>{errors[key] && <small role="alert">{errors[key]}</small>}</button>)}</div></section>;
+function SceneButtons({ action, pending, errors, header = false }: { action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string>; header?: boolean }) {
+  return <div className={`scene-buttons${header ? ' header-scenes' : ''}`} aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => <button type="button" key={key} className={`scene ${key}`} disabled={pending[key]} onClick={() => action(key as DashboardAction)}><Icon filled>{icon}</Icon><span>{label}</span>{errors[key] && <small role="alert">{errors[key]}</small>}</button>)}</div>;
 }
 
 function HeatPump({ states, pending, errors, action, adjust, simple = false }: { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; action: (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => void; adjust: (offset: number) => void; simple?: boolean }) {
@@ -292,6 +359,24 @@ function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState>
   </div>;
 }
 
+function metricCards(states: Record<string, HomeAssistantState>): LayoutChild[] {
+  const rooms = [['Stue', states.roomLiving], ['Soverom', states.roomBedroom], ['Bad', states.roomBathroom]] as const;
+  const events = calendarEvents(states.calendar);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const days = [{ label: 'I dag', key: calendarDayKey(today.toISOString()) }, { label: 'I morgen', key: calendarDayKey(tomorrow.toISOString()) }];
+  const wasteDays = wasteDaysUntil(states.waste);
+  const wasteTypes = typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : typeof states.waste?.attributes.collection_type === 'string' ? states.waste.attributes.collection_type : stateValue(states.waste)?.replace(/^\s*\d+\s*,\s*/, '') || 'Ikke tilgjengelig';
+  return [
+    { id: 'energy', label: 'Energi i dag', content: <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section> },
+    { id: 'rooms', label: 'Rom', content: <section className="card metric rooms"><h3>Rom</h3>{rooms.map(([label, value]) => <p key={label}><span>{label}</span><strong>{reading(value, ' °C')}</strong></p>)}</section> },
+    { id: 'waste', label: 'Søppeltømming', content: <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong></div><p>{wasteTypes}</p></section> },
+    { id: 'carAndreas', label: 'Andreas bil', content: <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carAndreasBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section> },
+    { id: 'carHege', label: 'Hege bil', content: <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carHegeBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section> },
+    { id: 'calendar', label: 'Kalender', content: <section className="card metric calendar"><h3>Kalender</h3>{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}</section> },
+  ];
+}
+
 function QrCode({ payload }: { payload?: string }) {
   const [url, setUrl] = useState('');
   useEffect(() => { let active = true; if (!payload) { setUrl(''); return; } QRCode.toString(payload, { type: 'svg', width: 220, margin: 1, color: { dark: '#111111', light: '#f4efe7' } }).then((svg) => { if (active) setUrl(`data:image/svg+xml,${encodeURIComponent(svg)}`); }); return () => { active = false; }; }, [payload]);
@@ -303,22 +388,22 @@ function GuestWifi({ voucher, pending, renew }: { voucher?: string; pending: boo
   return <section className="card wifi-card" aria-labelledby="wifi-title"><h2 id="wifi-title"><Icon>wifi</Icon>Gjeste-WiFi</h2><p>Koble til nettverk: <strong>GH_Guest</strong></p><p>Passord: <output aria-label="Tilgangskode">{voucher || '—'}</output></p><QrCode payload={payload}/><button type="button" disabled={pending} onClick={renew}>Ny kode</button></section>;
 }
 
-function RegularDashboard({ states, pending, errors, action, adjust, showWeather, editing, layout, updateLayout }: DashboardProps & { showWeather: () => void; editing: boolean; layout: GridLayouts; updateLayout: (id: string, next: GridPlacement) => void }) {
+function RegularDashboard({ states, pending, errors, action, adjust, showWeather, editing, layout, updateLayout }: DashboardProps & { showWeather: () => void; editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void }) {
   return <EditableDashboard mode="regular" editing={editing} layout={layout} updateLayout={updateLayout} children={[
     { id: 'access', label: 'Adgang', content: <div className="upper-left"><DoorCard state={states.frontDoorLock} pending={pending.lockDoor || pending.unlockDoor} action={action} error={errors.lockDoor || errors.unlockDoor}/><SecurityCard state={states.securityMode} pending={pending.securityMode} action={() => action('securityMode')} error={errors.securityMode}/></div> },
     { id: 'weather', label: 'Vær', content: <WeatherOverview states={states} regular onDetails={showWeather}/> }, { id: 'doorbell', label: 'Ringeklokke', content: <Doorbell available={Boolean(stateValue(states.doorbellCamera))}/> },
-    { id: 'scenes', label: 'Scener', content: <Scenes action={action} pending={pending} errors={errors}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, { id: 'metrics', label: 'Oversikt', content: <MetricsUpdated states={states}/> },
+    { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, ...metricCards(states),
   ]}/>;
 }
 
 interface DashboardProps { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; action: (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => void; adjust: (offset: number) => void }
-function GuestDashboard({ states, pending, errors, action, adjust, editing, layout, updateLayout }: DashboardProps & { editing: boolean; layout: GridLayouts; updateLayout: (id: string, next: GridPlacement) => void }) {
+function GuestDashboard({ states, pending, errors, action, adjust, editing, layout, updateLayout }: DashboardProps & { editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void }) {
   const voucher = stateValue(states.guestVoucher);
-  return <EditableDashboard mode="guest" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'scenes', label: 'Scener', content: <Scenes action={action} pending={pending} errors={errors}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, { id: 'wifi', label: 'Gjeste-WiFi', content: <GuestWifi voucher={voucher} pending={pending.guestVoucher} renew={() => action('guestVoucher')}/> }]}/>;
+  return <EditableDashboard mode="guest" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, { id: 'wifi', label: 'Gjeste-WiFi', content: <GuestWifi voucher={voucher} pending={pending.guestVoucher} renew={() => action('guestVoucher')}/> }]}/>;
 }
 
-function ChildDashboard({ states, pending, errors, action, adjust, editing, layout, updateLayout }: DashboardProps & { editing: boolean; layout: GridLayouts; updateLayout: (id: string, next: GridPlacement) => void }) {
-  return <EditableDashboard mode="child" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch child on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'scenes', label: 'Scener', content: <Scenes large action={action} pending={pending} errors={errors}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump simple states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }]}/>;
+function ChildDashboard({ states, pending, errors, action, adjust, editing, layout, updateLayout }: DashboardProps & { editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void }) {
+  return <EditableDashboard mode="child" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch child on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'scenes', label: 'Scener', content: <section className="card scenes-card large"><h2>Scener</h2><SceneButtons action={action} pending={pending} errors={errors}/></section> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump simple states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }]}/>;
 }
 
 function DetailedWeather({ states, close }: { states: Record<string, HomeAssistantState>; close: () => void }) {
@@ -327,6 +412,8 @@ function DetailedWeather({ states, close }: { states: Record<string, HomeAssista
   const daily = forecastPoints(states.weatherDaily);
   return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected={tab === 'today'} className={tab === 'today' ? 'selected' : ''} onClick={() => setTab('today')}>I dag</button><button type="button" role="tab" aria-selected={tab === 'week'} className={tab === 'week' ? 'selected' : ''} onClick={() => setTab('week')}>Neste 7 dager</button></div></header><div className="weather-detail-grid"><section className="card detail-chart"><h2>{tab === 'today' ? 'I dag' : 'Neste 7 dager'}</h2><WeatherChart points={tab === 'today' ? hourly : daily} detailed/></section><section className="card hourly-card"><h2>Time for time</h2><div className="hourly-strip">{hourly.slice(0, 7).map((point) => <div key={point.datetime}><time>{new Date(point.datetime).toLocaleTimeString('nb-NO', {hour:'2-digit', minute:'2-digit'})}</time><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>{fmt(point.precipitation, ' mm')}</small><small>{fmt(point.windSpeed, ' m/s')}</small></div>)}{!hourly.length && <p>— Timevarsel ikke tilgjengelig</p>}</div></section><section className="card week-card"><h2>Neste 7 dager</h2>{daily.slice(0,7).map((point) => <div key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO',{weekday:'short'})}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>/ {fmt(point.templow, '°')}</small></div>)}{!daily.length && <p>— Ukesvarsel ikke tilgjengelig</p>}</section></div></main>;
 }
+
+const stateRefreshIntervalMs = 30_000;
 
 export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
@@ -341,7 +428,37 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const wasRepairOpen = useRef(false);
 
-  useEffect(() => { let active = true; api.getStates().then(({ states: confirmed }) => { if (active) setStates(confirmed); }, () => { if (active) setErrors({ load: updateError }); }); return () => { active = false; }; }, [api]);
+  useEffect(() => {
+    let active = true;
+    let requestInFlight = false;
+
+    const refreshStates = async () => {
+      if (!active || requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const { states: confirmed } = await api.getStates();
+        if (!active) return;
+        setStates(confirmed);
+        setErrors((current) => {
+          if (!current.load) return current;
+          const next = { ...current };
+          delete next.load;
+          return next;
+        });
+      } catch {
+        if (active) setErrors((current) => ({ ...current, load: updateError }));
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    void refreshStates();
+    const timer = window.setInterval(() => { void refreshStates(); }, stateRefreshIntervalMs);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [api]);
   useEffect(() => { if (!repairOpen) return; closeButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setRepairOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [repairOpen]);
   useEffect(() => { if (!repairOpen && wasRepairOpen.current) repairButton.current?.focus(); wasRepairOpen.current = repairOpen; }, [repairOpen]);
 
@@ -351,9 +468,9 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const adjust = (offset: number) => { if (baseline !== undefined) void confirm('temperature', () => api.setTemperature(baseline + offset)); };
   const dashboardProps = useMemo(() => ({ states, pending, errors, action, adjust }), [states, pending, errors]);
   const repair = isRepairNeeded(states.repairHealth);
-  const updateLayout = (id: string, next: GridPlacement) => setLayouts((current) => { const modeLayout = { ...current[mode], [id]: next }; window.localStorage.setItem(layoutKey(mode), JSON.stringify(modeLayout)); return { ...current, [mode]: modeLayout }; });
+  const updateLayout = (next: GridLayouts) => setLayouts((current) => { const modeLayout = Object.fromEntries(Object.entries(next).map(([id, placement]) => [id, { ...placement }])); window.localStorage.setItem(layoutKey(mode), JSON.stringify(modeLayout)); return { ...current, [mode]: modeLayout }; });
   const resetLayout = () => setLayouts((current) => { window.localStorage.removeItem(layoutKey(mode)); return { ...current, [mode]: defaultLayouts[mode] }; });
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }
