@@ -37,4 +37,16 @@ describe('dashboard state presentation', () => {
     expect(calendarEventOccursOnDay(event, '2026-08-11')).toBe(true);
     expect(calendarEventOccursOnDay(event, '2026-08-12')).toBe(false);
   });
+
+  it('reads Home Assistant calendar API date and dateTime values', () => {
+    const events = calendarEvents({ entity_id: 'calendar.felles', state: 'off', attributes: { events: [
+      { summary: 'Fotball', start: { dateTime: '2026-08-12T17:00:00+02:00' }, end: { dateTime: '2026-08-12T18:00:00+02:00' } },
+      { summary: 'Fridag', start: { date: '2026-08-13' }, end: { date: '2026-08-14' } },
+    ] } });
+
+    expect(events).toEqual([
+      { title: 'Fotball', start: '2026-08-12T17:00:00+02:00', end: '2026-08-12T18:00:00+02:00', allDay: false },
+      { title: 'Fridag', start: '2026-08-13', end: '2026-08-14', allDay: true },
+    ]);
+  });
 });

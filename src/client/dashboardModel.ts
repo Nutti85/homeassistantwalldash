@@ -7,6 +7,13 @@ export const stateValue = (state: HomeAssistantState | undefined): string | unde
   state && !unavailableStates.has(state.state.toLowerCase()) ? state.state : undefined;
 
 const validDate = (value: unknown): string | undefined => typeof value === 'string' && value && !Number.isNaN(Date.parse(value)) ? value : undefined;
+const calendarTimestamp = (value: unknown): string | undefined => {
+  const direct = validDate(value);
+  if (direct) return direct;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const timestamp = value as Record<string, unknown>;
+  return validDate(timestamp.dateTime ?? timestamp.date);
+};
 
 export interface CalendarEvent { title: string; start: string; end?: string; allDay: boolean }
 
@@ -16,11 +23,16 @@ export const calendarEvents = (state: HomeAssistantState | undefined): CalendarE
   return rawEvents.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
     const row = item as Record<string, unknown>;
-    const start = validDate(row.start ?? row.start_time ?? row.begin);
+    const start = calendarTimestamp(row.start ?? row.start_time ?? row.begin);
     if (!start) return [];
-    const end = validDate(row.end ?? row.end_time ?? row.finish);
+    const end = calendarTimestamp(row.end ?? row.end_time ?? row.finish);
     const title = [row.title, row.summary, row.message, row.description].find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? 'Uten tittel';
-    return [{ title, start, end, allDay: row.all_day === true }];
+    const startValue = row.start;
+    const allDay = row.all_day === true || (
+      !!startValue && typeof startValue === 'object' && !Array.isArray(startValue)
+      && typeof (startValue as Record<string, unknown>).date === 'string'
+    );
+    return [{ title, start, end, allDay }];
   }).sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
 };
 
