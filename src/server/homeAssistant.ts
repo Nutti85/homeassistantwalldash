@@ -77,7 +77,10 @@ export class HomeAssistantClient {
         continue;
       }
       try {
-        states[key] = await this.getState(entityId);
+        const state = await this.getState(entityId);
+        states[key] = key === 'calendar'
+          ? await this.getCalendarState(state)
+          : state;
       } catch {
         states[key] = { entity_id: entityId, state: 'unavailable', attributes: {} };
       }
@@ -334,6 +337,25 @@ export class HomeAssistantClient {
       state: payload.state,
       attributes: payload.attributes,
     };
+  }
+
+  private async getCalendarState(state: HomeAssistantState): Promise<HomeAssistantState> {
+    // Calendar entities only expose the currently active event in their state.
+    // Fetch an explicit range so upcoming entries are available to the dashboard.
+    const start = new Date();
+    start.setUTCDate(start.getUTCDate() - 1);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 4);
+    const query = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+    const response = await this.fetcher(`${this.baseUrl}/api/calendars/${state.entity_id}?${query}`, {
+      method: 'GET',
+      headers: this.headers(),
+    });
+    if (!response.ok) throw communicationError();
+    const events: unknown = await response.json();
+    if (!Array.isArray(events)) throw communicationError();
+    return { ...state, attributes: { ...state.attributes, events } };
   }
 
   private async waitForChangedState(entityId: string, previous: HomeAssistantState): Promise<HomeAssistantState> {

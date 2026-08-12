@@ -246,12 +246,19 @@ describe('HomeAssistantClient', () => {
     ];
     const fetcher = vi.fn();
     entityIds.forEach((entityId) => fetcher.mockResolvedValueOnce(stateResponse(entityId)));
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify([
+      { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },
+    ]), { status: 200 }));
 
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
-    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
+    expect(fetcher.mock.calls.slice(0, entityIds.length).map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
+    expect(fetcher.mock.calls[entityIds.length][0]).toMatch(/^http:\/\/ha:8123\/api\/calendars\/calendar\.outlook_andreas_felles\?start=.*&end=.*/);
     expect(Object.keys(result.states)).toHaveLength(29);
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
+    expect(result.states.calendar?.attributes.events).toEqual([
+      { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },
+    ]);
   });
 
   it('finds the AI weather summary in the broadcast service trace node', () => {
