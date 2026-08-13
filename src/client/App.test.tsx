@@ -62,6 +62,28 @@ describe('redesigned dashboard', () => {
     expect(saved.calendar).toMatchObject({ column: 21, row: 7, columns: 4, rows: 2 });
   });
 
+  it('resizes only the selected card against the grid dimensions captured at pointer down', async () => {
+    render(<App api={createApi()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
+    const handle = screen.getByRole('button', { name: 'Endre størrelse på Ytterdør' });
+    const grid = handle.closest('.editable-dashboard') as HTMLElement;
+    const frontDoor = handle.closest('[data-layout-id="frontDoor"]') as HTMLElement;
+    const calendar = grid.querySelector('[data-layout-id="calendar"]') as HTMLElement;
+    const bounds = vi.fn()
+      .mockReturnValueOnce({ left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800, x: 0, y: 0, toJSON: () => ({}) })
+      .mockReturnValue({ left: 0, top: 0, right: 600, bottom: 400, width: 600, height: 400, x: 0, y: 0, toJSON: () => ({}) });
+    Object.defineProperty(handle, 'setPointerCapture', { value: vi.fn() });
+    Object.defineProperty(grid, 'getBoundingClientRect', { value: bounds });
+
+    const pointerEvent = (type: string, clientX: number, clientY: number) => { const event = new MouseEvent(type, { bubbles: true, clientX, clientY }); Object.defineProperty(event, 'pointerId', { value: 2 }); return event; };
+    fireEvent(handle, pointerEvent('pointerdown', 100, 50));
+    fireEvent(grid, pointerEvent('pointermove', 300, 150));
+
+    expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 4' });
+    expect(calendar).toHaveStyle({ gridColumn: '21 / span 4', gridRow: '7 / span 2' });
+    expect(bounds).toHaveBeenCalledTimes(1);
+  });
+
   it('renders exactly one guest Wi-Fi card and confirmed voucher in Gjest', async () => {
     render(<App api={createApi()} />); await selectMode('Gjest');
     expect(screen.getAllByText('Gjeste-WiFi')).toHaveLength(1);

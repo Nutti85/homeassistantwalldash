@@ -69,7 +69,7 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
   const gridRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<GridLayouts>(layout);
   const draftRef = useRef<GridLayouts>(layout);
-  const drag = useRef<{ id: string; type: 'move' | 'resize'; pointerId: number; startX: number; startY: number; origin: GridLayouts } | null>(null);
+  const drag = useRef<{ id: string; type: 'move' | 'resize'; pointerId: number; startX: number; startY: number; columnUnit: number; rowUnit: number; origin: GridLayouts } | null>(null);
 
   useEffect(() => {
     if (drag.current) return;
@@ -83,20 +83,30 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
   };
 
   const start = (event: ReactPointerEvent<HTMLButtonElement>, id: string, type: 'move' | 'resize') => {
-    if (!editing || !layout[id]) return;
+    const grid = gridRef.current;
+    if (!editing || !layout[id] || !grid) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    const bounds = grid.getBoundingClientRect();
+    const computed = window.getComputedStyle(grid);
+    const horizontalGap = Number.parseFloat(computed.columnGap) || 0;
+    const verticalGap = Number.parseFloat(computed.rowGap) || 0;
+    const horizontalPadding = (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0);
+    const verticalPadding = (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0);
     const origin = Object.fromEntries(Object.entries(layout).map(([key, placement]) => [key, { ...placement }]));
-    drag.current = { id, type, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin };
+    drag.current = {
+      id, type, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin,
+      columnUnit: Math.max(1, (bounds.width - horizontalPadding + horizontalGap) / GRID_COLUMNS),
+      rowUnit: Math.max(1, (bounds.height - verticalPadding + verticalGap) / GRID_ROWS),
+    };
     showDraft(origin);
   };
 
   const move = (event: ReactPointerEvent<HTMLDivElement>) => {
     const active = drag.current;
-    const bounds = gridRef.current?.getBoundingClientRect();
-    if (!active || !bounds || event.pointerId !== active.pointerId) return;
-    const columnDelta = Math.round((event.clientX - active.startX) / (bounds.width / GRID_COLUMNS));
-    const rowDelta = Math.round((event.clientY - active.startY) / (bounds.height / GRID_ROWS));
+    if (!active || event.pointerId !== active.pointerId) return;
+    const columnDelta = Math.round((event.clientX - active.startX) / active.columnUnit);
+    const rowDelta = Math.round((event.clientY - active.startY) / active.rowUnit);
 
     if (active.type === 'resize') {
       const original = active.origin[active.id];
