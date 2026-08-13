@@ -52,13 +52,13 @@ describe('redesigned dashboard', () => {
     fireEvent(handle, pointerEvent('pointerdown', 100, 50));
     fireEvent(grid, pointerEvent('pointermove', 600, 300));
 
-    expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '6 / span 2' });
+    expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 2' });
     expect(calendar).toHaveStyle({ gridColumn: '21 / span 4', gridRow: '7 / span 2' });
-    expect(localStorage.getItem('smarthjem-layout-v3-regular')).toBeNull();
+    expect(localStorage.getItem('smarthjem-layout-v4-regular')).toBeNull();
 
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v3-regular') ?? '{}');
-    expect(saved.frontDoor).toMatchObject({ column: 11, row: 6, columns: 4, rows: 2 });
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v4-regular') ?? '{}');
+    expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 2 });
     expect(saved.calendar).toMatchObject({ column: 21, row: 7, columns: 4, rows: 2 });
   });
 
@@ -79,7 +79,7 @@ describe('redesigned dashboard', () => {
     fireEvent(handle, pointerEvent('pointerdown', 100, 50));
     fireEvent(grid, pointerEvent('pointermove', 300, 150));
 
-    expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 4' });
+    expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 3' });
     expect(calendar).toHaveStyle({ gridColumn: '21 / span 4', gridRow: '7 / span 2' });
     expect(bounds).toHaveBeenCalledTimes(1);
   });

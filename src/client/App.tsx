@@ -19,7 +19,7 @@ type GridPlacement = { column: number; row: number; columns: number; rows: numbe
 type GridLayouts = Record<string, GridPlacement>;
 type LayoutChild = { id: string; label: string; content: ReactElement };
 const GRID_COLUMNS = 24;
-const GRID_ROWS = 16;
+const GRID_ROWS = 8;
 const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const fmt = (value: number | undefined, unit = '') => value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`;
@@ -56,7 +56,7 @@ const defaultLayouts: Record<Mode, GridLayouts> = {
   guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
   child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
-const layoutKey = (mode: Mode) => `smarthjem-layout-v3-${mode}`;
+const layoutKey = (mode: Mode) => `smarthjem-layout-v4-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
   const columns = Math.max(1, Math.min(GRID_COLUMNS, placement.columns)); const rows = Math.max(1, Math.min(GRID_ROWS, placement.rows));
   return { columns, rows, column: Math.max(1, Math.min(GRID_COLUMNS + 1 - columns, placement.column)), row: Math.max(1, Math.min(GRID_ROWS + 1 - rows, placement.row)) };
