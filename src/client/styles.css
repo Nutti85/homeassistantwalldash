@@ -551,3 +551,8 @@ body{min-width:0}
   grid-template-rows:repeat(8,minmax(0,1fr));
   grid-template-areas:none;
 }
+
+.action-toast{position:fixed;z-index:1000;top:18px;left:50%;display:flex;align-items:center;gap:10px;max-width:min(90vw,520px);padding:14px 20px;border:1px solid rgba(153,243,194,.55);border-radius:12px;background:#183126;color:var(--text);box-shadow:0 14px 34px rgba(0,0,0,.35);transform:translateX(-50%);animation:toast-slide-in .24s ease-out}.action-toast .material-symbols-outlined{color:var(--mint)}@keyframes toast-slide-in{from{opacity:0;transform:translate(-50%,-24px)}to{opacity:1;transform:translate(-50%,0)}}
+
+.hvac-modes button:nth-child(1) .material-symbols-outlined{color:#ffc21b}
+.hvac-modes button:nth-child(2) .material-symbols-outlined{color:#7fd6ff}

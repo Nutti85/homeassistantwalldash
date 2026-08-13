@@ -36,7 +36,7 @@ function ModeSelector({ mode, setMode }: { mode: Mode; setMode: (mode: Mode) => 
   </div>;
 }
 
-function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing, setEditing, resetLayout, action, pending, errors }: { mode: Mode; setMode: (mode: Mode) => void; repair: boolean; openRepair: () => void; repairRef: React.RefObject<HTMLButtonElement>; editing: boolean; setEditing: (editing: boolean) => void; resetLayout: () => void; action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string> }) {
+function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing, setEditing, resetLayout, saveDefaultLayout, action, pending, errors }: { mode: Mode; setMode: (mode: Mode) => void; repair: boolean; openRepair: () => void; repairRef: React.RefObject<HTMLButtonElement>; editing: boolean; setEditing: (editing: boolean) => void; resetLayout: () => void; saveDefaultLayout: () => void; action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string> }) {
   const [time, setTime] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setTime(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
   return <header className="dashboard-header">
@@ -44,7 +44,7 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
       <div className="context">{repair && mode === 'regular' && <button ref={repairRef} type="button" className="repair-inline" onClick={openRepair}><Icon>build</Icon>Reparer smarthuset</button>}{mode !== 'child' && <SceneButtons action={action} pending={pending} errors={errors} header />}</div>
     </div>
     <ModeSelector mode={mode} setMode={setMode} />
-    <div className="layout-actions"><button type="button" className={editing ? 'selected' : ''} aria-label={editing ? 'Fullfør tilpassing av oppsett' : 'Tilpass oppsett'} title={editing ? 'Fullfør' : 'Tilpass oppsett'} aria-pressed={editing} onClick={() => setEditing(!editing)}><Icon>dashboard_customize</Icon></button>{editing && <><button type="button" className="reset-layout" onClick={resetLayout}>Tilbakestill</button><span className="layout-hint" role="status">Dra kort med håndtaket · endre størrelse nederst til høyre</span></>}</div>
+    <div className="layout-actions"><button type="button" className={editing ? 'selected' : ''} aria-label={editing ? 'Fullfør tilpassing av oppsett' : 'Tilpass oppsett'} title={editing ? 'Fullfør' : 'Tilpass oppsett'} aria-pressed={editing} onClick={() => setEditing(!editing)}><Icon>dashboard_customize</Icon></button>{editing && <><button type="button" className="reset-layout" onClick={saveDefaultLayout}>Lagre som standard</button><button type="button" className="reset-layout" onClick={resetLayout}>Tilbakestill</button><span className="layout-hint" role="status">Dra kort med håndtaket · endre størrelse nederst til høyre</span></>}</div>
     <time dateTime={time.toISOString()}>{time.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</time>
   </header>;
 }
@@ -52,17 +52,18 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
 const scalePlacement = ({ column, row, columns, rows }: GridPlacement): GridPlacement => ({ column: column * 2 - 1, row: row * 2 - 1, columns: columns * 2, rows: rows * 2 });
 const scaleLayout = (layout: GridLayouts): GridLayouts => Object.fromEntries(Object.entries(layout).map(([id, placement]) => [id, scalePlacement(placement)]));
 const defaultLayouts: Record<Mode, GridLayouts> = {
-  regular: scaleLayout({ frontDoor: { column: 1, row: 1, columns: 2, rows: 1 }, security: { column: 3, row: 1, columns: 2, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 2 }, doorbell: { column: 1, row: 2, columns: 2, rows: 2 }, courtyard: { column: 3, row: 2, columns: 2, rows: 2 }, heatpump: { column: 5, row: 3, columns: 8, rows: 1 }, energy: { column: 1, row: 4, columns: 2, rows: 1 }, rooms: { column: 3, row: 4, columns: 2, rows: 1 }, waste: { column: 5, row: 4, columns: 2, rows: 1 }, carAndreas: { column: 7, row: 4, columns: 2, rows: 1 }, carHege: { column: 9, row: 4, columns: 2, rows: 1 }, calendar: { column: 11, row: 4, columns: 2, rows: 1 } }),
+  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 16, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, heatpump: { column: 1, row: 5, columns: 8, rows: 2 }, energy: { column: 13, row: 7, columns: 12, rows: 2 }, rooms: { column: 1, row: 7, columns: 12, rows: 2 }, waste: { column: 14, row: 5, columns: 3, rows: 2 }, carAndreas: { column: 17, row: 5, columns: 4, rows: 2 }, carHege: { column: 21, row: 5, columns: 4, rows: 2 }, calendar: { column: 9, row: 5, columns: 5, rows: 2 } },
   guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
   child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
-const layoutKey = (mode: Mode) => `smarthjem-layout-v4-${mode}`;
+const layoutKey = (mode: Mode) => `smarthjem-layout-v6-${mode}`;
+const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v6-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
   const columns = Math.max(1, Math.min(GRID_COLUMNS, placement.columns)); const rows = Math.max(1, Math.min(GRID_ROWS, placement.rows));
   return { columns, rows, column: Math.max(1, Math.min(GRID_COLUMNS + 1 - columns, placement.column)), row: Math.max(1, Math.min(GRID_ROWS + 1 - rows, placement.row)) };
 };
 const loadLayout = (mode: Mode): GridLayouts => {
-  try { const saved = JSON.parse(window.localStorage.getItem(layoutKey(mode)) ?? '{}') as GridLayouts; return Object.fromEntries(Object.entries(defaultLayouts[mode]).map(([id, fallback]) => [id, saved[id] ? clampPlacement(saved[id]) : fallback])); } catch { return defaultLayouts[mode]; }
+  try { const savedDefault = JSON.parse(window.localStorage.getItem(defaultLayoutKey(mode)) ?? '{}') as GridLayouts; const saved = JSON.parse(window.localStorage.getItem(layoutKey(mode)) ?? '{}') as GridLayouts; return Object.fromEntries(Object.entries(defaultLayouts[mode]).map(([id, fallback]) => { const defaultPlacement = savedDefault[id] ? clampPlacement(savedDefault[id]) : fallback; return [id, saved[id] ? clampPlacement(saved[id]) : defaultPlacement]; })); } catch { return defaultLayouts[mode]; }
 };
 
 function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, children }: { mode: Mode; editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void; children: LayoutChild[] }) {
@@ -133,7 +134,25 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
 }
 
 function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; detailed?: boolean }) {
+  const width = 900;
   const data = points.slice(0, detailed ? 25 : 22);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [viewport, setViewport] = useState(() => ({ width, height: detailed ? 248 : 178 }));
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const svg = svgRef.current;
+    if (!wrap || !svg || !window.ResizeObserver) return;
+    const updateViewport = () => {
+      const { width: nextWidth, height: nextHeight } = svg.getBoundingClientRect();
+      const measured = { width: Math.round(nextWidth), height: Math.round(nextHeight) };
+      if (measured.width && measured.height) setViewport((current) => current.width === measured.width && current.height === measured.height ? current : measured);
+    };
+    const observer = new ResizeObserver(updateViewport);
+    observer.observe(wrap);
+    updateViewport();
+    return () => observer.disconnect();
+  }, [data.length, detailed]);
   const temperatures = data.map((point) => point.temperature);
   const winds = data.map((point) => point.windSpeed);
   const gusts = data.map((point) => point.windGustSpeed);
@@ -146,8 +165,7 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
   const max = temperatureValues.length ? Math.ceil(Math.max(...temperatureValues) + 2) : 25;
   const windMax = Math.max(2.5, ...windValues);
   const precipitationMax = Math.max(1, ...precipitationValues);
-  const width = 900;
-  const height = detailed ? 220 : 150;
+  const height = Math.max(120, width * viewport.height / viewport.width - 28);
   const plot = detailed
     ? { left: 80, right: 96, top: 6, bottom: 25 }
     : { left: 80, right: 96, top: 4, bottom: 21 };
@@ -167,9 +185,9 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
   const ticks = [0, .25, .5, .75, 1];
   const timeStep = Math.max(1, Math.floor((data.length - 1) / 7));
   const timeIndexes = data.map((_, index) => index).filter((index) => index % timeStep === 0 || index === data.length - 1);
-  return <div className="weather-chart-wrap">
+  return <div ref={wrapRef} className="weather-chart-wrap">
     <div className="chart-legend" aria-label="Tegnforklaring"><span className="temp">Temperatur</span><span className="rain">Nedbør</span><span className="probability">Sannsynlighet</span><span className="wind">Vind</span><span className="gust">Kast</span><span className="cloud">Skydekke</span></div>
-    {data.length ? <svg className="weather-chart" role="img" aria-label="Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke" viewBox={`0 0 ${width} ${height + 28}`} preserveAspectRatio="xMidYMid meet">
+    {data.length ? <svg ref={svgRef} className="weather-chart" role="img" aria-label="Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke" viewBox={`0 0 ${width} ${height + 28}`} preserveAspectRatio="xMidYMid meet">
       <defs><linearGradient id={`temperature-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f4b17b" stopOpacity=".62"/><stop offset="1" stopColor="#f4b17b" stopOpacity=".08"/></linearGradient><linearGradient id={`cloud-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#aeb4b3" stopOpacity=".2"/><stop offset="1" stopColor="#aeb4b3" stopOpacity=".02"/></linearGradient></defs>
       {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" x={plot.left - 8} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan><tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan></text><text className="axis-label axis-right" x={width - plot.right + 8} y={y + 4}><tspan>{percent}%</tspan><tspan className="axis-wind-value"> · {wind.toFixed(1)} m/s</tspan></text></g>; })}
       {cloudPath && <><path className="cloud-area" fill={`url(#cloud-fill-${detailed})`} d={`${cloudPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`}/><path className="cloud-line" d={cloudPath}/></>}
@@ -287,6 +305,7 @@ function GuestSwitch({ on, pending, action, child = false }: { on: boolean; pend
 }
 
 const sceneMeta = { morning: ['sunny', 'Morgen'], evening: ['wb_twilight', 'Kveld'], night: ['bedtime', 'Natt'] } as const;
+const sceneConfirmation = { morning: 'Morgen er sendt til Home Assistant', evening: 'Kveld er sendt til Home Assistant', night: 'Natt er sendt til Home Assistant' } as const;
 function SceneButtons({ action, pending, errors, header = false }: { action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string>; header?: boolean }) {
   return <div className={`scene-buttons${header ? ' header-scenes' : ''}`} aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => <button type="button" key={key} className={`scene ${key}`} disabled={pending[key]} onClick={() => action(key as DashboardAction)}><Icon filled>{icon}</Icon><span>{label}</span>{errors[key] && <small role="alert">{errors[key]}</small>}</button>)}</div>;
 }
@@ -297,7 +316,7 @@ function HeatPump({ states, pending, errors, action, adjust, simple = false }: {
   const target = temperatureNumber(climate);
   const mode = ['cool', 'heat', 'heat_cool', 'fan_only'].includes(climate?.state) ? climate.state as HeatPumpMode : undefined;
   const fan = typeof climate?.attributes.fan_mode === 'string' ? climate.attributes.fan_mode : undefined;
-  const modes: Array<[HeatPumpMode, string, string]> = simple ? [['heat', 'sunny', 'Varme'], ['cool', 'ac_unit', 'Kjøling'], ['fan_only', 'mode_fan', 'Vifte']] : [['heat', 'sunny', 'Varme'], ['cool', 'ac_unit', 'Kjøling'], ['fan_only', 'mode_fan', 'Vifte'], ['heat_cool', 'adjust', 'Balanser']];
+  const modes: Array<[HeatPumpMode, string, string]> = simple ? [['heat', 'sunny', 'Varme'], ['cool', 'ac_unit', 'Kjøle'], ['fan_only', 'mode_fan', 'Vifte']] : [['heat', 'sunny', 'Varme'], ['cool', 'ac_unit', 'Kjøle'], ['fan_only', 'mode_fan', 'Vifte'], ['heat_cool', 'adjust', 'Balanser']];
   return <section className={`card heatpump-card ${simple ? 'simple' : ''}`} aria-labelledby="heat-title"><div className="heat-title"><Icon>mode_fan</Icon><div><h2 id="heat-title">Varmepumpe</h2><p>Inne {fmt(current, '°C')}</p></div></div><div className="heat-controls"><div className="temperature-stepper"><button type="button" aria-label="Senk temperatur" disabled={pending.temperature || target === undefined} onClick={() => adjust(-1)}><Icon>remove</Icon></button><output aria-label="Temperatur">{fmt(target, '°C')}</output><button type="button" aria-label="Øk temperatur" disabled={pending.temperature || target === undefined} onClick={() => adjust(1)}><Icon>add</Icon></button></div><div className="hvac-modes" role="group" aria-label="Velg varmepumpens driftsmodus">{modes.map(([value, icon, label]) => <button type="button" key={value} className={mode === value ? 'selected' : ''} aria-pressed={mode === value} disabled={pending.heatPump} onClick={() => action('heatPump', value)}><Icon>{icon}</Icon><span>{label}</span></button>)}</div></div><div className="fan-group"><div role="group" aria-label="Velg viftehastighet">{([['quiet', 'Stille'], ['medium', 'Medium'], ['strong', 'Sterk']] as const).map(([value, label]) => <button key={value} type="button" className={fan === value ? 'selected' : ''} aria-pressed={fan === value} disabled={pending.fanSpeed} onClick={() => action('fanSpeed', value)}>{label}</button>)}</div></div>{errors.heatPump && <p className="card-error" role="alert">{errors.heatPump}</p>}{errors.fanSpeed && <p className="card-error" role="alert">{errors.fanSpeed}</p>}{errors.temperature && <p className="card-error" role="alert">{errors.temperature}</p>}</section>;
 }
 
@@ -314,18 +333,24 @@ function SecurityCard({ state, pending, action, error }: { state?: HomeAssistant
 
 function CameraCard({ title, available, imagePath, streamPath }: { title: string; available: boolean; imagePath: string; streamPath: string }) {
   const [source, setSource] = useState<'stream' | 'snapshot' | 'unavailable'>('stream');
+  const [fullscreen, setFullscreen] = useState(false);
+  const frameRef = useRef<HTMLDivElement>(null);
   useEffect(() => { setSource('stream'); }, [available]);
+  useEffect(() => { const syncFullscreen = () => setFullscreen(document.fullscreenElement === frameRef.current); document.addEventListener('fullscreenchange', syncFullscreen); return () => document.removeEventListener('fullscreenchange', syncFullscreen); }, []);
   const cameraAvailable = available && source !== 'unavailable';
   const stream = source === 'stream';
   const imageSource = stream ? streamPath : `${imagePath}?frame=fallback`;
   const liveLabel = `Direktevideo fra ${title.toLocaleLowerCase('nb-NO')}`;
   const snapshotLabel = `Siste bilde fra ${title.toLocaleLowerCase('nb-NO')}`;
-  return <section className="card doorbell-card" aria-label={title}><h2>{title}</h2><div className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={stream ? liveLabel : snapshotLabel} onError={() => setSource((current) => current === 'stream' ? 'snapshot' : 'unavailable')}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">{stream ? 'LIVE' : 'BILDE'}</span>}<div className="camera-controls"><button type="button" aria-label={`Vis ${title} i fullskjerm`} onClick={(event) => event.currentTarget.closest('.camera-frame')?.requestFullscreen?.()}><Icon>fullscreen</Icon></button></div></div></section>;
+  const toggleFullscreen = async () => { if (document.fullscreenElement === frameRef.current) await document.exitFullscreen?.(); else await frameRef.current?.requestFullscreen?.(); };
+  return <section className="card doorbell-card" aria-label={title}><h2>{title}</h2><div ref={frameRef} className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={stream ? liveLabel : snapshotLabel} onError={() => setSource((current) => current === 'stream' ? 'snapshot' : 'unavailable')}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">{stream ? 'LIVE' : 'BILDE'}</span>}<div className="camera-controls"><button type="button" aria-label={fullscreen ? `Avslutt fullskjerm for ${title}` : `Vis ${title} i fullskjerm`} onClick={() => void toggleFullscreen()}><Icon>{fullscreen ? 'fullscreen_exit' : 'fullscreen'}</Icon></button></div></div></section>;
 }
+
+function Toast({ message }: { message: string | null }) { return message ? <div className="action-toast" role="status"><Icon filled>check_circle</Icon><span>{message}</span></div> : null; }
 
 const reading = (state: HomeAssistantState | undefined, unit = '') => stateValue(state) ? `${stateValue(state)}${unit}` : '—';
 function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
-  const rooms = [['Stue', states.roomLiving], ['Soverom', states.roomBedroom], ['Bad', states.roomBathroom]] as const;
+  const rooms = [['Temperatur for stue', states.roomLiving], ['Soverom HA', states.roomBedroom], ['Soverom barn', states.roomBathroom]] as const;
   const events = Array.isArray(states.calendar?.attributes.events) ? states.calendar.attributes.events.slice(0, 2) as Array<Record<string, unknown>> : [];
   return <div className="metric-row">
     <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section>
@@ -338,7 +363,7 @@ function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
 }
 
 function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState> }) {
-  const rooms = [['Stue', states.roomLiving], ['Soverom', states.roomBedroom], ['Bad', states.roomBathroom]] as const;
+  const rooms = [['Temperatur for stue', states.roomLiving], ['Soverom HA', states.roomBedroom], ['Soverom barn', states.roomBathroom]] as const;
   const events = calendarEvents(states.calendar);
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -356,7 +381,7 @@ function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState>
 }
 
 function metricCards(states: Record<string, HomeAssistantState>): LayoutChild[] {
-  const rooms = [['Stue', states.roomLiving], ['Soverom', states.roomBedroom], ['Bad', states.roomBathroom]] as const;
+  const rooms = [['Temperatur for stue', states.roomLiving], ['Soverom HA', states.roomBedroom], ['Soverom barn', states.roomBathroom]] as const;
   const events = calendarEvents(states.calendar);
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -423,6 +448,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [repairOpen, setRepairOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const repairButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const wasRepairOpen = useRef(false);
@@ -460,16 +486,18 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   }, [api]);
   useEffect(() => { if (!repairOpen) return; closeButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setRepairOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [repairOpen]);
   useEffect(() => { if (!repairOpen && wasRepairOpen.current) repairButton.current?.focus(); wasRepairOpen.current = repairOpen; }, [repairOpen]);
+  useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 4_000); return () => window.clearTimeout(timer); }, [toast]);
 
-  const confirm = async (key: string, operation: () => Promise<{ states: Record<string, HomeAssistantState> }>) => { setPending((value) => ({ ...value, [key]: true })); setErrors((value) => ({ ...value, [key]: '' })); try { const result = await operation(); setStates((value) => ({ ...value, ...result.states })); } catch { setErrors((value) => ({ ...value, [key]: updateError })); } finally { setPending((value) => { const next = { ...value }; delete next[key]; return next; }); } };
+  const confirm = async (key: string, operation: () => Promise<{ states: Record<string, HomeAssistantState> }>) => { setPending((value) => ({ ...value, [key]: true })); setErrors((value) => ({ ...value, [key]: '' })); try { const result = await operation(); setStates((value) => ({ ...value, ...result.states })); if (key in sceneConfirmation) setToast(sceneConfirmation[key as keyof typeof sceneConfirmation]); } catch { setErrors((value) => ({ ...value, [key]: updateError })); } finally { setPending((value) => { const next = { ...value }; delete next[key]; return next; }); } };
   const action = (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => { void confirm(key, () => api.runAction(key, option)); };
   const baseline = temperatureNumber(states.climate) ?? currentTemperatureNumber(states.climate);
   const adjust = (offset: number) => { if (baseline !== undefined) void confirm('temperature', () => api.setTemperature(baseline + offset)); };
   const dashboardProps = useMemo(() => ({ states, pending, errors, action, adjust }), [states, pending, errors]);
   const repair = isRepairNeeded(states.repairHealth);
   const updateLayout = (next: GridLayouts) => setLayouts((current) => { const modeLayout = Object.fromEntries(Object.entries(next).map(([id, placement]) => [id, { ...placement }])); window.localStorage.setItem(layoutKey(mode), JSON.stringify(modeLayout)); return { ...current, [mode]: modeLayout }; });
-  const resetLayout = () => setLayouts((current) => { window.localStorage.removeItem(layoutKey(mode)); return { ...current, [mode]: defaultLayouts[mode] }; });
+  const saveDefaultLayout = () => window.localStorage.setItem(defaultLayoutKey(mode), JSON.stringify(layouts[mode]));
+  const resetLayout = () => setLayouts((current) => { window.localStorage.removeItem(layoutKey(mode)); return { ...current, [mode]: loadLayout(mode) }; });
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }

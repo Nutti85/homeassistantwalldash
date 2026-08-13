@@ -52,14 +52,14 @@ describe('redesigned dashboard', () => {
     fireEvent(handle, pointerEvent('pointerdown', 100, 50));
     fireEvent(grid, pointerEvent('pointermove', 600, 300));
 
-    expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 2' });
-    expect(calendar).toHaveStyle({ gridColumn: '21 / span 4', gridRow: '7 / span 2' });
-    expect(localStorage.getItem('smarthjem-layout-v4-regular')).toBeNull();
+    expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
+    expect(calendar).toHaveStyle({ gridColumn: '9 / span 5', gridRow: '5 / span 2' });
+    expect(localStorage.getItem('smarthjem-layout-v6-regular')).toBeNull();
 
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v4-regular') ?? '{}');
-    expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 2 });
-    expect(saved.calendar).toMatchObject({ column: 21, row: 7, columns: 4, rows: 2 });
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v6-regular') ?? '{}');
+    expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
+    expect(saved.calendar).toMatchObject({ column: 9, row: 5, columns: 5, rows: 2 });
   });
 
   it('resizes only the selected card against the grid dimensions captured at pointer down', async () => {
@@ -79,8 +79,8 @@ describe('redesigned dashboard', () => {
     fireEvent(handle, pointerEvent('pointerdown', 100, 50));
     fireEvent(grid, pointerEvent('pointermove', 300, 150));
 
-    expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 3' });
-    expect(calendar).toHaveStyle({ gridColumn: '21 / span 4', gridRow: '7 / span 2' });
+    expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 2' });
+    expect(calendar).toHaveStyle({ gridColumn: '9 / span 5', gridRow: '5 / span 2' });
     expect(bounds).toHaveBeenCalledTimes(1);
   });
 
@@ -128,6 +128,12 @@ describe('redesigned dashboard', () => {
   it.each([['Morgen','morning'],['Kveld','evening'],['Natt','night']] as const)('preserves %s scene intent', async (label, action) => {
     const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: {} }); render(<App api={api}/>);
     fireEvent.click(await screen.findByRole('button', { name: label })); await waitFor(() => expect(api.runAction).toHaveBeenCalledWith(action, undefined));
+  });
+
+  it('confirms a sent scene command with a toast', async () => {
+    const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: {} }); render(<App api={api}/>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Morgen' }));
+    expect(await screen.findByText('Morgen er sendt til Home Assistant')).toBeInTheDocument();
   });
 
   it('shows populated and unavailable AI summary states', async () => {
