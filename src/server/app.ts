@@ -11,6 +11,8 @@ export interface DashboardClient {
   setTemperature(temperature: number): Promise<DashboardActionResult>;
   getCameraImage?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
   getCameraStream?(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>;
+  getCourtyardCameraImage?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
+  getCourtyardCameraStream?(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>;
 }
 
 const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
@@ -58,6 +60,36 @@ export const createApp = (client: DashboardClient): Express => {
     if (!client.getCameraStream) { response.sendStatus(404); return; }
     try {
       const stream = await client.getCameraStream();
+      response.set({ 'Content-Type': stream.contentType, 'Cache-Control': 'no-store' });
+      response.flushHeaders();
+      const reader = stream.body.getReader();
+      request.on('close', () => { void reader.cancel(); });
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        response.write(value);
+      }
+      response.end();
+    } catch (error) {
+      if (!response.headersSent) sendClientError(error, response);
+      else response.end();
+    }
+  });
+
+  app.get('/api/courtyard-camera', async (_request: Request, response: Response) => {
+    if (!client.getCourtyardCameraImage) { response.sendStatus(404); return; }
+    try {
+      const image = await client.getCourtyardCameraImage();
+      response.type(image.contentType).send(Buffer.from(image.bytes));
+    } catch (error) {
+      sendClientError(error, response);
+    }
+  });
+
+  app.get('/api/courtyard-camera/stream', async (request: Request, response: Response) => {
+    if (!client.getCourtyardCameraStream) { response.sendStatus(404); return; }
+    try {
+      const stream = await client.getCourtyardCameraStream();
       response.set({ 'Content-Type': stream.contentType, 'Cache-Control': 'no-store' });
       response.flushHeaders();
       const reader = stream.body.getReader();

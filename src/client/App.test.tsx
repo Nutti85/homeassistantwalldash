@@ -29,6 +29,8 @@ describe('redesigned dashboard', () => {
   it('offers a deliberate layout editing mode with move, resize and reset controls', async () => {
     render(<App api={createApi()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
+    expect(screen.getByRole('button', { name: 'Flytt Ytterdør' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Flytt Overvåkning' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Flytt Vær' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Endre størrelse på Vær' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tilbakestill' })).toBeInTheDocument();
@@ -36,29 +38,28 @@ describe('redesigned dashboard', () => {
     expect(screen.queryByRole('button', { name: 'Flytt Vær' })).not.toBeInTheDocument();
   });
 
-  it('previews a card swap while dragging and persists it only on pointer release', async () => {
+  it('moves a card freely and persists its new grid position only on pointer release', async () => {
     render(<App api={createApi()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
-    const handle = screen.getByRole('button', { name: 'Flytt Varmepumpe' });
+    const handle = screen.getByRole('button', { name: 'Flytt Ytterdør' });
     const grid = handle.closest('.editable-dashboard') as HTMLElement;
-    const heatpump = handle.closest('[data-layout-id="heatpump"]') as HTMLElement;
+    const frontDoor = handle.closest('[data-layout-id="frontDoor"]') as HTMLElement;
     const calendar = grid.querySelector('[data-layout-id="calendar"]') as HTMLElement;
     Object.defineProperty(handle, 'setPointerCapture', { value: vi.fn() });
     Object.defineProperty(grid, 'getBoundingClientRect', { value: () => ({ left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800, x: 0, y: 0, toJSON: () => ({}) }) });
-    Object.defineProperty(calendar, 'getBoundingClientRect', { value: () => ({ left: 1000, top: 600, right: 1200, bottom: 700, width: 200, height: 100, x: 1000, y: 600, toJSON: () => ({}) }) });
 
     const pointerEvent = (type: string, clientX: number, clientY: number) => { const event = new MouseEvent(type, { bubbles: true, clientX, clientY }); Object.defineProperty(event, 'pointerId', { value: 1 }); return event; };
-    fireEvent(handle, pointerEvent('pointerdown', 500, 350));
-    fireEvent(grid, pointerEvent('pointermove', 1100, 650));
+    fireEvent(handle, pointerEvent('pointerdown', 100, 50));
+    fireEvent(grid, pointerEvent('pointermove', 600, 300));
 
-    expect(heatpump).toHaveStyle({ gridColumn: '11 / span 2', gridRow: '4 / span 1' });
-    expect(calendar).toHaveStyle({ gridColumn: '5 / span 8', gridRow: '3 / span 1' });
-    expect(localStorage.getItem('smarthjem-layout-v1-regular')).toBeNull();
+    expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '6 / span 2' });
+    expect(calendar).toHaveStyle({ gridColumn: '21 / span 4', gridRow: '7 / span 2' });
+    expect(localStorage.getItem('smarthjem-layout-v3-regular')).toBeNull();
 
-    fireEvent(grid, pointerEvent('pointerup', 1100, 650));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v1-regular') ?? '{}');
-    expect(saved.heatpump).toMatchObject({ column: 11, row: 4, columns: 2, rows: 1 });
-    expect(saved.calendar).toMatchObject({ column: 5, row: 3, columns: 8, rows: 1 });
+    fireEvent(grid, pointerEvent('pointerup', 600, 300));
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v3-regular') ?? '{}');
+    expect(saved.frontDoor).toMatchObject({ column: 11, row: 6, columns: 4, rows: 2 });
+    expect(saved.calendar).toMatchObject({ column: 21, row: 7, columns: 4, rows: 2 });
   });
 
   it('renders exactly one guest Wi-Fi card and confirmed voucher in Gjest', async () => {
@@ -138,8 +139,9 @@ describe('redesigned dashboard', () => {
   });
 
   it('shows camera fallback and accessible controls', async () => {
-    render(<App api={createApi()} />); expect(await screen.findByText('— Kamera ikke tilgjengelig')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Vis kamera i fullskjerm' })).toBeInTheDocument();
+    render(<App api={createApi()} />); expect((await screen.findAllByText('— Kamera ikke tilgjengelig'))).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Vis Ringeklokke i fullskjerm' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vis Gårdsplassen i fullskjerm' })).toBeInTheDocument();
   });
 
   it('uses the live stream and falls back to a still image when it fails', async () => {
@@ -148,6 +150,14 @@ describe('redesigned dashboard', () => {
     expect(camera).toHaveAttribute('src', '/api/camera/stream');
     fireEvent.error(camera);
     expect(await screen.findByRole('img', { name: 'Siste bilde fra ringeklokke' })).toHaveAttribute('src', '/api/camera?frame=fallback');
+  });
+
+  it('uses the Gårdsplassen camera stream and its own fallback image', async () => {
+    render(<App api={createApi({ courtyardCamera: state('camera.gaardsplass_fluent_lens_0', 'idle') })} />);
+    const camera = await screen.findByRole('img', { name: 'Direktevideo fra gårdsplassen' });
+    expect(camera).toHaveAttribute('src', '/api/courtyard-camera/stream');
+    fireEvent.error(camera);
+    expect(await screen.findByRole('img', { name: 'Siste bilde fra gårdsplassen' })).toHaveAttribute('src', '/api/courtyard-camera?frame=fallback');
   });
 
   it('refreshes Home Assistant states so an entity that returns later is rendered', async () => {

@@ -26,6 +26,7 @@ npm run start
    - `HA_GUEST_VOUCHER_SENSOR_ID` = voucher-sensoren. Standard er `sensor.67647a4bca314858fac0f8fc_voucher`.
    - `HA_GUEST_VOUCHER_CREATE_BUTTON_ID` = knappen som oppretter voucher. Standard er `button.67647a4bca314858fac0f8fc_create`.
    - `HA_DOORBELL_CAMERA_ENTITY_ID` = kameraet i ringeklokke-kortet. Standard er `camera.ringeklokke_fluent`.
+   - `HA_COURTYARD_CAMERA_ENTITY_ID` = kameraet i Gårdsplassen-kortet. Standard er `camera.gaardsplass_fluent_lens_0`.
    - `GIT_SYNC_REPO` = `https://github.com/Nutti85/homeassistantwalldash.git`
    - `GIT_SYNC_BRANCH` = `main`
 3. Deploy stacken og åpne `http://<proxmox-eller-portainer-vert>:<DASHBOARD_PORT>` fra tableten.

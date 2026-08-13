@@ -235,8 +235,16 @@ export class HomeAssistantClient {
   }
 
   public async getCameraImage(): Promise<{ bytes: ArrayBuffer; contentType: string }> {
-    if (!this.entities.doorbellCamera) throw communicationError();
-    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy/${this.entities.doorbellCamera}`, {
+    return this.getCameraImageFor(this.entities.doorbellCamera);
+  }
+
+  public async getCourtyardCameraImage(): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+    return this.getCameraImageFor(this.entities.courtyardCamera);
+  }
+
+  private async getCameraImageFor(entityId: string): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+    if (!entityId) throw communicationError();
+    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy/${entityId}`, {
       method: 'GET',
       headers: this.headers(),
     });
@@ -245,8 +253,16 @@ export class HomeAssistantClient {
   }
 
   public async getCameraStream(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }> {
-    if (!this.entities.doorbellCamera) throw communicationError();
-    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy_stream/${this.entities.doorbellCamera}`, {
+    return this.getCameraStreamFor(this.entities.doorbellCamera);
+  }
+
+  public async getCourtyardCameraStream(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }> {
+    return this.getCameraStreamFor(this.entities.courtyardCamera);
+  }
+
+  private async getCameraStreamFor(entityId: string): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }> {
+    if (!entityId) throw communicationError();
+    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy_stream/${entityId}`, {
       method: 'GET',
       headers: this.headers(),
     });

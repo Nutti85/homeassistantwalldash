@@ -24,6 +24,7 @@ const entities = {
   weatherHourly: process.env.HA_WEATHER_HOURLY_ENTITY_ID?.trim() || defaultDashboardEntityIds.weatherHourly,
   weatherDaily: process.env.HA_WEATHER_DAILY_ENTITY_ID?.trim() || defaultDashboardEntityIds.weatherDaily,
   doorbellCamera: process.env.HA_DOORBELL_CAMERA_ENTITY_ID?.trim() || '',
+  courtyardCamera: process.env.HA_COURTYARD_CAMERA_ENTITY_ID?.trim() || defaultDashboardEntityIds.courtyardCamera,
   weatherSummary: process.env.HA_WEATHER_SUMMARY_ENTITY_ID?.trim() || '',
   energyToday: process.env.HA_ENERGY_TODAY_ENTITY_ID?.trim() || '',
   roomLiving: process.env.HA_ROOM_LIVING_ENTITY_ID?.trim() || '',

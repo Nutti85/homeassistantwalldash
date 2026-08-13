@@ -28,6 +28,7 @@ services:
       HA_GUEST_VOUCHER_SENSOR_ID: ${HA_GUEST_VOUCHER_SENSOR_ID:-sensor.67647a4bca314858fac0f8fc_voucher}
       HA_GUEST_VOUCHER_CREATE_BUTTON_ID: ${HA_GUEST_VOUCHER_CREATE_BUTTON_ID:-button.67647a4bca314858fac0f8fc_create}
       HA_DOORBELL_CAMERA_ENTITY_ID: ${HA_DOORBELL_CAMERA_ENTITY_ID:-camera.ringeklokke_fluent}
+      HA_COURTYARD_CAMERA_ENTITY_ID: ${HA_COURTYARD_CAMERA_ENTITY_ID:-camera.gaardsplass_fluent_lens_0}
       GIT_SYNC_REPO: ${GIT_SYNC_REPO:-https://github.com/Nutti85/homeassistantwalldash.git}
       GIT_SYNC_BRANCH: ${GIT_SYNC_BRANCH:-main}
       PORT: "3000"

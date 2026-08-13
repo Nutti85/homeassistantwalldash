@@ -18,6 +18,8 @@ type WeatherTab = 'today' | 'week';
 type GridPlacement = { column: number; row: number; columns: number; rows: number };
 type GridLayouts = Record<string, GridPlacement>;
 type LayoutChild = { id: string; label: string; content: ReactElement };
+const GRID_COLUMNS = 24;
+const GRID_ROWS = 16;
 const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const fmt = (value: number | undefined, unit = '') => value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`;
@@ -47,15 +49,17 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
   </header>;
 }
 
+const scalePlacement = ({ column, row, columns, rows }: GridPlacement): GridPlacement => ({ column: column * 2 - 1, row: row * 2 - 1, columns: columns * 2, rows: rows * 2 });
+const scaleLayout = (layout: GridLayouts): GridLayouts => Object.fromEntries(Object.entries(layout).map(([id, placement]) => [id, scalePlacement(placement)]));
 const defaultLayouts: Record<Mode, GridLayouts> = {
-  regular: { access: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 2 }, doorbell: { column: 1, row: 2, columns: 4, rows: 2 }, heatpump: { column: 5, row: 3, columns: 8, rows: 1 }, energy: { column: 1, row: 4, columns: 2, rows: 1 }, rooms: { column: 3, row: 4, columns: 2, rows: 1 }, waste: { column: 5, row: 4, columns: 2, rows: 1 }, carAndreas: { column: 7, row: 4, columns: 2, rows: 1 }, carHege: { column: 9, row: 4, columns: 2, rows: 1 }, calendar: { column: 11, row: 4, columns: 2, rows: 1 } },
-  guest: { guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } },
-  child: { guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } },
+  regular: scaleLayout({ frontDoor: { column: 1, row: 1, columns: 2, rows: 1 }, security: { column: 3, row: 1, columns: 2, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 2 }, doorbell: { column: 1, row: 2, columns: 2, rows: 2 }, courtyard: { column: 3, row: 2, columns: 2, rows: 2 }, heatpump: { column: 5, row: 3, columns: 8, rows: 1 }, energy: { column: 1, row: 4, columns: 2, rows: 1 }, rooms: { column: 3, row: 4, columns: 2, rows: 1 }, waste: { column: 5, row: 4, columns: 2, rows: 1 }, carAndreas: { column: 7, row: 4, columns: 2, rows: 1 }, carHege: { column: 9, row: 4, columns: 2, rows: 1 }, calendar: { column: 11, row: 4, columns: 2, rows: 1 } }),
+  guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
+  child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
-const layoutKey = (mode: Mode) => `smarthjem-layout-${mode === 'regular' ? 'v1' : 'v2'}-${mode}`;
+const layoutKey = (mode: Mode) => `smarthjem-layout-v3-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
-  const columns = Math.max(1, Math.min(12, placement.columns)); const rows = Math.max(1, Math.min(8, placement.rows));
-  return { columns, rows, column: Math.max(1, Math.min(13 - columns, placement.column)), row: Math.max(1, Math.min(9 - rows, placement.row)) };
+  const columns = Math.max(1, Math.min(GRID_COLUMNS, placement.columns)); const rows = Math.max(1, Math.min(GRID_ROWS, placement.rows));
+  return { columns, rows, column: Math.max(1, Math.min(GRID_COLUMNS + 1 - columns, placement.column)), row: Math.max(1, Math.min(GRID_ROWS + 1 - rows, placement.row)) };
 };
 const loadLayout = (mode: Mode): GridLayouts => {
   try { const saved = JSON.parse(window.localStorage.getItem(layoutKey(mode)) ?? '{}') as GridLayouts; return Object.fromEntries(Object.entries(defaultLayouts[mode]).map(([id, fallback]) => [id, saved[id] ? clampPlacement(saved[id]) : fallback])); } catch { return defaultLayouts[mode]; }
@@ -65,7 +69,7 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
   const gridRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<GridLayouts>(layout);
   const draftRef = useRef<GridLayouts>(layout);
-  const drag = useRef<{ id: string; type: 'move' | 'resize'; pointerId: number; startX: number; startY: number; origin: GridLayouts; vacant: GridPlacement; swapped: boolean; lastTarget?: string } | null>(null);
+  const drag = useRef<{ id: string; type: 'move' | 'resize'; pointerId: number; startX: number; startY: number; origin: GridLayouts } | null>(null);
 
   useEffect(() => {
     if (drag.current) return;
@@ -83,7 +87,7 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const origin = Object.fromEntries(Object.entries(layout).map(([key, placement]) => [key, { ...placement }]));
-    drag.current = { id, type, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, vacant: { ...origin[id] }, swapped: false };
+    drag.current = { id, type, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin };
     showDraft(origin);
   };
 
@@ -91,8 +95,8 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
     const active = drag.current;
     const bounds = gridRef.current?.getBoundingClientRect();
     if (!active || !bounds || event.pointerId !== active.pointerId) return;
-    const columnDelta = Math.round((event.clientX - active.startX) / (bounds.width / 12));
-    const rowDelta = Math.round((event.clientY - active.startY) / (bounds.height / 8));
+    const columnDelta = Math.round((event.clientX - active.startX) / (bounds.width / GRID_COLUMNS));
+    const rowDelta = Math.round((event.clientY - active.startY) / (bounds.height / GRID_ROWS));
 
     if (active.type === 'resize') {
       const original = active.origin[active.id];
@@ -100,26 +104,6 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
       return;
     }
 
-    const targetId = Array.from(gridRef.current?.querySelectorAll<HTMLElement>('.layout-item[data-layout-id]') ?? [])
-      .find((element) => {
-        if (element.dataset.layoutId === active.id) return false;
-        const rect = element.getBoundingClientRect();
-        return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
-      })?.dataset.layoutId;
-
-    if (targetId && targetId !== active.lastTarget && draftRef.current[targetId]) {
-      const current = draftRef.current;
-      const targetPlacement = current[targetId];
-      showDraft({ ...current, [active.id]: { ...targetPlacement }, [targetId]: { ...active.vacant } });
-      active.vacant = { ...targetPlacement };
-      active.swapped = true;
-      active.lastTarget = targetId;
-      return;
-    }
-
-    if (!targetId) active.lastTarget = undefined;
-    if (active.lastTarget) return;
-    if (active.swapped) return;
     const original = active.origin[active.id];
     showDraft({ ...draftRef.current, [active.id]: clampPlacement({ ...original, column: original.column + columnDelta, row: original.row + rowDelta }) });
   };
@@ -318,13 +302,15 @@ function SecurityCard({ state, pending, action, error }: { state?: HomeAssistant
   return <button type="button" className={`card security-card ${status.tone}`} disabled={pending} onClick={action}><span className="round-icon"><Icon>{status.icon}</Icon></span><span><strong>Overvåkning</strong><small>{status.label}</small></span>{error && <small role="alert">{error}</small>}</button>;
 }
 
-function Doorbell({ available }: { available: boolean }) {
+function CameraCard({ title, available, imagePath, streamPath }: { title: string; available: boolean; imagePath: string; streamPath: string }) {
   const [source, setSource] = useState<'stream' | 'snapshot' | 'unavailable'>('stream');
   useEffect(() => { setSource('stream'); }, [available]);
   const cameraAvailable = available && source !== 'unavailable';
   const stream = source === 'stream';
-  const imageSource = stream ? '/api/camera/stream' : '/api/camera?frame=fallback';
-  return <section className="card doorbell-card" aria-labelledby="doorbell-title"><h2 id="doorbell-title">Ringeklokke</h2><div className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={stream ? 'Direktevideo fra ringeklokke' : 'Siste bilde fra ringeklokke'} onError={() => setSource((current) => current === 'stream' ? 'snapshot' : 'unavailable')}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">{stream ? 'LIVE' : 'BILDE'}</span>}<div className="camera-controls"><button type="button" aria-label="Vis kamera i fullskjerm" onClick={() => document.querySelector('.camera-frame')?.requestFullscreen?.()}><Icon>fullscreen</Icon></button></div></div></section>;
+  const imageSource = stream ? streamPath : `${imagePath}?frame=fallback`;
+  const liveLabel = `Direktevideo fra ${title.toLocaleLowerCase('nb-NO')}`;
+  const snapshotLabel = `Siste bilde fra ${title.toLocaleLowerCase('nb-NO')}`;
+  return <section className="card doorbell-card" aria-label={title}><h2>{title}</h2><div className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={stream ? liveLabel : snapshotLabel} onError={() => setSource((current) => current === 'stream' ? 'snapshot' : 'unavailable')}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">{stream ? 'LIVE' : 'BILDE'}</span>}<div className="camera-controls"><button type="button" aria-label={`Vis ${title} i fullskjerm`} onClick={(event) => event.currentTarget.closest('.camera-frame')?.requestFullscreen?.()}><Icon>fullscreen</Icon></button></div></div></section>;
 }
 
 const reading = (state: HomeAssistantState | undefined, unit = '') => stateValue(state) ? `${stateValue(state)}${unit}` : '—';
@@ -390,8 +376,11 @@ function GuestWifi({ voucher, pending, renew }: { voucher?: string; pending: boo
 
 function RegularDashboard({ states, pending, errors, action, adjust, showWeather, editing, layout, updateLayout }: DashboardProps & { showWeather: () => void; editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void }) {
   return <EditableDashboard mode="regular" editing={editing} layout={layout} updateLayout={updateLayout} children={[
-    { id: 'access', label: 'Adgang', content: <div className="upper-left"><DoorCard state={states.frontDoorLock} pending={pending.lockDoor || pending.unlockDoor} action={action} error={errors.lockDoor || errors.unlockDoor}/><SecurityCard state={states.securityMode} pending={pending.securityMode} action={() => action('securityMode')} error={errors.securityMode}/></div> },
-    { id: 'weather', label: 'Vær', content: <WeatherOverview states={states} regular onDetails={showWeather}/> }, { id: 'doorbell', label: 'Ringeklokke', content: <Doorbell available={Boolean(stateValue(states.doorbellCamera))}/> },
+    { id: 'frontDoor', label: 'Ytterdør', content: <DoorCard state={states.frontDoorLock} pending={pending.lockDoor || pending.unlockDoor} action={action} error={errors.lockDoor || errors.unlockDoor}/> },
+    { id: 'security', label: 'Overvåkning', content: <SecurityCard state={states.securityMode} pending={pending.securityMode} action={() => action('securityMode')} error={errors.securityMode}/> },
+    { id: 'weather', label: 'Vær', content: <WeatherOverview states={states} regular onDetails={showWeather}/> },
+    { id: 'doorbell', label: 'Ringeklokke', content: <CameraCard title="Ringeklokke" available={Boolean(stateValue(states.doorbellCamera))} imagePath="/api/camera" streamPath="/api/camera/stream"/> },
+    { id: 'courtyard', label: 'Gårdsplassen', content: <CameraCard title="Gårdsplassen" available={Boolean(stateValue(states.courtyardCamera))} imagePath="/api/courtyard-camera" streamPath="/api/courtyard-camera/stream"/> },
     { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, ...metricCards(states),
   ]}/>;
 }

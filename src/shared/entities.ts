@@ -8,7 +8,7 @@ export type DashboardAction =
 
 export const dashboardStateKeys = [
   'home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night',
-  'cooling', 'climate', 'outdoor', 'securityMode', 'frontDoorLock', 'doorbellCamera',
+  'cooling', 'climate', 'outdoor', 'securityMode', 'frontDoorLock', 'doorbellCamera', 'courtyardCamera',
   'weatherHourly', 'weatherDaily', 'weatherSummary', 'energyToday', 'roomLiving',
   'roomBedroom', 'roomBathroom', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
   'andreasTravelTime', 'hegeTravelTime', 'calendar', 'repairHealth',
@@ -46,6 +46,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   weatherHourly: 'sensor.weather_hourly',
   weatherDaily: 'sensor.weather_daily',
   doorbellCamera: '',
+  courtyardCamera: 'camera.gaardsplass_fluent_lens_0',
   weatherSummary: '',
   energyToday: '',
   roomLiving: '',
