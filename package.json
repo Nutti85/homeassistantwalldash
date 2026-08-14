@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build",
     "start": "node --import tsx src/server/index.ts",
     "test": "vitest run",

@@ -310,6 +310,20 @@ function SceneButtons({ action, pending, errors, header = false }: { action: (ke
   return <div className={`scene-buttons${header ? ' header-scenes' : ''}`} aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => <button type="button" key={key} className={`scene ${key}`} disabled={pending[key]} onClick={() => action(key as DashboardAction)}><Icon filled>{icon}</Icon><span>{label}</span>{errors[key] && <small role="alert">{errors[key]}</small>}</button>)}</div>;
 }
 
+const quickControls = [
+  ['lightbulb', 'Styr lys'],
+  ['vacuum', 'Styr robotstøvsuger'],
+  ['mode_fan', 'Styr klimaanlegg'],
+  ['grass', 'Styr robotgressklipper'],
+  ['settings', 'Innstillinger'],
+] as const;
+
+function QuickControls({ openHeatPump, openVacuum, heatPumpButtonRef, vacuumButtonRef }: { openHeatPump: () => void; openVacuum: () => void; heatPumpButtonRef: React.RefObject<HTMLButtonElement>; vacuumButtonRef: React.RefObject<HTMLButtonElement> }) {
+  return <nav className="quick-controls" aria-label="Hurtigkontroller">
+    {quickControls.map(([icon, label]) => <button ref={icon === 'mode_fan' ? heatPumpButtonRef : icon === 'vacuum' ? vacuumButtonRef : undefined} key={icon} type="button" aria-label={label} title={label} onClick={icon === 'mode_fan' ? openHeatPump : icon === 'vacuum' ? openVacuum : undefined}><Icon>{icon}</Icon></button>)}
+  </nav>;
+}
+
 function HeatPump({ states, pending, errors, action, adjust, simple = false }: { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; action: (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => void; adjust: (offset: number) => void; simple?: boolean }) {
   const climate = states.climate;
   const current = currentTemperatureNumber(climate);
@@ -331,19 +345,42 @@ function SecurityCard({ state, pending, action, error }: { state?: HomeAssistant
   return <button type="button" className={`card security-card ${status.tone}`} disabled={pending} onClick={action}><span className="round-icon"><Icon>{status.icon}</Icon></span><span><strong>Overvåkning</strong><small>{status.label}</small></span>{error && <small role="alert">{error}</small>}</button>;
 }
 
-function CameraCard({ title, available, imagePath, streamPath }: { title: string; available: boolean; imagePath: string; streamPath: string }) {
-  const [source, setSource] = useState<'stream' | 'snapshot' | 'unavailable'>('stream');
+function CameraCard({ title, available, streamPath }: { title: string; available: boolean; streamPath: string }) {
+  const [streamAttempt, setStreamAttempt] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { setSource('stream'); }, [available]);
+  const retryTimer = useRef<number>();
+  useEffect(() => {
+    setStreamAttempt(0);
+    return () => { if (retryTimer.current) window.clearTimeout(retryTimer.current); };
+  }, [available]);
   useEffect(() => { const syncFullscreen = () => setFullscreen(document.fullscreenElement === frameRef.current); document.addEventListener('fullscreenchange', syncFullscreen); return () => document.removeEventListener('fullscreenchange', syncFullscreen); }, []);
-  const cameraAvailable = available && source !== 'unavailable';
-  const stream = source === 'stream';
-  const imageSource = stream ? streamPath : `${imagePath}?frame=fallback`;
+  const cameraAvailable = available;
+  const imageSource = `${streamPath}?attempt=${streamAttempt}`;
   const liveLabel = `Direktevideo fra ${title.toLocaleLowerCase('nb-NO')}`;
-  const snapshotLabel = `Siste bilde fra ${title.toLocaleLowerCase('nb-NO')}`;
+  const reconnect = () => {
+    if (retryTimer.current) window.clearTimeout(retryTimer.current);
+    retryTimer.current = window.setTimeout(() => setStreamAttempt((current) => current + 1), 750);
+  };
   const toggleFullscreen = async () => { if (document.fullscreenElement === frameRef.current) await document.exitFullscreen?.(); else await frameRef.current?.requestFullscreen?.(); };
-  return <section className="card doorbell-card" aria-label={title}><h2>{title}</h2><div ref={frameRef} className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={stream ? liveLabel : snapshotLabel} onError={() => setSource((current) => current === 'stream' ? 'snapshot' : 'unavailable')}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">{stream ? 'LIVE' : 'BILDE'}</span>}<div className="camera-controls"><button type="button" aria-label={fullscreen ? `Avslutt fullskjerm for ${title}` : `Vis ${title} i fullskjerm`} onClick={() => void toggleFullscreen()}><Icon>{fullscreen ? 'fullscreen_exit' : 'fullscreen'}</Icon></button></div></div></section>;
+  return <section className="card doorbell-card" aria-label={title}><h2>{title}</h2><div ref={frameRef} className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={liveLabel} onError={reconnect}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">LIVE</span>}<div className="camera-controls"><button type="button" aria-label={fullscreen ? `Avslutt fullskjerm for ${title}` : `Vis ${title} i fullskjerm`} onClick={() => void toggleFullscreen()}><Icon>{fullscreen ? 'fullscreen_exit' : 'fullscreen'}</Icon></button></div></div></section>;
+}
+
+function HeatPumpModal({ states, pending, errors, action, adjust, close, closeButtonRef }: DashboardProps & { close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+  return <div className="heatpump-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+    <section className="heatpump-modal" role="dialog" aria-modal="true" aria-label="Varmepumpe">
+      <button className="heatpump-modal-close" ref={closeButtonRef} type="button" aria-label="Lukk varmepumpe" onClick={close}><Icon>close</Icon></button>
+      <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/>
+    </section>
+  </div>;
+}
+
+const vacuumOptions = (state: HomeAssistantState | undefined) => Array.isArray(state?.attributes.options) ? state.attributes.options.filter((value): value is string => typeof value === 'string') : [];
+function VacuumModal({ states, pending, errors, action, close, closeButtonRef }: { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; action: (key: string, option?: string) => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+  const cleaning = states.vacuumCleaning?.state === 'on'; const status = stateValue(states.vacuumStatus) ?? (cleaning ? 'Rengjøring pågår' : 'Klar'); const progress = Number(stateValue(states.vacuumProgress));
+  const rooms: Array<[string, string, string]> = [['full', 'home', 'Hele huset'], ['gang', 'door_front', 'Gang'], ['kjokken', 'countertops', 'Kjøkken'], ['lounge', 'chair', 'Lounge'], ['stue', 'weekend', 'Stue'], ['morgen', 'wb_sunny', 'Morgen'], ['natt', 'bedtime', 'Natt']];
+  const selectControl = (key: 'cleaningMode' | 'mopMode' | 'mopIntensity', label: string, state: HomeAssistantState | undefined) => <label>{label}<select value={stateValue(state) ?? ''} disabled={pending[key]} onChange={(event) => action(key, event.target.value)}><option value="" disabled>Velg</option>{vacuumOptions(state).map((value) => <option value={value} key={value}>{value}</option>)}</select></label>;
+  return <div className="vacuum-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><div className="vacuum-modal-shell"><button className="vacuum-modal-close" ref={closeButtonRef} type="button" aria-label="Lukk robotstøvsuger" onClick={close}><Icon>close</Icon></button><section className="vacuum-modal card" role="dialog" aria-modal="true" aria-labelledby="vacuum-title"><header><div><h2 id="vacuum-title"><Icon>vacuum</Icon>Sucky V2</h2><p>{status} {stateValue(states.vacuumRoom) ? `· ${stateValue(states.vacuumRoom)}` : ''}</p></div></header><div className="vacuum-overview"><img src="/api/vacuum-map" alt="Kart over første etasje"/><div><strong>{reading(states.vacuumBattery, ' %')}</strong><span>Batteri</span><div className="vacuum-progress"><i style={{ width: `${Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0}%` }}/></div><p>{reading(states.vacuumProgress, ' %')} ferdig · {reading(states.vacuumArea, ' m²')} · {reading(states.vacuumTime, ' min')}</p></div></div><section><h3>Hurtigkontroller</h3><div className="vacuum-actions"><button type="button" disabled={pending[cleaning ? 'pause' : 'start']} onClick={() => action(cleaning ? 'pause' : 'start')}><Icon>{cleaning ? 'pause' : 'play_arrow'}</Icon>{cleaning ? 'Sett på pause' : 'Start'}</button><button type="button" disabled={pending.dock} onClick={() => action('dock')}><Icon>home</Icon>Send til dokk</button><button type="button" disabled={pending.locate} onClick={() => action('locate')}><Icon>location_searching</Icon>Finn roboten</button></div></section><button className="vacuum-kitchen" type="button" disabled={pending.kitchenRefill} onClick={() => action('kitchenRefill')}><Icon>water_drop</Icon>Send til kjøkken og fyll vann</button><section><h3>Rutiner</h3><div className="vacuum-routines">{rooms.map(([key, icon, label]) => <button type="button" key={key} disabled={pending[key]} onClick={() => action(key)}><Icon>{icon}</Icon>{label}</button>)}</div></section><section className="vacuum-settings">{selectControl('cleaningMode', 'Rengjøringsmodus', states.vacuumCleaningMode)}{selectControl('mopMode', 'Moppemodus', states.vacuumMopMode)}{selectControl('mopIntensity', 'Moppeintensitet', states.vacuumMopIntensity)}<label>Volum<input type="range" min="0" max="100" value={Number(stateValue(states.vacuumVolume)) || 0} disabled={pending.volume} onChange={(event) => action('volume', event.target.value)}/></label></section>{errors.vacuum && <p className="card-error" role="alert">{errors.vacuum}</p>}</section></div></div>;
 }
 
 function Toast({ message }: { message: string | null }) { return message ? <div className="action-toast" role="status"><Icon filled>check_circle</Icon><span>{message}</span></div> : null; }
@@ -414,20 +451,20 @@ function RegularDashboard({ states, pending, errors, action, adjust, showWeather
     { id: 'frontDoor', label: 'Ytterdør', content: <DoorCard state={states.frontDoorLock} pending={pending.lockDoor || pending.unlockDoor} action={action} error={errors.lockDoor || errors.unlockDoor}/> },
     { id: 'security', label: 'Overvåkning', content: <SecurityCard state={states.securityMode} pending={pending.securityMode} action={() => action('securityMode')} error={errors.securityMode}/> },
     { id: 'weather', label: 'Vær', content: <WeatherOverview states={states} regular onDetails={showWeather}/> },
-    { id: 'doorbell', label: 'Ringeklokke', content: <CameraCard title="Ringeklokke" available={Boolean(stateValue(states.doorbellCamera))} imagePath="/api/camera" streamPath="/api/camera/stream"/> },
-    { id: 'courtyard', label: 'Gårdsplassen', content: <CameraCard title="Gårdsplassen" available={Boolean(stateValue(states.courtyardCamera))} imagePath="/api/courtyard-camera" streamPath="/api/courtyard-camera/stream"/> },
-    { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, ...metricCards(states),
+    { id: 'doorbell', label: 'Ringeklokke', content: <CameraCard title="Ringeklokke" available={Boolean(stateValue(states.doorbellCamera))} streamPath="/api/camera/stream"/> },
+    { id: 'courtyard', label: 'Gårdsplassen', content: <CameraCard title="Gårdsplassen" available={Boolean(stateValue(states.courtyardCamera))} streamPath="/api/courtyard-camera/stream"/> },
+    ...metricCards(states),
   ]}/>;
 }
 
 interface DashboardProps { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; action: (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => void; adjust: (offset: number) => void }
 function GuestDashboard({ states, pending, errors, action, adjust, editing, layout, updateLayout }: DashboardProps & { editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void }) {
   const voucher = stateValue(states.guestVoucher);
-  return <EditableDashboard mode="guest" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }, { id: 'wifi', label: 'Gjeste-WiFi', content: <GuestWifi voucher={voucher} pending={pending.guestVoucher} renew={() => action('guestVoucher')}/> }]}/>;
+  return <EditableDashboard mode="guest" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'wifi', label: 'Gjeste-WiFi', content: <GuestWifi voucher={voucher} pending={pending.guestVoucher} renew={() => action('guestVoucher')}/> }]}/>;
 }
 
 function ChildDashboard({ states, pending, errors, action, adjust, editing, layout, updateLayout }: DashboardProps & { editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void }) {
-  return <EditableDashboard mode="child" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch child on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'scenes', label: 'Scener', content: <section className="card scenes-card large"><h2>Scener</h2><SceneButtons action={action} pending={pending} errors={errors}/></section> }, { id: 'heatpump', label: 'Varmepumpe', content: <HeatPump simple states={states} pending={pending} errors={errors} action={action} adjust={adjust}/> }]}/>;
+  return <EditableDashboard mode="child" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch child on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'scenes', label: 'Scener', content: <section className="card scenes-card large"><h2>Scener</h2><SceneButtons action={action} pending={pending} errors={errors}/></section> }]}/>;
 }
 
 function DetailedWeather({ states, close }: { states: Record<string, HomeAssistantState>; close: () => void }) {
@@ -448,10 +485,18 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [repairOpen, setRepairOpen] = useState(false);
+  const [heatPumpOpen, setHeatPumpOpen] = useState(false);
+  const [vacuumOpen, setVacuumOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const repairButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const heatPumpButton = useRef<HTMLButtonElement>(null);
+  const heatPumpCloseButton = useRef<HTMLButtonElement>(null);
+  const vacuumButton = useRef<HTMLButtonElement>(null);
+  const vacuumCloseButton = useRef<HTMLButtonElement>(null);
   const wasRepairOpen = useRef(false);
+  const wasHeatPumpOpen = useRef(false);
+  const wasVacuumOpen = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -486,10 +531,15 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   }, [api]);
   useEffect(() => { if (!repairOpen) return; closeButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setRepairOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [repairOpen]);
   useEffect(() => { if (!repairOpen && wasRepairOpen.current) repairButton.current?.focus(); wasRepairOpen.current = repairOpen; }, [repairOpen]);
+  useEffect(() => { if (!heatPumpOpen) return; heatPumpCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setHeatPumpOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [heatPumpOpen]);
+  useEffect(() => { if (!heatPumpOpen && wasHeatPumpOpen.current) heatPumpButton.current?.focus(); wasHeatPumpOpen.current = heatPumpOpen; }, [heatPumpOpen]);
+  useEffect(() => { if (!vacuumOpen) return; vacuumCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setVacuumOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [vacuumOpen]);
+  useEffect(() => { if (!vacuumOpen && wasVacuumOpen.current) vacuumButton.current?.focus(); wasVacuumOpen.current = vacuumOpen; }, [vacuumOpen]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 4_000); return () => window.clearTimeout(timer); }, [toast]);
 
   const confirm = async (key: string, operation: () => Promise<{ states: Record<string, HomeAssistantState> }>) => { setPending((value) => ({ ...value, [key]: true })); setErrors((value) => ({ ...value, [key]: '' })); try { const result = await operation(); setStates((value) => ({ ...value, ...result.states })); if (key in sceneConfirmation) setToast(sceneConfirmation[key as keyof typeof sceneConfirmation]); } catch { setErrors((value) => ({ ...value, [key]: updateError })); } finally { setPending((value) => { const next = { ...value }; delete next[key]; return next; }); } };
   const action = (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => { void confirm(key, () => api.runAction(key, option)); };
+  const vacuumAction = (_key: string, option?: string) => { void confirm('vacuum', () => browserApi.runVacuumAction(_key, option)); };
   const baseline = temperatureNumber(states.climate) ?? currentTemperatureNumber(states.climate);
   const adjust = (offset: number) => { if (baseline !== undefined) void confirm('temperature', () => api.setTemperature(baseline + offset)); };
   const dashboardProps = useMemo(() => ({ states, pending, errors, action, adjust }), [states, pending, errors]);
@@ -499,5 +549,5 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const resetLayout = () => setLayouts((current) => { window.localStorage.removeItem(layoutKey(mode)); return { ...current, [mode]: loadLayout(mode) }; });
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton}/>{heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }

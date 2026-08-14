@@ -136,6 +136,7 @@ body{background:#060d0e}
 .header-scenes .scene{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;height:46px;min-height:46px;min-width:96px;padding:0 17px;border-radius:8px;font-size:14px;font-weight:600}
 .header-scenes .scene .material-symbols-outlined{font-size:21px}
 .header-scenes .scene small{display:none}
+.quick-controls{position:fixed;z-index:5;bottom:8px;left:50%;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;width:244px;height:54px;padding:3px;transform:translateX(-50%);background:#10191a;border:1px solid rgba(255,255,255,.025);border-radius:10px}.quick-controls button{display:flex;align-items:center;justify-content:center;width:100%;height:46px;min-width:0;min-height:46px;padding:0;border:0;border-radius:8px;background:transparent;color:#c7c3bd}.quick-controls button + button{border-left:1px solid rgba(255,255,255,.14);border-radius:0}.quick-controls button:hover{background:rgba(255,255,255,.06);color:var(--text)}.quick-controls button .material-symbols-outlined{font-size:23px}.quick-controls button:first-child .material-symbols-outlined{color:#ffbd00}.quick-controls button:nth-child(2) .material-symbols-outlined{color:var(--mint)}.quick-controls button:nth-child(3) .material-symbols-outlined{color:#7fd6ff}.quick-controls button:nth-child(4) .material-symbols-outlined{color:#7ed269}.quick-controls button:last-child .material-symbols-outlined{color:var(--periwinkle)}
 @media(min-width:801px){
   .regular-layout{grid-template-areas:'access access access access weather weather weather weather weather weather weather weather' 'doorbell doorbell doorbell doorbell weather weather weather weather weather weather weather weather' 'doorbell doorbell doorbell doorbell heatpump heatpump heatpump heatpump heatpump heatpump heatpump heatpump' 'metrics metrics metrics metrics metrics metrics metrics metrics metrics metrics metrics metrics'}
   .guest-layout>.layout-item[data-layout-id="heatpump"]{grid-column:1/3;grid-row:2/4}
@@ -552,7 +553,35 @@ body{min-width:0}
   grid-template-areas:none;
 }
 
+/* Reserve a clear lower band for future cards. Its height matches the
+   desktop header—the area that contains the centered clock. */
+@media(min-width:801px){
+  .dashboard-content{height:calc(100% - 124px)}
+}
+
+@media(min-width:801px) and (max-width:1300px){
+  .dashboard-content{height:calc(100% - 120px)}
+}
+
 .action-toast{position:fixed;z-index:1000;top:18px;left:50%;display:flex;align-items:center;gap:10px;max-width:min(90vw,520px);padding:14px 20px;border:1px solid rgba(153,243,194,.55);border-radius:12px;background:#183126;color:var(--text);box-shadow:0 14px 34px rgba(0,0,0,.35);transform:translateX(-50%);animation:toast-slide-in .24s ease-out}.action-toast .material-symbols-outlined{color:var(--mint)}@keyframes toast-slide-in{from{opacity:0;transform:translate(-50%,-24px)}to{opacity:1;transform:translate(-50%,0)}}
 
 .hvac-modes button:nth-child(1) .material-symbols-outlined{color:#ffc21b}
 .hvac-modes button:nth-child(2) .material-symbols-outlined{color:#7fd6ff}
+
+.heatpump-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(5,10,10,.72);backdrop-filter:blur(4px)}
+.heatpump-modal{position:relative;width:min(720px,100%);max-height:min(90vh,560px);overflow:visible}
+.heatpump-modal-close{position:absolute;top:-52px;right:0;display:grid;place-items:center;width:42px;min-width:42px;height:42px;min-height:42px;padding:0;background:rgba(255,255,255,.07)}
+.heatpump-modal>.heatpump-card{max-height:min(90vh,560px);overflow:auto;padding:18px 18px 20px;border:1px solid rgba(127,227,178,.32);border-radius:16px;background:var(--surface);box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.heatpump-modal .hvac-modes button{min-height:76px;padding:12px 8px;border-radius:10px;gap:8px}
+.heatpump-modal .hvac-modes button .material-symbols-outlined{font-size:30px}
+.heatpump-modal .hvac-modes button span{font-size:16px}
+
+/* Roborock modal follows the dashboard's dark, compact control language. */
+.vacuum-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(5,10,10,.72);backdrop-filter:blur(4px)}
+.vacuum-modal-shell{position:relative;width:min(760px,100%)}.vacuum-modal{width:100%;padding:18px;border-color:rgba(103,199,151,.32);box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.vacuum-modal-close{position:absolute;top:-52px;right:0;z-index:1;display:grid;place-items:center;width:42px;min-width:42px;height:42px;min-height:42px;padding:0;background:rgba(255,255,255,.07)}
+.vacuum-modal>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.vacuum-modal>header h2{display:flex;align-items:center;gap:9px}.vacuum-modal>header h2 .material-symbols-outlined{color:var(--mint)}.vacuum-modal>header p{margin-top:4px;color:var(--text-muted);font-size:14px}
+.vacuum-overview{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:16px}.vacuum-overview img{width:100%;height:190px;object-fit:cover;border:1px solid #263b35;border-radius:10px;background:var(--surface-deep)}.vacuum-overview>div{display:flex;flex-direction:column;justify-content:center;gap:6px}.vacuum-overview strong{font-size:36px;font-weight:500}.vacuum-overview>div>span,.vacuum-overview p{color:var(--text-muted);font-size:13px}.vacuum-progress{height:8px;margin:8px 0 2px;overflow:hidden;border-radius:5px;background:#26302e}.vacuum-progress i{display:block;height:100%;border-radius:inherit;background:var(--mint)}
+.vacuum-modal section{margin-top:15px}.vacuum-modal h3{margin-bottom:8px;font-size:14px}.vacuum-actions,.vacuum-routines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vacuum-actions button,.vacuum-routines button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:62px;padding:8px;border:1px solid #26302e;border-radius:10px;background:var(--surface-raised);font-size:13px}.vacuum-actions .material-symbols-outlined,.vacuum-routines .material-symbols-outlined{color:var(--mint)}.vacuum-kitchen{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:52px;margin-top:15px;background:var(--mint);color:#092018;font-weight:700}.vacuum-kitchen .material-symbols-outlined{color:inherit}.vacuum-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.vacuum-settings label{display:grid;gap:5px;color:var(--text-muted);font-size:12px}.vacuum-settings select,.vacuum-settings input{width:100%;min-height:38px;border:1px solid #26302e;border-radius:8px;background:var(--surface-raised);color:var(--text);font:inherit;padding:0 9px}.vacuum-settings input{padding:0}
+@media(min-width:601px){.vacuum-modal{display:grid;grid-template-columns:minmax(290px,.95fr) minmax(300px,1.05fr);gap:10px 16px}.vacuum-modal>header{grid-column:1/-1;margin-bottom:0}.vacuum-overview{grid-column:1;grid-row:2 / span 3;grid-template-columns:1fr;gap:9px;margin:0}.vacuum-overview img{height:220px}.vacuum-overview>div{display:grid;grid-template-columns:auto 1fr;column-gap:12px}.vacuum-overview strong{grid-row:1 / span 2}.vacuum-overview .vacuum-progress,.vacuum-overview p{grid-column:1/-1}.vacuum-modal>section{margin-top:0}.vacuum-modal>section:nth-of-type(1){grid-column:2;grid-row:2}.vacuum-kitchen{grid-column:2;grid-row:3;margin-top:0}.vacuum-modal>section:nth-of-type(2){grid-column:2;grid-row:4}.vacuum-routines{grid-template-columns:repeat(4,minmax(0,1fr))}.vacuum-routines button{min-height:50px}.vacuum-modal>section:nth-of-type(3){grid-column:1/-1;grid-row:5}.vacuum-settings{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:600px){.vacuum-backdrop{padding:10px}.vacuum-modal{padding:14px}.vacuum-overview{grid-template-columns:1fr}.vacuum-overview img{height:150px}.vacuum-actions,.vacuum-routines{grid-template-columns:repeat(2,minmax(0,1fr))}.vacuum-settings{grid-template-columns:1fr}}

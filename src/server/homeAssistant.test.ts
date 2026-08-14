@@ -248,6 +248,24 @@ describe('HomeAssistantClient', () => {
       'sensor.ee14199_range_electric',
       'sensor.ee14199_state_of_charge',
       'calendar.outlook_andreas_felles',
+      'vacuum.roborock_s8',
+      'sensor.sucky_v2_battery',
+      'sensor.sucky_v2_status',
+      'sensor.sucky_v2_cleaning_progress',
+      'sensor.sucky_v2_cleaning_area',
+      'sensor.sucky_v2_cleaning_time',
+      'sensor.sucky_v2_current_room',
+      'binary_sensor.sucky_v2_charging',
+      'binary_sensor.sucky_v2_cleaning',
+      'binary_sensor.sucky_v2_mop_attached',
+      'binary_sensor.sucky_v2_water_box_attached',
+      'binary_sensor.sucky_v2_water_shortage',
+      'binary_sensor.sucky_v2_dock_mop_drying',
+      'select.sucky_v2_cleaning_mode',
+      'select.roborock_s8_mop_mode',
+      'select.roborock_s8_mop_intensity',
+      'number.sucky_v2_volume',
+      'image.sucky_v2_forste_etasje',
     ];
     const fetcher = vi.fn();
     entityIds.forEach((entityId) => fetcher.mockResolvedValueOnce(stateResponse(entityId)));
@@ -259,7 +277,7 @@ describe('HomeAssistantClient', () => {
 
     expect(fetcher.mock.calls.slice(0, entityIds.length).map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
     expect(fetcher.mock.calls[entityIds.length][0]).toMatch(/^http:\/\/ha:8123\/api\/calendars\/calendar\.outlook_andreas_felles\?start=.*&end=.*/);
-    expect(Object.keys(result.states)).toHaveLength(30);
+    expect(Object.keys(result.states)).toHaveLength(48);
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
     expect(result.states.calendar?.attributes.events).toEqual([
       { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },

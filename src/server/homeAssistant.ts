@@ -2,6 +2,7 @@ import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, 
 
 type DashboardStates = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 type CommandResult = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
+export type VacuumAction = 'start' | 'pause' | 'dock' | 'locate' | 'full' | 'gang' | 'kjokken' | 'lounge' | 'stue' | 'morgen' | 'natt' | 'vacMop' | 'kitchenRefill' | 'cleaningMode' | 'mopMode' | 'mopIntensity' | 'volume';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -58,6 +59,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 };
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const requestTimeoutMs = 8_000;
 
 export class HomeAssistantClient {
   public constructor(
@@ -71,10 +73,10 @@ export class HomeAssistantClient {
 
   public async getDashboardStates(): Promise<DashboardStates> {
     const states = {} as Record<DashboardStateKey, HomeAssistantState>;
-    for (const [key, entityId] of Object.entries(this.entities) as [DashboardStateKey, string][]) {
+    await Promise.all((Object.entries(this.entities) as [DashboardStateKey, string][]).map(async ([key, entityId]) => {
       if (!entityId) {
         states[key] = { entity_id: '', state: 'unavailable', attributes: {} };
-        continue;
+        return;
       }
       try {
         const state = await this.getState(entityId);
@@ -84,7 +86,7 @@ export class HomeAssistantClient {
       } catch {
         states[key] = { entity_id: entityId, state: 'unavailable', attributes: {} };
       }
-    }
+    }));
     if (this.weatherAutomationTraceId) {
       try {
         const summary = await this.getWeatherSummaryFromTrace();
@@ -122,13 +124,16 @@ export class HomeAssistantClient {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(websocketUrl);
       let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
       const finish = (callback: () => void) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeout);
         socket.close();
         callback();
       };
       const fail = () => finish(() => reject(communicationError()));
+      timeout = setTimeout(() => fail(), requestTimeoutMs);
       socket.addEventListener('error', fail);
       socket.addEventListener('close', () => { if (!settled) reject(communicationError()); });
       socket.addEventListener('message', (event) => {
@@ -238,13 +243,53 @@ export class HomeAssistantClient {
     return this.getCameraImageFor(this.entities.doorbellCamera);
   }
 
+  public async executeVacuum(action: VacuumAction, option?: string): Promise<CommandResult> {
+    const buttonEntities: Partial<Record<VacuumAction, string>> = {
+      full: 'button.sucky_v2_full_cleaning', gang: 'button.sucky_v2_gang', kjokken: 'button.sucky_v2_kjokken', lounge: 'button.sucky_v2_lounge', stue: 'button.sucky_v2_stue', morgen: 'button.sucky_v2_morgen', natt: 'button.sucky_v2_natt', vacMop: 'button.sucky_v2_vac_followed_by_mop', kitchenRefill: 'script.send_sucky_robovacuum_to_kitchen',
+    };
+    try {
+      if (action === 'start' || action === 'pause' || action === 'dock' || action === 'locate') {
+        const service = action === 'start' ? 'vacuum/start' : action === 'pause' ? 'vacuum/pause' : action === 'dock' ? 'vacuum/return_to_base' : 'vacuum/locate';
+        await this.request(service, { entity_id: this.entities.vacuum });
+      } else if (action === 'cleaningMode' || action === 'mopMode' || action === 'mopIntensity') {
+        if (!option) throw communicationError();
+        const entityKey = action === 'cleaningMode' ? 'vacuumCleaningMode' : action === 'mopMode' ? 'vacuumMopMode' : 'vacuumMopIntensity';
+        await this.request('select/select_option', { entity_id: this.entities[entityKey], option });
+      } else if (action === 'volume') {
+        const value = Number(option);
+        if (!Number.isFinite(value)) throw communicationError();
+        await this.request('number/set_value', { entity_id: this.entities.vacuumVolume, value });
+      } else {
+        const entityId = buttonEntities[action];
+        if (!entityId) throw communicationError();
+        await this.request(entityId.startsWith('script.') ? 'script/turn_on' : 'button/press', { entity_id: entityId });
+      }
+      return await this.getDashboardStates();
+    } catch {
+      throw communicationError();
+    }
+  }
+
   public async getCourtyardCameraImage(): Promise<{ bytes: ArrayBuffer; contentType: string }> {
     return this.getCameraImageFor(this.entities.courtyardCamera);
   }
 
+  public async getVacuumMap(): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+    try {
+      const state = await this.getState(this.entities.vacuumMap);
+      const picture = state.attributes.entity_picture;
+      if (typeof picture !== 'string' || !picture.startsWith('/api/image_proxy/')) throw communicationError();
+      const response = await this.fetchWithTimeout(`${this.baseUrl}${picture}`, { method: 'GET', headers: this.headers() });
+      if (!response.ok) throw communicationError();
+      return { bytes: await response.arrayBuffer(), contentType: response.headers.get('content-type') || 'image/jpeg' };
+    } catch {
+      throw communicationError();
+    }
+  }
+
   private async getCameraImageFor(entityId: string): Promise<{ bytes: ArrayBuffer; contentType: string }> {
     if (!entityId) throw communicationError();
-    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy/${entityId}`, {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/camera_proxy/${entityId}`, {
       method: 'GET',
       headers: this.headers(),
     });
@@ -262,7 +307,7 @@ export class HomeAssistantClient {
 
   private async getCameraStreamFor(entityId: string): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }> {
     if (!entityId) throw communicationError();
-    const response = await this.fetcher(`${this.baseUrl}/api/camera_proxy_stream/${entityId}`, {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/camera_proxy_stream/${entityId}`, {
       method: 'GET',
       headers: this.headers(),
     });
@@ -320,7 +365,7 @@ export class HomeAssistantClient {
   }
 
   private async request(service: string, body?: Record<string, unknown>): Promise<Response> {
-    const response = await this.fetcher(`${this.baseUrl}/api/services/${service}`, {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/services/${service}`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -332,7 +377,7 @@ export class HomeAssistantClient {
   }
 
   private async getState(entityId: string): Promise<HomeAssistantState> {
-    const response = await this.fetcher(`${this.baseUrl}/api/states/${entityId}`, {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/states/${entityId}`, {
       method: 'GET',
       headers: this.headers(),
     });
@@ -364,7 +409,7 @@ export class HomeAssistantClient {
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 4);
     const query = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
-    const response = await this.fetcher(`${this.baseUrl}/api/calendars/${state.entity_id}?${query}`, {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/calendars/${state.entity_id}?${query}`, {
       method: 'GET',
       headers: this.headers(),
     });
@@ -393,5 +438,15 @@ export class HomeAssistantClient {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': 'application/json',
     };
+  }
+
+  private async fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    try {
+      return await this.fetcher(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

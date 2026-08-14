@@ -12,6 +12,7 @@ export const dashboardStateKeys = [
   'weatherHourly', 'weatherDaily', 'weatherSummary', 'energyToday', 'roomLiving',
   'roomBedroom', 'roomBathroom', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
   'andreasTravelTime', 'hegeTravelTime', 'calendar', 'repairHealth',
+  'vacuum', 'vacuumBattery', 'vacuumStatus', 'vacuumProgress', 'vacuumArea', 'vacuumTime', 'vacuumRoom', 'vacuumCharging', 'vacuumCleaning', 'vacuumMopAttached', 'vacuumWaterBoxAttached', 'vacuumWaterShortage', 'vacuumMopDrying', 'vacuumCleaningMode', 'vacuumMopMode', 'vacuumMopIntensity', 'vacuumVolume', 'vacuumMap',
 ] as const;
 
 export type DashboardStateKey = (typeof dashboardStateKeys)[number];
@@ -61,6 +62,24 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   hegeTravelTime: '',
   calendar: 'calendar.outlook_andreas_felles',
   repairHealth: '',
+  vacuum: 'vacuum.roborock_s8',
+  vacuumBattery: 'sensor.sucky_v2_battery',
+  vacuumStatus: 'sensor.sucky_v2_status',
+  vacuumProgress: 'sensor.sucky_v2_cleaning_progress',
+  vacuumArea: 'sensor.sucky_v2_cleaning_area',
+  vacuumTime: 'sensor.sucky_v2_cleaning_time',
+  vacuumRoom: 'sensor.sucky_v2_current_room',
+  vacuumCharging: 'binary_sensor.sucky_v2_charging',
+  vacuumCleaning: 'binary_sensor.sucky_v2_cleaning',
+  vacuumMopAttached: 'binary_sensor.sucky_v2_mop_attached',
+  vacuumWaterBoxAttached: 'binary_sensor.sucky_v2_water_box_attached',
+  vacuumWaterShortage: 'binary_sensor.sucky_v2_water_shortage',
+  vacuumMopDrying: 'binary_sensor.sucky_v2_dock_mop_drying',
+  vacuumCleaningMode: 'select.sucky_v2_cleaning_mode',
+  vacuumMopMode: 'select.roborock_s8_mop_mode',
+  vacuumMopIntensity: 'select.roborock_s8_mop_intensity',
+  vacuumVolume: 'number.sucky_v2_volume',
+  vacuumMap: 'image.sucky_v2_forste_etasje',
 };
 
 export interface HomeAssistantState {

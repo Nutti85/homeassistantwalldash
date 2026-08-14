@@ -12,7 +12,7 @@ npm install
 npm run start
 ```
 
-Åpne `http://localhost:3000`. For utvikling med automatisk klientoppdatering, bruk `npm run dev` sammen med en terminal som kjører serveren.
+Åpne `http://localhost:3000`. For utvikling med automatisk klientoppdatering, bruk `npm run dev`. Kommandoen starter både API-serveren og Vite, og stopper dem sammen. Legg lokale Home Assistant-verdier i `.env` først.
 
 ## Portainer
 

@@ -166,7 +166,7 @@ describe('dashboard API', () => {
     const response = await request(createApp(client)).get('/api/camera/stream');
 
     expect(response.status).toBe(200);
-    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['cache-control']).toBe('no-store, no-transform');
     expect(response.headers['content-type']).toContain('application/octet-stream');
     expect(client.getCameraStream).toHaveBeenCalledOnce();
   });

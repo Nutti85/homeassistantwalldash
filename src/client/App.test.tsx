@@ -26,6 +26,19 @@ describe('redesigned dashboard', () => {
     expect(screen.getAllByRole('heading', { level: 3 })).toEqual(expect.arrayContaining([]));
   });
 
+  it('opens the heat-pump card from the bottom fan control and can close it', async () => {
+    render(<App api={createApi()} />);
+    const fan = await screen.findByRole('button', { name: 'Styr klimaanlegg' });
+    fireEvent.click(fan);
+    expect(screen.getByRole('dialog', { name: 'Varmepumpe' })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Varmepumpe' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Varmepumpe' })).not.toBeInTheDocument();
+    expect(fan).toHaveFocus();
+    fireEvent.click(fan);
+    fireEvent.click(screen.getByRole('button', { name: 'Lukk varmepumpe' }));
+    expect(screen.queryByRole('dialog', { name: 'Varmepumpe' })).not.toBeInTheDocument();
+  });
+
   it('offers a deliberate layout editing mode with move, resize and reset controls', async () => {
     render(<App api={createApi()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
@@ -172,20 +185,18 @@ describe('redesigned dashboard', () => {
     expect(screen.getByRole('button', { name: 'Vis Gårdsplassen i fullskjerm' })).toBeInTheDocument();
   });
 
-  it('uses the live stream and falls back to a still image when it fails', async () => {
+  it('uses the camera stream and reconnects it after an interruption', async () => {
     render(<App api={createApi({ doorbellCamera: state('camera.ringeklokke_fluent', 'idle') })} />);
     const camera = await screen.findByRole('img', { name: 'Direktevideo fra ringeklokke' });
-    expect(camera).toHaveAttribute('src', '/api/camera/stream');
+    expect(camera).toHaveAttribute('src', '/api/camera/stream?attempt=0');
     fireEvent.error(camera);
-    expect(await screen.findByRole('img', { name: 'Siste bilde fra ringeklokke' })).toHaveAttribute('src', '/api/camera?frame=fallback');
+    await vi.waitFor(() => expect(screen.getByRole('img', { name: 'Direktevideo fra ringeklokke' })).toHaveAttribute('src', '/api/camera/stream?attempt=1'), { timeout: 1_500 });
   });
 
-  it('uses the Gårdsplassen camera stream and its own fallback image', async () => {
+  it('uses its own Gårdsplassen stream', async () => {
     render(<App api={createApi({ courtyardCamera: state('camera.gaardsplass_fluent_lens_0', 'idle') })} />);
     const camera = await screen.findByRole('img', { name: 'Direktevideo fra gårdsplassen' });
-    expect(camera).toHaveAttribute('src', '/api/courtyard-camera/stream');
-    fireEvent.error(camera);
-    expect(await screen.findByRole('img', { name: 'Siste bilde fra gårdsplassen' })).toHaveAttribute('src', '/api/courtyard-camera?frame=fallback');
+    expect(camera).toHaveAttribute('src', '/api/courtyard-camera/stream?attempt=0');
   });
 
   it('refreshes Home Assistant states so an entity that returns later is rendered', async () => {

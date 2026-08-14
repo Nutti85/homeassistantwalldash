@@ -1,5 +1,5 @@
 import express, { type Express, type Request, type Response } from 'express';
-import type { HomeAssistantClient } from './homeAssistant';
+import type { HomeAssistantClient, VacuumAction } from './homeAssistant';
 import type { DashboardAction, FanSpeed, HeatPumpMode } from '../shared/entities';
 
 type DashboardActionResult = Awaited<ReturnType<HomeAssistantClient['execute']>>;
@@ -8,14 +8,17 @@ type DashboardStates = Awaited<ReturnType<HomeAssistantClient['getDashboardState
 export interface DashboardClient {
   getDashboardStates(): Promise<DashboardStates>;
   execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<DashboardActionResult>;
+  executeVacuum?(action: VacuumAction, option?: string): Promise<DashboardActionResult>;
   setTemperature(temperature: number): Promise<DashboardActionResult>;
   getCameraImage?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
   getCameraStream?(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>;
   getCourtyardCameraImage?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
   getCourtyardCameraStream?(): Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>;
+  getVacuumMap?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
 }
 
 const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
+const vacuumActions = new Set<VacuumAction>(['start', 'pause', 'dock', 'locate', 'full', 'gang', 'kjokken', 'lounge', 'stue', 'morgen', 'natt', 'vacMop', 'kitchenRefill', 'cleaningMode', 'mopMode', 'mopIntensity', 'volume']);
 const updateError = { error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -28,6 +31,48 @@ const isFanSpeed = (value: unknown): value is FanSpeed => value === 'quiet' || v
 
 const sendClientError = (_error: unknown, response: Response): void => {
   response.status(502).json(updateError);
+};
+
+const proxyCameraStream = async (
+  request: Request,
+  response: Response,
+  getStream: () => Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>,
+): Promise<void> => {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  const cancelStream = () => { void reader?.cancel(); };
+  request.once('aborted', cancelStream);
+  response.once('close', cancelStream);
+  try {
+    const stream = await getStream();
+    reader = stream.body.getReader();
+    response.set({
+      'Content-Type': stream.contentType,
+      'Cache-Control': 'no-store, no-transform',
+      'X-Accel-Buffering': 'no',
+    });
+    response.socket?.setNoDelay(true);
+    response.setTimeout(0);
+    response.flushHeaders();
+    while (!response.destroyed) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // Do not accumulate old frames when a client is temporarily slow.
+      if (!response.write(value)) {
+        await new Promise<void>((resolve) => {
+          response.once('drain', resolve);
+          response.once('close', resolve);
+        });
+      }
+    }
+    if (!response.destroyed) response.end();
+  } catch (error) {
+    if (!response.headersSent) sendClientError(error, response);
+    else if (!response.destroyed) response.end();
+  } finally {
+    request.off('aborted', cancelStream);
+    response.off('close', cancelStream);
+    await reader?.cancel();
+  }
 };
 
 export const createApp = (client: DashboardClient): Express => {
@@ -58,22 +103,7 @@ export const createApp = (client: DashboardClient): Express => {
 
   app.get('/api/camera/stream', async (request: Request, response: Response) => {
     if (!client.getCameraStream) { response.sendStatus(404); return; }
-    try {
-      const stream = await client.getCameraStream();
-      response.set({ 'Content-Type': stream.contentType, 'Cache-Control': 'no-store' });
-      response.flushHeaders();
-      const reader = stream.body.getReader();
-      request.on('close', () => { void reader.cancel(); });
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        response.write(value);
-      }
-      response.end();
-    } catch (error) {
-      if (!response.headersSent) sendClientError(error, response);
-      else response.end();
-    }
+    await proxyCameraStream(request, response, () => client.getCameraStream!());
   });
 
   app.get('/api/courtyard-camera', async (_request: Request, response: Response) => {
@@ -86,24 +116,14 @@ export const createApp = (client: DashboardClient): Express => {
     }
   });
 
+  app.get('/api/vacuum-map', async (_request: Request, response: Response) => {
+    if (!client.getVacuumMap) { response.sendStatus(404); return; }
+    try { const image = await client.getVacuumMap(); response.type(image.contentType).send(Buffer.from(image.bytes)); } catch (error) { sendClientError(error, response); }
+  });
+
   app.get('/api/courtyard-camera/stream', async (request: Request, response: Response) => {
     if (!client.getCourtyardCameraStream) { response.sendStatus(404); return; }
-    try {
-      const stream = await client.getCourtyardCameraStream();
-      response.set({ 'Content-Type': stream.contentType, 'Cache-Control': 'no-store' });
-      response.flushHeaders();
-      const reader = stream.body.getReader();
-      request.on('close', () => { void reader.cancel(); });
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        response.write(value);
-      }
-      response.end();
-    } catch (error) {
-      if (!response.headersSent) sendClientError(error, response);
-      else response.end();
-    }
+    await proxyCameraStream(request, response, () => client.getCourtyardCameraStream!());
   });
 
   app.post('/api/actions/:action', async (request: Request, response: Response) => {
@@ -153,6 +173,16 @@ export const createApp = (client: DashboardClient): Express => {
     } catch (error) {
       sendClientError(error, response);
     }
+  });
+
+  app.post('/api/vacuum/:action', async (request: Request, response: Response) => {
+    const action = request.params.action as VacuumAction;
+    if (!vacuumActions.has(action) || !client.executeVacuum) { response.sendStatus(404); return; }
+    const body = request.body as unknown;
+    if (!isRecord(body) || (body.option !== undefined && typeof body.option !== 'string')) { response.sendStatus(400); return; }
+    if ((action === 'cleaningMode' || action === 'mopMode' || action === 'mopIntensity' || action === 'volume') && !body.option) { response.sendStatus(400); return; }
+    if (!(action === 'cleaningMode' || action === 'mopMode' || action === 'mopIntensity' || action === 'volume') && Object.keys(body).length !== 0) { response.sendStatus(400); return; }
+    try { response.json(await client.executeVacuum(action, body.option as string | undefined)); } catch (error) { sendClientError(error, response); }
   });
 
   app.post('/api/temperature', async (request: Request, response: Response) => {

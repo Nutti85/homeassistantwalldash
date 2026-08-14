@@ -5,6 +5,7 @@ export interface DashboardResponse {
 }
 
 const fallbackError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
+const requestTimeoutMs = 10_000;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -43,11 +44,15 @@ const readResponse = async (response: Response): Promise<DashboardResponse> => {
 };
 
 const request = async (path: string, init?: RequestInit): Promise<DashboardResponse> => {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
   let response: Response;
   try {
-    response = await fetch(path, init);
+    response = await fetch(path, { ...init, signal: controller.signal });
   } catch {
     throw new Error(fallbackError);
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
   return readResponse(response);
 };
@@ -67,4 +72,10 @@ export const setTemperature = async (temperature: number): Promise<DashboardResp
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ temperature }),
+});
+
+export const runVacuumAction = async (action: string, option?: string): Promise<DashboardResponse> => request(`/api/vacuum/${action}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(option === undefined ? {} : { option }),
 });
