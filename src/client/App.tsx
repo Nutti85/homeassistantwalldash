@@ -57,8 +57,10 @@ const defaultLayouts: Record<Mode, GridLayouts> = {
   guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
   child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
-const layoutKey = (mode: Mode) => `smarthjem-layout-v6-${mode}`;
-const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v6-${mode}`;
+// A new shipped arrangement must use a new storage version. Otherwise an
+// earlier device-specific arrangement always wins over the built-in default.
+const layoutKey = (mode: Mode) => `smarthjem-layout-v7-${mode}`;
+const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v7-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
   const columns = Math.max(1, Math.min(GRID_COLUMNS, placement.columns)); const rows = Math.max(1, Math.min(GRID_ROWS, placement.rows));
   return { columns, rows, column: Math.max(1, Math.min(GRID_COLUMNS + 1 - columns, placement.column)), row: Math.max(1, Math.min(GRID_ROWS + 1 - rows, placement.row)) };
