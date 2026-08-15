@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import App, { type DashboardApi } from './App';
@@ -66,13 +66,13 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointermove', 600, 300));
 
     expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
-    expect(calendar).toHaveStyle({ gridColumn: '9 / span 5', gridRow: '5 / span 2' });
-    expect(localStorage.getItem('smarthjem-layout-v7-regular')).toBeNull();
+    expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '1 / span 4' });
+    expect(localStorage.getItem('smarthjem-layout-v8-regular')).toBeNull();
 
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v7-regular') ?? '{}');
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v8-regular') ?? '{}');
     expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
-    expect(saved.calendar).toMatchObject({ column: 9, row: 5, columns: 5, rows: 2 });
+    expect(saved.calendar).toMatchObject({ column: 17, row: 1, columns: 8, rows: 4 });
   });
 
   it('uses a saved standard layout after a fresh app load', async () => {
@@ -89,8 +89,8 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
     fireEvent.click(screen.getByRole('button', { name: 'Lagre som standard' }));
 
-    expect(localStorage.getItem('smarthjem-layout-v7-regular')).toBeNull();
-    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v7-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
+    expect(localStorage.getItem('smarthjem-layout-v8-regular')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v8-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
 
     unmount();
     render(<App api={createApi()} />);
@@ -99,10 +99,25 @@ describe('redesigned dashboard', () => {
   });
 
   it('uses the shipped default instead of a layout saved by the prior release', async () => {
-    localStorage.setItem('smarthjem-layout-v6-regular', JSON.stringify({ frontDoor: { column: 11, row: 4, columns: 4, rows: 1 } }));
+    localStorage.setItem('smarthjem-layout-v7-regular', JSON.stringify({ frontDoor: { column: 11, row: 4, columns: 4, rows: 1 } }));
     render(<App api={createApi()} />);
     expect((await screen.findByRole('tab', { name: 'Full' })).closest('.dashboard')).not.toBeNull();
     expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '1 / span 4', gridRow: '1 / span 1' });
+  });
+
+  it('opens Klara AI when its text changes after the initial load', async () => {
+    vi.useFakeTimers();
+    const api = createApi();
+    vi.mocked(api.getStates)
+      .mockResolvedValueOnce({ states: baseStates })
+      .mockResolvedValueOnce({ states: { ...baseStates, weatherSummary: state('sensor.summary', 'Sol og varmt i morgen.') } });
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.getStates).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Klara AI' })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(screen.getByRole('dialog', { name: 'Klara AI' })).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('resizes only the selected card against the grid dimensions captured at pointer down', async () => {
@@ -123,7 +138,7 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointermove', 300, 150));
 
     expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 2' });
-    expect(calendar).toHaveStyle({ gridColumn: '9 / span 5', gridRow: '5 / span 2' });
+    expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '1 / span 4' });
     expect(bounds).toHaveBeenCalledTimes(1);
   });
 
