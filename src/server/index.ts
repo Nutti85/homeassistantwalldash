@@ -30,6 +30,12 @@ const entities = {
   roomLiving: process.env.HA_ROOM_LIVING_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomLiving,
   roomBedroom: process.env.HA_ROOM_BEDROOM_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBedroom,
   roomBathroom: process.env.HA_ROOM_BATHROOM_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBathroom,
+  roomLivingHumidity: process.env.HA_ROOM_LIVING_HUMIDITY_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomLivingHumidity,
+  roomLivingCo2: process.env.HA_ROOM_LIVING_CO2_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomLivingCo2,
+  roomBedroomHumidity: process.env.HA_ROOM_BEDROOM_HUMIDITY_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBedroomHumidity,
+  roomBedroomCo2: process.env.HA_ROOM_BEDROOM_CO2_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBedroomCo2,
+  roomBathroomHumidity: process.env.HA_ROOM_BATHROOM_HUMIDITY_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBathroomHumidity,
+  roomBathroomCo2: process.env.HA_ROOM_BATHROOM_CO2_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBathroomCo2,
   waste: process.env.HA_WASTE_ENTITY_ID?.trim() || 'sensor.next_garbage_collection',
   carAndreasRange: process.env.HA_CAR_ANDREAS_RANGE_ENTITY_ID?.trim() || defaultDashboardEntityIds.carAndreasRange,
   carAndreasBattery: process.env.HA_CAR_ANDREAS_BATTERY_ENTITY_ID?.trim() || defaultDashboardEntityIds.carAndreasBattery,
@@ -47,10 +53,12 @@ const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 app.use('/api', (_request, response) => {
   response.sendStatus(404);
 });
-app.use(express.static(distDirectory));
-app.get('/{*splat}', (_request, response) => {
-  response.sendFile(path.join(distDirectory, 'index.html'));
-});
+if (process.env.DASHBOARD_SERVE_STATIC !== 'false') {
+  app.use(express.static(distDirectory));
+  app.get('/{*splat}', (_request, response) => {
+    response.sendFile(path.join(distDirectory, 'index.html'));
+  });
+}
 
 app.listen(port, () => {
   console.log(`Dashboard listening on port ${port}`);

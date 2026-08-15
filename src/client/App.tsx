@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import QRCode from 'qrcode';
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState } from '../shared/entities';
 import * as browserApi from './api';
+import './roomCards.css';
 import {
   calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, wasteDaysUntil,
   securityPresentation, stateValue, temperatureNumber, type ForecastPoint,
@@ -52,7 +53,7 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
 const scalePlacement = ({ column, row, columns, rows }: GridPlacement): GridPlacement => ({ column: column * 2 - 1, row: row * 2 - 1, columns: columns * 2, rows: rows * 2 });
 const scaleLayout = (layout: GridLayouts): GridLayouts => Object.fromEntries(Object.entries(layout).map(([id, placement]) => [id, scalePlacement(placement)]));
 const defaultLayouts: Record<Mode, GridLayouts> = {
-  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 16, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, heatpump: { column: 1, row: 5, columns: 8, rows: 2 }, energy: { column: 13, row: 7, columns: 12, rows: 2 }, rooms: { column: 1, row: 7, columns: 12, rows: 2 }, waste: { column: 14, row: 5, columns: 3, rows: 2 }, carAndreas: { column: 17, row: 5, columns: 4, rows: 2 }, carHege: { column: 21, row: 5, columns: 4, rows: 2 }, calendar: { column: 9, row: 5, columns: 5, rows: 2 } },
+  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 16, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, heatpump: { column: 1, row: 5, columns: 8, rows: 2 }, energy: { column: 13, row: 7, columns: 12, rows: 2 }, roomLiving: { column: 1, row: 7, columns: 4, rows: 2 }, roomBedroom: { column: 5, row: 7, columns: 4, rows: 2 }, roomBathroom: { column: 9, row: 7, columns: 4, rows: 2 }, waste: { column: 14, row: 5, columns: 3, rows: 2 }, carAndreas: { column: 17, row: 5, columns: 4, rows: 2 }, carHege: { column: 21, row: 5, columns: 4, rows: 2 }, calendar: { column: 9, row: 5, columns: 5, rows: 2 } },
   guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
   child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
@@ -290,11 +291,10 @@ function WeatherOverview({ states, regular, onDetails }: { states: Record<string
   const hourly = forecastPoints(states.weatherHourly);
   const current = currentTemperatureNumber(states.weatherDaily) ?? currentTemperatureNumber(states.outdoor);
   const condition = stateValue(states.weatherDaily) ?? daily[0]?.condition;
-  const summary = stateValue(states.weatherSummary);
   return <section className={`card weather-card ${regular ? 'weather-regular' : ''}`} aria-labelledby={regular ? undefined : 'weather-title'} role={regular ? 'button' : undefined} tabIndex={regular ? 0 : undefined} aria-label={regular ? 'Åpne detaljert vær' : undefined} onClick={regular ? onDetails : undefined} onKeyDown={regular ? (event) => { if ((event.key === 'Enter' || event.key === ' ') && onDetails) { event.preventDefault(); onDetails(); } } : undefined}>
     <div className="weather-top">
       <div className="weather-now"><WeatherGlyph condition={condition} large/><div><h2 id="weather-title">{fmt(current, '°C')}</h2><span>{conditionLabel(condition)}</span></div></div>
-      {regular ? <div className="weather-summary"><p>{summary || '— Værmelding ikke tilgjengelig'}</p></div> : <ForecastStrip points={daily}/>} 
+      {!regular && <ForecastStrip points={daily}/>} 
     </div>
     {regular && <WeatherChart points={hourly}/>} 
   </section>;
@@ -318,10 +318,26 @@ const quickControls = [
   ['settings', 'Innstillinger'],
 ] as const;
 
-function QuickControls({ openHeatPump, openVacuum, heatPumpButtonRef, vacuumButtonRef }: { openHeatPump: () => void; openVacuum: () => void; heatPumpButtonRef: React.RefObject<HTMLButtonElement>; vacuumButtonRef: React.RefObject<HTMLButtonElement> }) {
+function QuickControls({ openHeatPump, openVacuum, openKlaraAi, heatPumpButtonRef, vacuumButtonRef, klaraButtonRef }: { openHeatPump: () => void; openVacuum: () => void; openKlaraAi: () => void; heatPumpButtonRef: React.RefObject<HTMLButtonElement>; vacuumButtonRef: React.RefObject<HTMLButtonElement>; klaraButtonRef: React.RefObject<HTMLButtonElement> }) {
   return <nav className="quick-controls" aria-label="Hurtigkontroller">
     {quickControls.map(([icon, label]) => <button ref={icon === 'mode_fan' ? heatPumpButtonRef : icon === 'vacuum' ? vacuumButtonRef : undefined} key={icon} type="button" aria-label={label} title={label} onClick={icon === 'mode_fan' ? openHeatPump : icon === 'vacuum' ? openVacuum : undefined}><Icon>{icon}</Icon></button>)}
+    <button ref={klaraButtonRef} type="button" className="klara-ai-button" aria-label="Klara AI" title="Klara AI" onClick={openKlaraAi}><Icon>auto_awesome</Icon></button>
   </nav>;
+}
+
+function KlaraAiModal({ states, close, closeButtonRef }: { states: Record<string, HomeAssistantState>; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+  const daily = forecastPoints(states.weatherDaily);
+  const current = currentTemperatureNumber(states.weatherDaily) ?? currentTemperatureNumber(states.outdoor);
+  const condition = stateValue(states.weatherDaily) ?? daily[0]?.condition;
+  const summary = stateValue(states.weatherSummary) ?? 'Værmelding ikke tilgjengelig';
+  return <div className="klara-ai-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+    <section className="klara-ai-modal" role="dialog" aria-modal="true" aria-labelledby="klara-ai-title">
+      <button ref={closeButtonRef} className="klara-ai-close" type="button" aria-label="Lukk Klara AI" onClick={close}><Icon>close</Icon></button>
+      <header className="klara-ai-header"><div><span className="klara-ai-eyebrow">Personlig oversikt</span><h2 id="klara-ai-title">Klara AI</h2></div><Icon filled>auto_awesome</Icon></header>
+      <div className="klara-ai-section-label"><Icon>partly_cloudy_day</Icon><span>Vær</span></div>
+      <article className="klara-ai-weather"><div className="klara-ai-weather-icon"><WeatherGlyph condition={condition} large/></div><div className="klara-ai-weather-reading"><strong>{fmt(current, '°C')}</strong><span>{conditionLabel(condition)}</span></div><p>{summary}</p></article>
+    </section>
+  </div>;
 }
 
 function HeatPump({ states, pending, errors, action, adjust, simple = false }: { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; action: (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => void; adjust: (offset: number) => void; simple?: boolean }) {
@@ -342,7 +358,7 @@ function DoorCard({ state, pending, action, error }: { state?: HomeAssistantStat
 
 function SecurityCard({ state, pending, action, error }: { state?: HomeAssistantState; pending: boolean; action: () => void; error?: string }) {
   const status = securityPresentation(state);
-  return <button type="button" className={`card security-card ${status.tone}`} disabled={pending} onClick={action}><span className="round-icon"><Icon>{status.icon}</Icon></span><span><strong>Overvåkning</strong><small>{status.label}</small></span>{error && <small role="alert">{error}</small>}</button>;
+  return <button type="button" className={`card security-card ${status.tone}`} disabled={pending} onClick={action}><span><strong>Overvåkning</strong><small>{status.label}</small></span><span className="round-icon"><Icon>{status.icon}</Icon></span>{error && <small role="alert">{error}</small>}</button>;
 }
 
 function CameraCard({ title, available, streamPath }: { title: string; available: boolean; streamPath: string }) {
@@ -386,12 +402,27 @@ function VacuumModal({ states, pending, errors, action, close, closeButtonRef }:
 function Toast({ message }: { message: string | null }) { return message ? <div className="action-toast" role="status"><Icon filled>check_circle</Icon><span>{message}</span></div> : null; }
 
 const reading = (state: HomeAssistantState | undefined, unit = '') => stateValue(state) ? `${stateValue(state)}${unit}` : '—';
+const roomDefinitions = [
+  ['roomLiving', 'roomLivingHumidity', 'roomLivingCo2', 'Stue', 'weekend'],
+  ['roomBedroom', 'roomBedroomHumidity', 'roomBedroomCo2', 'Soverom HA', 'bed'],
+  ['roomBathroom', 'roomBathroomHumidity', 'roomBathroomCo2', 'Soverom barn', 'child_care'],
+] as const;
+function RoomCard({ name, icon, temperature, humidity, co2 }: { name: string; icon: string; temperature?: HomeAssistantState; humidity?: HomeAssistantState; co2?: HomeAssistantState }) {
+  return <section className="card room-card" aria-label={`Rom: ${name}`}>
+    <header><h3>{name}</h3><Icon>{icon}</Icon></header>
+    <strong className="room-temperature">{reading(temperature, '°')}</strong>
+    <div className="room-readings">
+      <span className="room-reading humidity"><b>{reading(humidity)}</b><small>%</small></span>
+      <span className="room-reading co2"><b>{reading(co2)}</b><small>ppm</small></span>
+    </div>
+    <footer aria-hidden="true"><Icon>air</Icon><Icon filled>lightbulb</Icon></footer>
+  </section>;
+}
 function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
-  const rooms = [['Temperatur for stue', states.roomLiving], ['Soverom HA', states.roomBedroom], ['Soverom barn', states.roomBathroom]] as const;
   const events = Array.isArray(states.calendar?.attributes.events) ? states.calendar.attributes.events.slice(0, 2) as Array<Record<string, unknown>> : [];
   return <div className="metric-row">
     <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section>
-    <section className="card metric rooms"><h3>Rom</h3>{rooms.map(([label, value]) => <p key={label}><span>{label}</span><strong>{reading(value, '°C')}</strong></p>)}</section>
+    {roomDefinitions.map(([id, humidityId, co2Id, name, icon]) => <RoomCard key={id} name={name} icon={icon} temperature={states[id]} humidity={states[humidityId]} co2={states[co2Id]}/>)}
     <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{reading(states.waste)}</strong></div><p>{typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : 'Ikke tilgjengelig'}</p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section>
@@ -400,7 +431,6 @@ function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
 }
 
 function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState> }) {
-  const rooms = [['Temperatur for stue', states.roomLiving], ['Soverom HA', states.roomBedroom], ['Soverom barn', states.roomBathroom]] as const;
   const events = calendarEvents(states.calendar);
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -409,7 +439,7 @@ function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState>
   const wasteTypes = typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : typeof states.waste?.attributes.collection_type === 'string' ? states.waste.attributes.collection_type : stateValue(states.waste)?.replace(/^\s*\d+\s*,\s*/, '') || 'Ikke tilgjengelig';
   return <div className="metric-row">
     <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section>
-    <section className="card metric rooms"><h3>Rom</h3>{rooms.map(([label, value]) => <p key={label}><span>{label}</span><strong>{reading(value, ' °C')}</strong></p>)}</section>
+    {roomDefinitions.map(([id, humidityId, co2Id, name, icon]) => <RoomCard key={id} name={name} icon={icon} temperature={states[id]} humidity={states[humidityId]} co2={states[co2Id]}/>)}
     <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong></div><p>{wasteTypes}</p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carAndreasBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carHegeBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section>
@@ -418,7 +448,6 @@ function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState>
 }
 
 function metricCards(states: Record<string, HomeAssistantState>): LayoutChild[] {
-  const rooms = [['Temperatur for stue', states.roomLiving], ['Soverom HA', states.roomBedroom], ['Soverom barn', states.roomBathroom]] as const;
   const events = calendarEvents(states.calendar);
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -427,11 +456,10 @@ function metricCards(states: Record<string, HomeAssistantState>): LayoutChild[] 
   const wasteTypes = typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : typeof states.waste?.attributes.collection_type === 'string' ? states.waste.attributes.collection_type : stateValue(states.waste)?.replace(/^\s*\d+\s*,\s*/, '') || 'Ikke tilgjengelig';
   return [
     { id: 'energy', label: 'Energi i dag', content: <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section> },
-    { id: 'rooms', label: 'Rom', content: <section className="card metric rooms"><h3>Rom</h3>{rooms.map(([label, value]) => <p key={label}><span>{label}</span><strong>{reading(value, ' °C')}</strong></p>)}</section> },
-    { id: 'waste', label: 'Søppeltømming', content: <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong></div><p>{wasteTypes}</p></section> },
+    ...roomDefinitions.map(([id, humidityId, co2Id, name, icon]) => ({ id, label: name, content: <RoomCard key={id} name={name} icon={icon} temperature={states[id]} humidity={states[humidityId]} co2={states[co2Id]}/> })),
     { id: 'carAndreas', label: 'Andreas bil', content: <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carAndreasBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section> },
     { id: 'carHege', label: 'Hege bil', content: <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carHegeBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section> },
-    { id: 'calendar', label: 'Kalender', content: <section className="card metric calendar"><h3>Kalender</h3>{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}</section> },
+    { id: 'calendar', label: 'Kalender', content: <section className="card metric calendar"><h3>Kalender</h3>{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}<div className="calendar-waste-section"><h3>Søppeltømming</h3><div className="calendar-waste"><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong><span>-</span><span>{wasteTypes}</span></div></div></section> },
   ];
 }
 
@@ -487,6 +515,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [repairOpen, setRepairOpen] = useState(false);
   const [heatPumpOpen, setHeatPumpOpen] = useState(false);
   const [vacuumOpen, setVacuumOpen] = useState(false);
+  const [klaraAiOpen, setKlaraAiOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const repairButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -494,9 +523,12 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const heatPumpCloseButton = useRef<HTMLButtonElement>(null);
   const vacuumButton = useRef<HTMLButtonElement>(null);
   const vacuumCloseButton = useRef<HTMLButtonElement>(null);
+  const klaraButton = useRef<HTMLButtonElement>(null);
+  const klaraCloseButton = useRef<HTMLButtonElement>(null);
   const wasRepairOpen = useRef(false);
   const wasHeatPumpOpen = useRef(false);
   const wasVacuumOpen = useRef(false);
+  const wasKlaraAiOpen = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -535,6 +567,8 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   useEffect(() => { if (!heatPumpOpen && wasHeatPumpOpen.current) heatPumpButton.current?.focus(); wasHeatPumpOpen.current = heatPumpOpen; }, [heatPumpOpen]);
   useEffect(() => { if (!vacuumOpen) return; vacuumCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setVacuumOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [vacuumOpen]);
   useEffect(() => { if (!vacuumOpen && wasVacuumOpen.current) vacuumButton.current?.focus(); wasVacuumOpen.current = vacuumOpen; }, [vacuumOpen]);
+  useEffect(() => { if (!klaraAiOpen) return; klaraCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setKlaraAiOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [klaraAiOpen]);
+  useEffect(() => { if (!klaraAiOpen && wasKlaraAiOpen.current) klaraButton.current?.focus(); wasKlaraAiOpen.current = klaraAiOpen; }, [klaraAiOpen]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 4_000); return () => window.clearTimeout(timer); }, [toast]);
 
   const confirm = async (key: string, operation: () => Promise<{ states: Record<string, HomeAssistantState> }>) => { setPending((value) => ({ ...value, [key]: true })); setErrors((value) => ({ ...value, [key]: '' })); try { const result = await operation(); setStates((value) => ({ ...value, ...result.states })); if (key in sceneConfirmation) setToast(sceneConfirmation[key as keyof typeof sceneConfirmation]); } catch { setErrors((value) => ({ ...value, [key]: updateError })); } finally { setPending((value) => { const next = { ...value }; delete next[key]; return next; }); } };
@@ -545,9 +579,12 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const dashboardProps = useMemo(() => ({ states, pending, errors, action, adjust }), [states, pending, errors]);
   const repair = isRepairNeeded(states.repairHealth);
   const updateLayout = (next: GridLayouts) => setLayouts((current) => { const modeLayout = Object.fromEntries(Object.entries(next).map(([id, placement]) => [id, { ...placement }])); window.localStorage.setItem(layoutKey(mode), JSON.stringify(modeLayout)); return { ...current, [mode]: modeLayout }; });
-  const saveDefaultLayout = () => window.localStorage.setItem(defaultLayoutKey(mode), JSON.stringify(layouts[mode]));
+  const saveDefaultLayout = () => {
+    window.localStorage.setItem(defaultLayoutKey(mode), JSON.stringify(layouts[mode]));
+    window.localStorage.removeItem(layoutKey(mode));
+  };
   const resetLayout = () => setLayouts((current) => { window.localStorage.removeItem(layoutKey(mode)); return { ...current, [mode]: loadLayout(mode) }; });
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton}/>{heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={() => setKlaraAiOpen(true)} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal states={states} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }

@@ -75,6 +75,29 @@ describe('redesigned dashboard', () => {
     expect(saved.calendar).toMatchObject({ column: 9, row: 5, columns: 5, rows: 2 });
   });
 
+  it('uses a saved standard layout after a fresh app load', async () => {
+    const { unmount } = render(<App api={createApi()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
+    const handle = screen.getByRole('button', { name: 'Flytt Ytterdør' });
+    const grid = handle.closest('.editable-dashboard') as HTMLElement;
+    Object.defineProperty(handle, 'setPointerCapture', { value: vi.fn() });
+    Object.defineProperty(grid, 'getBoundingClientRect', { value: () => ({ left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800, x: 0, y: 0, toJSON: () => ({}) }) });
+    const pointerEvent = (type: string, clientX: number, clientY: number) => { const event = new MouseEvent(type, { bubbles: true, clientX, clientY }); Object.defineProperty(event, 'pointerId', { value: 3 }); return event; };
+
+    fireEvent(handle, pointerEvent('pointerdown', 100, 50));
+    fireEvent(grid, pointerEvent('pointermove', 600, 300));
+    fireEvent(grid, pointerEvent('pointerup', 600, 300));
+    fireEvent.click(screen.getByRole('button', { name: 'Lagre som standard' }));
+
+    expect(localStorage.getItem('smarthjem-layout-v6-regular')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v6-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
+
+    unmount();
+    render(<App api={createApi()} />);
+    expect((await screen.findByRole('tab', { name: 'Full' })).closest('.dashboard')).not.toBeNull();
+    expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
+  });
+
   it('resizes only the selected card against the grid dimensions captured at pointer down', async () => {
     render(<App api={createApi()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Tilpass oppsett' }));
@@ -126,7 +149,7 @@ describe('redesigned dashboard', () => {
     expect(repair).toHaveFocus();
   });
 
-  it.each([['1','Mode: Armert'],['2','Mode: Notifikasjoner'],['3','Mode: Deaktivert'],['other','Mode: Ukjent']])('maps security %s', async (value, label) => {
+  it.each([['1','Armert'],['2','Notifikasjoner'],['3','Deaktivert'],['other','Ukjent']])('maps security %s', async (value, label) => {
     render(<App api={createApi({ securityMode: state('input_number.security', value) })} />);
     expect(await screen.findByText(label)).toBeInTheDocument();
   });
@@ -150,9 +173,10 @@ describe('redesigned dashboard', () => {
   });
 
   it('shows populated and unavailable AI summary states', async () => {
-    const { rerender } = render(<App api={createApi()} />); expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
+    const { rerender } = render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' })); expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
     rerender(<App api={createApi({ weatherSummary: state('', 'unavailable') })} />);
-    expect(await screen.findByText('— Værmelding ikke tilgjengelig')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
+    expect(await screen.findByText('Værmelding ikke tilgjengelig')).toBeInTheDocument();
   });
 
   it('opens detailed weather and switches its tabs', async () => {
@@ -207,9 +231,9 @@ describe('redesigned dashboard', () => {
       .mockResolvedValueOnce({ states: { ...baseStates, securityMode: state('input_number.security', '3') } });
 
     render(<App api={api} />);
-    await vi.waitFor(() => expect(screen.getByText('Mode: Armert')).toBeInTheDocument());
+    await vi.waitFor(() => expect(screen.getByText('Armert')).toBeInTheDocument());
     await vi.advanceTimersByTimeAsync(30_000);
-    await vi.waitFor(() => expect(screen.getByText('Mode: Deaktivert')).toBeInTheDocument());
+    await vi.waitFor(() => expect(screen.getByText('Deaktivert')).toBeInTheDocument());
     expect(api.getStates).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });

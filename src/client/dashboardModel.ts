@@ -127,10 +127,10 @@ export const forecastPoints = (state: HomeAssistantState | undefined): ForecastP
 
 export const securityPresentation = (state: HomeAssistantState | undefined) => {
   const value = Number(stateValue(state));
-  if (value === 1) return { label: 'Mode: Armert', icon: 'shield_lock', tone: 'safe' } as const;
-  if (value === 2) return { label: 'Mode: Notifikasjoner', icon: 'pause_circle', tone: 'notice' } as const;
-  if (value === 3) return { label: 'Mode: Deaktivert', icon: 'shield_off', tone: 'danger' } as const;
-  return { label: 'Mode: Ukjent', icon: 'help', tone: 'muted' } as const;
+  if (value === 1) return { label: 'Armert', icon: 'shield_lock', tone: 'safe' } as const;
+  if (value === 2) return { label: 'Notifikasjoner', icon: 'pause_circle', tone: 'notice' } as const;
+  if (value === 3) return { label: 'Deaktivert', icon: 'shield_off', tone: 'danger' } as const;
+  return { label: 'Ukjent', icon: 'help', tone: 'muted' } as const;
 };
 
 export const isRepairNeeded = (state: HomeAssistantState | undefined): boolean => {

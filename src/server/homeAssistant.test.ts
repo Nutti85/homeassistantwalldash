@@ -244,6 +244,12 @@ describe('HomeAssistantClient', () => {
       'sensor.indoor_temperature',
       'sensor.indoor_soverom_ha_temperature',
       'sensor.indoor_soverom_j_temperature',
+      'sensor.indoor_humidity',
+      'sensor.indoor_carbon_dioxide',
+      'sensor.indoor_soverom_ha_humidity',
+      'sensor.indoor_soverom_ha_carbon_dioxide',
+      'sensor.indoor_soverom_j_humidity',
+      'sensor.indoor_soverom_j_carbon_dioxide',
       'sensor.next_garbage_collection',
       'sensor.ee14199_range_electric',
       'sensor.ee14199_state_of_charge',
@@ -277,7 +283,7 @@ describe('HomeAssistantClient', () => {
 
     expect(fetcher.mock.calls.slice(0, entityIds.length).map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
     expect(fetcher.mock.calls[entityIds.length][0]).toMatch(/^http:\/\/ha:8123\/api\/calendars\/calendar\.outlook_andreas_felles\?start=.*&end=.*/);
-    expect(Object.keys(result.states)).toHaveLength(48);
+    expect(Object.keys(result.states)).toHaveLength(54);
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
     expect(result.states.calendar?.attributes.events).toEqual([
       { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },
