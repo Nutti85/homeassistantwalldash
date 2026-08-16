@@ -53,14 +53,14 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
 const scalePlacement = ({ column, row, columns, rows }: GridPlacement): GridPlacement => ({ column: column * 2 - 1, row: row * 2 - 1, columns: columns * 2, rows: rows * 2 });
 const scaleLayout = (layout: GridLayouts): GridLayouts => Object.fromEntries(Object.entries(layout).map(([id, placement]) => [id, scalePlacement(placement)]));
 const defaultLayouts: Record<Mode, GridLayouts> = {
-  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 8, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, calendar: { column: 17, row: 1, columns: 8, rows: 4 }, carAndreas: { column: 9, row: 5, columns: 4, rows: 2 }, carHege: { column: 13, row: 5, columns: 4, rows: 2 }, energy: { column: 13, row: 7, columns: 12, rows: 2 }, roomLiving: { column: 1, row: 7, columns: 4, rows: 2 }, roomBedroom: { column: 5, row: 7, columns: 4, rows: 2 }, roomBathroom: { column: 9, row: 7, columns: 4, rows: 2 } },
+  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 8, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, calendar: { column: 17, row: 1, columns: 8, rows: 4 }, carAndreas: { column: 9, row: 5, columns: 4, rows: 2 }, carHege: { column: 13, row: 5, columns: 4, rows: 2 }, energy: { column: 13, row: 7, columns: 12, rows: 2 }, roomClimate: { column: 1, row: 7, columns: 12, rows: 2 } },
   guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
   child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
 // A new shipped arrangement must use a new storage version. Otherwise an
 // earlier device-specific arrangement always wins over the built-in default.
-const layoutKey = (mode: Mode) => `smarthjem-layout-v8-${mode}`;
-const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v8-${mode}`;
+const layoutKey = (mode: Mode) => `smarthjem-layout-v10-${mode}`;
+const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v10-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
   const columns = Math.max(1, Math.min(GRID_COLUMNS, placement.columns)); const rows = Math.max(1, Math.min(GRID_ROWS, placement.rows));
   return { columns, rows, column: Math.max(1, Math.min(GRID_COLUMNS + 1 - columns, placement.column)), row: Math.max(1, Math.min(GRID_ROWS + 1 - rows, placement.row)) };
@@ -420,6 +420,107 @@ function RoomCard({ name, icon, temperature, humidity, co2 }: { name: string; ic
     <footer aria-hidden="true"><Icon>air</Icon><Icon filled>lightbulb</Icon></footer>
   </section>;
 }
+
+function RoomClimateCard({ states }: { states: Record<string, HomeAssistantState> }) {
+  const visibleRooms = roomDefinitions.slice(0, 3);
+  const rotatingRooms = roomDefinitions.slice(3);
+  const [activeRoom, setActiveRoom] = useState(0);
+  useEffect(() => {
+    if (rotatingRooms.length < 2) return;
+    const timer = window.setInterval(() => setActiveRoom((current) => (current + 1) % rotatingRooms.length), 4_000);
+    return () => window.clearInterval(timer);
+  }, [rotatingRooms.length]);
+  const rotating = rotatingRooms[activeRoom];
+  return <section className="card room-climate-card" aria-labelledby="room-climate-title">
+    <header><h2 id="room-climate-title">Romklima</h2>{rotating ? <span className="room-carousel" key={rotating[0]}>{rotating[3]} <b>{reading(states[rotating[0]], '°')}</b> · CO₂ {reading(states[rotating[2]])}</span> : <span className="room-count">{visibleRooms.length} rom</span>}</header>
+    <div className="room-climate-rows">{visibleRooms.map(([id, humidityId, co2Id, name]) => <div className="room-climate-row" key={id}><strong>{name}</strong><RoomClimateMetric label="Temperatur" value={reading(states[id], '°')} trend={states[id]?.attributes.trend}/><RoomClimateMetric label="Fuktighet" value={reading(states[humidityId], ' %')} trend={states[humidityId]?.attributes.trend}/><RoomClimateMetric label="CO₂" value={reading(states[co2Id], ' ppm')} trend={states[co2Id]?.attributes.trend} air/></div>)}</div>
+  </section>;
+}
+
+function RoomClimateMetric({ label, value, trend, air = false }: { label: string; value: string; trend: unknown; air?: boolean }) {
+  const values = Array.isArray(trend) ? trend.filter((point): point is number => typeof point === 'number' && Number.isFinite(point)) : [];
+  const min = Math.min(...values); const max = Math.max(...values); const range = Math.max(max - min, .001);
+  const points = values.length > 1 ? values.map((point, index) => `${index * 100 / (values.length - 1)},${18 - (point - min) / range * 14}`).join(' ') : '';
+  return <span className={air ? 'air' : ''}><small>{label}</small><b>{value}</b>{points ? <svg className="room-trend" viewBox="0 0 100 20" preserveAspectRatio="none" aria-label={`${label}: trend siste 30 minutter`}><polyline points={points}/></svg> : <i className="room-trend-empty" aria-label={`${label}: trenddata ikke tilgjengelig`}>—</i>}</span>;
+}
+
+const numericState = (state: HomeAssistantState | undefined) => {
+  const value = Number(state?.state);
+  return Number.isFinite(value) ? value : undefined;
+};
+
+const priceSeries = (state: HomeAssistantState | undefined, key: 'today' | 'tomorrow') => {
+  const source = state?.attributes[key];
+  if (!Array.isArray(source)) return [] as number[];
+  const values = source.flatMap((item) => {
+    if (typeof item === 'number' && Number.isFinite(item)) return [item];
+    if (typeof item === 'string' && Number.isFinite(Number(item))) return [Number(item)];
+    if (typeof item === 'object' && item !== null) {
+      const value = (item as Record<string, unknown>).value ?? (item as Record<string, unknown>).price;
+      return typeof value === 'number' && Number.isFinite(value) ? [value] : [];
+    }
+    return [];
+  });
+  // Nordpool exposes 15-minute values. The card chart uses one point per hour
+  // so it remains readable at the same compact size as the weather card.
+  if (values.length > 24 && values.length % 24 === 0) {
+    const pointsPerHour = values.length / 24;
+    return Array.from({ length: 24 }, (_, hour) => {
+      const hourValues = values.slice(hour * pointsPerHour, (hour + 1) * pointsPerHour);
+      return hourValues.reduce((total, value) => total + value, 0) / hourValues.length;
+    });
+  }
+  return values;
+};
+
+const consumptionSeries = (state: HomeAssistantState | undefined) => {
+  const source = state?.attributes.hourlyConsumption;
+  if (!Array.isArray(source)) return [] as number[];
+  return source.flatMap((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? [value] : []);
+};
+
+function EnergyPriceChart({ price, consumption }: { price?: HomeAssistantState; consumption?: HomeAssistantState }) {
+  const today = priceSeries(price, 'today');
+  const tomorrow = priceSeries(price, 'tomorrow');
+  const all = [...today, ...tomorrow];
+  const hourlyConsumption = consumptionSeries(consumption);
+  if (!all.length && !hourlyConsumption.length) return <div className="energy-chart-empty">Energigraf ikke tilgjengelig</div>;
+  const width = 620; const height = 134; const left = 64; const right = 68; const top = 8; const bottom = 28;
+  const max = Math.max(1, ...all) * 1.12;
+  const consumptionMax = Math.max(.1, ...hourlyConsumption) * 1.12;
+  const x = (index: number) => left + (index / 23) * (width - left - right);
+  const y = (value: number) => top + (1 - value / max) * (height - top - bottom);
+  const consumptionY = (value: number) => top + (1 - value / consumptionMax) * (height - top - bottom);
+  const path = (values: number[]) => values.length ? values.map((value, index) => `${index ? 'L' : 'M'}${x(index)} ${y(value)}`).join(' ') : '';
+  const currentHour = new Date().getHours();
+  const barWidth = (width - left - right) / 24 * .7;
+  return <div className="energy-chart-wrap">
+    <svg className="energy-chart" role="img" aria-label="Strømpris de neste 48 timene" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+      {[0, .5, 1].map((ratio) => <line key={ratio} className="energy-gridline" x1={left} x2={width - right} y1={top + ratio * (height - top - bottom)} y2={top + ratio * (height - top - bottom)}/>)}
+      {hourlyConsumption.map((value, index) => <rect key={`consumption-${index}`} className="energy-consumption-bar" x={x(index) - barWidth / 2} y={consumptionY(value)} width={barWidth} height={height - bottom - consumptionY(value)} rx="1.5"/>)}
+      <path className="energy-price-today" d={path(today)}/>
+      {tomorrow.length > 0 && <path className="energy-price-tomorrow" d={path(tomorrow)}/>}
+      {today.length > currentHour && <line className="energy-now-line" x1={x(currentHour)} x2={x(currentHour)} y1={top} y2={height - bottom}/>}
+      {[0, 6, 12, 18, 23].map((hour) => <text key={hour} className="energy-time-label" x={x(hour)} y={height + 1}>{String(hour).padStart(2, '0')}</text>)}
+      {[0, .5, 1].map((ratio) => <text key={`price-${ratio}`} className="energy-price-label" x={left - 7} y={top + ratio * (height - top - bottom) + 5}>{`${(max * (1 - ratio)).toLocaleString('nb-NO', { maximumFractionDigits: 1 })} kr/kWh`}</text>)}
+      {hourlyConsumption.length > 0 && [0, .5, 1].map((ratio) => <text key={`consumption-${ratio}`} className="energy-value-label" x={width - right + 7} y={top + ratio * (height - top - bottom) + 5}>{`${(consumptionMax * (1 - ratio)).toLocaleString('nb-NO', { maximumFractionDigits: 1 })} kWh`}</text>)}
+    </svg>
+    <div className="energy-legend"><span className="energy-legend-consumption"><Icon>bar_chart</Icon>Forbruk</span><span className="energy-legend-today">Dagens pris</span><span className="energy-legend-tomorrow">Neste døgn</span></div>
+  </div>;
+}
+
+function EnergyCard({ states }: { states: Record<string, HomeAssistantState> }) {
+  const powerWatts = numericState(states.energyPower);
+  const power = powerWatts === undefined ? undefined : powerWatts / 1000;
+  const today = numericState(states.energyToday);
+  const yesterday = numericState(states.energyYesterday);
+  const price = numericState(states.energyPrice);
+  return <section className="card energy-card" aria-labelledby="energy-title">
+    <header className="energy-top"><Icon>bolt</Icon><div><h2 id="energy-title">{fmt(power, ' kW')}</h2><span>Effekt nå</span></div><div className="energy-price-now"><strong>{fmt(price, ' kr/kWh')}</strong><span>Pris nå</span></div></header>
+    <div className="energy-totals"><div><strong>{fmt(today, ' kWh')}</strong><span>I dag</span></div><div><strong>{fmt(yesterday, ' kWh')}</strong><span>I går</span></div></div>
+    <EnergyPriceChart price={states.energyPrice} consumption={states.energyToday}/>
+  </section>;
+}
 function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
   const events = Array.isArray(states.calendar?.attributes.events) ? states.calendar.attributes.events.slice(0, 2) as Array<Record<string, unknown>> : [];
   return <div className="metric-row">
@@ -457,8 +558,8 @@ function metricCards(states: Record<string, HomeAssistantState>): LayoutChild[] 
   const wasteDays = wasteDaysUntil(states.waste);
   const wasteTypes = typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : typeof states.waste?.attributes.collection_type === 'string' ? states.waste.attributes.collection_type : stateValue(states.waste)?.replace(/^\s*\d+\s*,\s*/, '') || 'Ikke tilgjengelig';
   return [
-    { id: 'energy', label: 'Energi i dag', content: <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section> },
-    ...roomDefinitions.map(([id, humidityId, co2Id, name, icon]) => ({ id, label: name, content: <RoomCard key={id} name={name} icon={icon} temperature={states[id]} humidity={states[humidityId]} co2={states[co2Id]}/> })),
+    { id: 'energy', label: 'Energi', content: <EnergyCard states={states}/> },
+    { id: 'roomClimate', label: 'Romklima', content: <RoomClimateCard states={states}/> },
     { id: 'carAndreas', label: 'Andreas bil', content: <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carAndreasBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section> },
     { id: 'carHege', label: 'Hege bil', content: <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carHegeBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section> },
     { id: 'calendar', label: 'Kalender', content: <section className="card metric calendar"><h3>Kalender</h3>{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}<div className="calendar-waste-section"><h3>Søppeltømming</h3><div className="calendar-waste"><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong><span>-</span><span>{wasteTypes}</span></div></div></section> },

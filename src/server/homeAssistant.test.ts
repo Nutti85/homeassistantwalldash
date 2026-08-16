@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { findBroadcastBody, HomeAssistantClient } from './homeAssistant';
+import { findBroadcastBody, HomeAssistantClient, hourlyConsumption, hourlyConsumptionFromHourlySensor, resampleRoomTrend } from './homeAssistant';
 import {
   climateStateKey,
   coolingStateKey,
@@ -20,6 +20,40 @@ const stateResponse = (entityId: string, state = 'on', attributes: Record<string
 );
 
 describe('HomeAssistantClient', () => {
+  it('resamples recorder events into seven evenly spaced points across 30 minutes', () => {
+    const start = Date.parse('2026-08-16T18:00:00.000Z');
+    const end = Date.parse('2026-08-16T18:30:00.000Z');
+
+    expect(resampleRoomTrend([
+      { entity_id: 'sensor.indoor_temperature', state: '21.7', last_changed: '2026-08-16T18:00:00.000Z' },
+      { state: '22.0', last_changed: '2026-08-16T18:07:00.000Z' },
+      { state: '22.4', last_changed: '2026-08-16T18:26:00.000Z' },
+    ], start, end)).toEqual([21.7, 21.7, 22, 22, 22, 22, 22.4]);
+  });
+
+  it('converts the accumulated energy sensor history into hourly usage', () => {
+    const start = Date.parse('2026-08-16T00:00:00.000Z');
+    const end = Date.parse('2026-08-16T03:30:00.000Z');
+
+    expect(hourlyConsumption([
+      { state: '0.0', last_changed: '2026-08-16T00:00:00.000Z' },
+      { state: '0.8', last_changed: '2026-08-16T01:00:00.000Z' },
+      { state: '2.1', last_changed: '2026-08-16T02:00:00.000Z' },
+      { state: '2.7', last_changed: '2026-08-16T03:00:00.000Z' },
+    ], start, end, '3.2')).toEqual([0.8, 1.3, 0.6, 0.5]);
+  });
+
+  it('uses the current-hour energy sensor readings directly instead of calculating daily deltas', () => {
+    const start = Date.parse('2026-08-16T00:00:00.000Z');
+    const end = Date.parse('2026-08-16T03:30:00.000Z');
+
+    expect(hourlyConsumptionFromHourlySensor([
+      { state: '0.8', last_changed: '2026-08-16T00:55:00.000Z' },
+      { state: '1.3', last_changed: '2026-08-16T01:58:00.000Z' },
+      { state: '0.6', last_changed: '2026-08-16T02:59:00.000Z' },
+    ], start, end, '0.5')).toEqual([0.8, 1.3, 0.6, 0.5]);
+  });
+
   it('exports stable dashboard state keys', () => {
     expect([homeStateKey, homeModeStateKey, guestModeStateKey, guestVoucherStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
       .toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
@@ -241,6 +275,9 @@ describe('HomeAssistantClient', () => {
       'sensor.weather_daily',
       'camera.gaardsplass_fluent_lens_0',
       'sensor.accumulated_consumption_klaras_vei_14',
+      'sensor.accumulated_consumption_current_hour_klaras_vei_14',
+      'sensor.power_klaras_vei_14',
+      'sensor.nordpool_kwh_no2_nok_3_10_025',
       'sensor.indoor_temperature',
       'sensor.indoor_soverom_ha_temperature',
       'sensor.indoor_soverom_j_temperature',
@@ -278,12 +315,15 @@ describe('HomeAssistantClient', () => {
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify([
       { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },
     ]), { status: 200 }));
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify([[{ state: '27.4' }, { state: '31.2' }]]), { status: 200 }));
 
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.slice(0, entityIds.length).map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
     expect(fetcher.mock.calls[entityIds.length][0]).toMatch(/^http:\/\/ha:8123\/api\/calendars\/calendar\.outlook_andreas_felles\?start=.*&end=.*/);
-    expect(Object.keys(result.states)).toHaveLength(54);
+    expect(fetcher.mock.calls[entityIds.length + 1][0]).toMatch(/^http:\/\/ha:8123\/api\/history\/period\//);
+    expect(Object.keys(result.states)).toHaveLength(58);
+    expect(result.states.energyYesterday).toMatchObject({ state: '31.2' });
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
     expect(result.states.calendar?.attributes.events).toEqual([
       { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },

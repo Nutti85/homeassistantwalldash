@@ -60,6 +60,91 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const requestTimeoutMs = 8_000;
+const roomTrendWindowMs = 30 * 60 * 1_000;
+const roomTrendPoints = 7;
+
+/**
+ * Converts Home Assistant's event-based recorder output into points covering
+ * a consistent short window. Each sample holds the latest value at a
+ * five-minute boundary, so room sensors that report at different rates remain
+ * directly comparable.
+ */
+export const resampleRoomTrend = (series: unknown, startMs: number, endMs: number): number[] => {
+  if (!Array.isArray(series) || endMs <= startMs) return [];
+
+  const readings = series.flatMap((point) => {
+    if (!isRecord(point) || typeof point.state !== 'string' || typeof point.last_changed !== 'string') return [] as { value: number; timestamp: number }[];
+    const value = Number(point.state);
+    const timestamp = Date.parse(point.last_changed);
+    return Number.isFinite(value) && Number.isFinite(timestamp) ? [{ value, timestamp }] : [];
+  }).sort((left, right) => left.timestamp - right.timestamp);
+  if (!readings.length) return [];
+
+  const samples: number[] = [];
+  let readingIndex = 0;
+  let latest = readings[0].value;
+  for (let point = 0; point < roomTrendPoints; point += 1) {
+    const boundary = startMs + (endMs - startMs) * point / (roomTrendPoints - 1);
+    while (readingIndex + 1 < readings.length && readings[readingIndex + 1].timestamp <= boundary) {
+      readingIndex += 1;
+      latest = readings[readingIndex].value;
+    }
+    samples.push(latest);
+  }
+  return samples;
+};
+
+/** Turns accumulated-consumption recorder readings into hourly usage values. */
+export const hourlyConsumption = (series: unknown, startMs: number, endMs: number, currentState?: string): number[] => {
+  if (!Array.isArray(series) || endMs <= startMs) return [];
+  const readings = series.flatMap((point) => {
+    if (!isRecord(point) || typeof point.state !== 'string' || typeof point.last_changed !== 'string') return [] as { value: number; timestamp: number }[];
+    const value = Number(point.state);
+    const timestamp = Date.parse(point.last_changed);
+    return Number.isFinite(value) && Number.isFinite(timestamp) ? [{ value, timestamp }] : [];
+  });
+  const current = Number(currentState);
+  if (Number.isFinite(current)) readings.push({ value: current, timestamp: endMs });
+  readings.sort((left, right) => left.timestamp - right.timestamp);
+  if (!readings.length) return [];
+
+  const valueAt = (boundary: number): number => {
+    let latest = readings[0].value;
+    for (const reading of readings) {
+      if (reading.timestamp > boundary) break;
+      latest = reading.value;
+    }
+    return latest;
+  };
+  const hourCount = Math.min(24, Math.ceil((endMs - startMs) / (60 * 60 * 1_000)));
+  return Array.from({ length: hourCount }, (_, hour) => {
+    const hourStart = startMs + hour * 60 * 60 * 1_000;
+    const hourEnd = Math.min(hourStart + 60 * 60 * 1_000, endMs);
+    return Number(Math.max(0, valueAt(hourEnd) - valueAt(hourStart)).toFixed(3));
+  });
+};
+
+/** Groups the current-hour sensor's recorder history into its actual hourly kWh readings. */
+export const hourlyConsumptionFromHourlySensor = (series: unknown, startMs: number, endMs: number, currentState?: string): number[] => {
+  if (!Array.isArray(series) || endMs <= startMs) return [];
+  const hourCount = Math.min(24, Math.ceil((endMs - startMs) / (60 * 60 * 1_000)));
+  const values = Array.from<number | undefined>({ length: hourCount });
+  let hasReading = false;
+  const addReading = (value: unknown, timestamp: unknown) => {
+    const reading = Number(value);
+    const changedAt = typeof timestamp === 'string' ? Date.parse(timestamp) : Number.NaN;
+    const hour = Math.floor((changedAt - startMs) / (60 * 60 * 1_000));
+    if (!Number.isFinite(reading) || !Number.isFinite(changedAt) || hour < 0 || hour >= hourCount) return;
+    hasReading = true;
+    values[hour] = Math.max(values[hour] ?? 0, reading);
+  };
+  for (const point of series) {
+    if (isRecord(point)) addReading(point.state, point.last_changed);
+  }
+  addReading(currentState, new Date(endMs).toISOString());
+  if (!hasReading) return [];
+  return values.map((value) => Number((value ?? 0).toFixed(3)));
+};
 
 export class HomeAssistantClient {
   public constructor(
@@ -95,7 +180,100 @@ export class HomeAssistantClient {
         // Keep the unavailable summary state when the trace is not reachable.
       }
     }
+    // Tibber's accumulated-consumption sensor is reset every midnight. The
+    // history endpoint supplies the completed total for the preceding day,
+    // without requiring the user to create a second helper sensor in HA.
+    try {
+      states.energyYesterday = await this.getYesterdayConsumption();
+    } catch {
+      states.energyYesterday = { entity_id: this.entities.energyToday, state: 'unavailable', attributes: {} };
+    }
+    try {
+      const hourly = await this.getHourlyConsumption(states.energyHourlyConsumption);
+      states.energyToday.attributes = { ...states.energyToday.attributes, hourlyConsumption: hourly };
+    } catch {
+      // Keep the current total if recorder history is unavailable.
+    }
+    try {
+      const roomStates = await this.getRoomTrends();
+      for (const [entityId, trend] of Object.entries(roomStates)) {
+        const state = Object.values(states).find((candidate) => candidate.entity_id === entityId);
+        if (state) state.attributes = { ...state.attributes, trend };
+      }
+    } catch {
+      // The room card keeps its readings when historical data is unavailable.
+    }
     return { states };
+  }
+
+  private async getRoomTrends(): Promise<Record<string, number[]>> {
+    const entityIds = [this.entities.roomLiving, this.entities.roomBedroom, this.entities.roomBathroom, this.entities.roomLivingHumidity, this.entities.roomLivingCo2, this.entities.roomBedroomHumidity, this.entities.roomBedroomCo2, this.entities.roomBathroomHumidity, this.entities.roomBathroomCo2].filter(Boolean);
+    const endMs = Date.now();
+    const startMs = endMs - roomTrendWindowMs;
+    const start = new Date(startMs);
+    const query = new URLSearchParams({ filter_entity_id: entityIds.join(','), end_time: new Date(endMs).toISOString(), minimal_response: 'true', no_attributes: 'true' });
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/history/period/${start.toISOString()}?${query}`, { method: 'GET', headers: this.headers() });
+    if (!response.ok) throw communicationError();
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) throw communicationError();
+    const trends: Record<string, number[]> = {};
+    for (const series of payload) {
+      if (!Array.isArray(series)) continue;
+      const entityId = series.find(isRecord)?.entity_id;
+      if (typeof entityId !== 'string') continue;
+      const values = resampleRoomTrend(series, startMs, endMs);
+      if (values.length) trends[entityId] = values;
+    }
+    return trends;
+  }
+
+  private async getYesterdayConsumption(): Promise<HomeAssistantState> {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 1);
+    const query = new URLSearchParams({
+      filter_entity_id: this.entities.energyToday,
+      end_time: end.toISOString(),
+      minimal_response: 'true',
+      no_attributes: 'true',
+    });
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/history/period/${start.toISOString()}?${query}`, {
+      method: 'GET', headers: this.headers(),
+    });
+    if (!response.ok) throw communicationError();
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload) || !Array.isArray(payload[0])) throw communicationError();
+    const readings = payload[0].flatMap((item) => {
+      if (!isRecord(item) || typeof item.state !== 'string') return [] as number[];
+      const value = Number(item.state);
+      return Number.isFinite(value) ? [value] : [];
+    });
+    if (!readings.length) throw communicationError();
+    return {
+      entity_id: this.entities.energyToday,
+      state: String(Math.max(...readings)),
+      attributes: { unit_of_measurement: 'kWh', source: 'history' },
+    };
+  }
+
+  private async getHourlyConsumption(current: HomeAssistantState): Promise<number[]> {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    const query = new URLSearchParams({
+      filter_entity_id: this.entities.energyHourlyConsumption,
+      end_time: end.toISOString(),
+      minimal_response: 'true',
+      no_attributes: 'true',
+    });
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/history/period/${start.toISOString()}?${query}`, {
+      method: 'GET', headers: this.headers(),
+    });
+    if (!response.ok) throw communicationError();
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload) || !Array.isArray(payload[0])) throw communicationError();
+    return hourlyConsumptionFromHourlySensor(payload[0], start.getTime(), end.getTime(), current.state);
   }
 
   private async getWeatherSummaryFromTrace(): Promise<HomeAssistantState | undefined> {

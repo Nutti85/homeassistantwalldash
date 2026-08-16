@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarEventOccursOnDay, calendarEvents, forecastPoints, homeLabel, temperatureValue, wasteDaysUntil } from './dashboardModel';
+import { calendarEventOccursOnDay, calendarEvents, forecastPoints, homeLabel, securityPresentation, temperatureValue, wasteDaysUntil } from './dashboardModel';
 
 describe('dashboard state presentation', () => {
   it('uses Home Assistant returned state for the home label', () => {
@@ -29,6 +29,11 @@ describe('dashboard state presentation', () => {
 
   it('reads garbage days and collection type from a combined sensor state', () => {
     expect(wasteDaysUntil({ entity_id: 'sensor.garbage', state: '7, Matavfall', attributes: {} })).toBe(7);
+  });
+
+  it('uses a supported icon when monitoring is deactivated', () => {
+    expect(securityPresentation({ entity_id: 'alarm_control_panel.home', state: '3', attributes: {} }))
+      .toEqual({ label: 'Deaktivert', icon: 'shield', tone: 'danger' });
   });
 
   it('reads Outlook calendar data and includes an all-day event on each covered day', () => {

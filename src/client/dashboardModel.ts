@@ -129,7 +129,7 @@ export const securityPresentation = (state: HomeAssistantState | undefined) => {
   const value = Number(stateValue(state));
   if (value === 1) return { label: 'Armert', icon: 'shield_lock', tone: 'safe' } as const;
   if (value === 2) return { label: 'Notifikasjoner', icon: 'pause_circle', tone: 'notice' } as const;
-  if (value === 3) return { label: 'Deaktivert', icon: 'shield_off', tone: 'danger' } as const;
+  if (value === 3) return { label: 'Deaktivert', icon: 'shield', tone: 'danger' } as const;
   return { label: 'Ukjent', icon: 'help', tone: 'muted' } as const;
 };
 

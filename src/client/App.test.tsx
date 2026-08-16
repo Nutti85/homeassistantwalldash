@@ -67,10 +67,10 @@ describe('redesigned dashboard', () => {
 
     expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
     expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '1 / span 4' });
-    expect(localStorage.getItem('smarthjem-layout-v8-regular')).toBeNull();
+    expect(localStorage.getItem('smarthjem-layout-v10-regular')).toBeNull();
 
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v8-regular') ?? '{}');
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v10-regular') ?? '{}');
     expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
     expect(saved.calendar).toMatchObject({ column: 17, row: 1, columns: 8, rows: 4 });
   });
@@ -89,8 +89,8 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
     fireEvent.click(screen.getByRole('button', { name: 'Lagre som standard' }));
 
-    expect(localStorage.getItem('smarthjem-layout-v8-regular')).toBeNull();
-    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v8-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
+    expect(localStorage.getItem('smarthjem-layout-v10-regular')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v10-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
 
     unmount();
     render(<App api={createApi()} />);
