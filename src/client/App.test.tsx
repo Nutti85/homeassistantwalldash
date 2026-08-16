@@ -67,10 +67,10 @@ describe('redesigned dashboard', () => {
 
     expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
     expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '1 / span 4' });
-    expect(localStorage.getItem('smarthjem-layout-v10-regular')).toBeNull();
+    expect(localStorage.getItem('smarthjem-layout-v11-regular')).toBeNull();
 
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v10-regular') ?? '{}');
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v11-regular') ?? '{}');
     expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
     expect(saved.calendar).toMatchObject({ column: 17, row: 1, columns: 8, rows: 4 });
   });
@@ -89,8 +89,8 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
     fireEvent.click(screen.getByRole('button', { name: 'Lagre som standard' }));
 
-    expect(localStorage.getItem('smarthjem-layout-v10-regular')).toBeNull();
-    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v10-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
+    expect(localStorage.getItem('smarthjem-layout-v11-regular')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v11-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
 
     unmount();
     render(<App api={createApi()} />);
@@ -99,10 +99,12 @@ describe('redesigned dashboard', () => {
   });
 
   it('uses the shipped default instead of a layout saved by the prior release', async () => {
-    localStorage.setItem('smarthjem-layout-v7-regular', JSON.stringify({ frontDoor: { column: 11, row: 4, columns: 4, rows: 1 } }));
+    localStorage.setItem('smarthjem-layout-v10-regular', JSON.stringify({ frontDoor: { column: 11, row: 4, columns: 4, rows: 1 } }));
     render(<App api={createApi()} />);
     expect((await screen.findByRole('tab', { name: 'Full' })).closest('.dashboard')).not.toBeNull();
     expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '1 / span 4', gridRow: '1 / span 1' });
+    expect(document.querySelector('[data-layout-id="energy"]')).toHaveStyle({ gridColumn: '9 / span 8', gridRow: '5 / span 4' });
+    expect(document.querySelector('[data-layout-id="roomClimate"]')).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '5 / span 4' });
   });
 
   it('opens Klara AI when its text changes after the initial load', async () => {

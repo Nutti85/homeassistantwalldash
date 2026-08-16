@@ -53,14 +53,14 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
 const scalePlacement = ({ column, row, columns, rows }: GridPlacement): GridPlacement => ({ column: column * 2 - 1, row: row * 2 - 1, columns: columns * 2, rows: rows * 2 });
 const scaleLayout = (layout: GridLayouts): GridLayouts => Object.fromEntries(Object.entries(layout).map(([id, placement]) => [id, scalePlacement(placement)]));
 const defaultLayouts: Record<Mode, GridLayouts> = {
-  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 8, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, calendar: { column: 17, row: 1, columns: 8, rows: 4 }, carAndreas: { column: 9, row: 5, columns: 4, rows: 2 }, carHege: { column: 13, row: 5, columns: 4, rows: 2 }, energy: { column: 13, row: 7, columns: 12, rows: 2 }, roomClimate: { column: 1, row: 7, columns: 12, rows: 2 } },
+  regular: { frontDoor: { column: 1, row: 1, columns: 4, rows: 1 }, security: { column: 5, row: 1, columns: 4, rows: 1 }, weather: { column: 9, row: 1, columns: 8, rows: 4 }, doorbell: { column: 1, row: 2, columns: 4, rows: 3 }, courtyard: { column: 5, row: 2, columns: 4, rows: 3 }, calendar: { column: 17, row: 1, columns: 8, rows: 4 }, carAndreas: { column: 17, row: 5, columns: 4, rows: 2 }, carHege: { column: 21, row: 5, columns: 4, rows: 2 }, energy: { column: 9, row: 5, columns: 8, rows: 4 }, roomClimate: { column: 1, row: 5, columns: 8, rows: 4 } },
   guest: scaleLayout({ guest: { column: 1, row: 1, columns: 4, rows: 1 }, weather: { column: 5, row: 1, columns: 8, rows: 1 }, heatpump: { column: 1, row: 2, columns: 8, rows: 3 }, wifi: { column: 9, row: 2, columns: 4, rows: 3 } }),
   child: scaleLayout({ guest: { column: 1, row: 1, columns: 5, rows: 1 }, weather: { column: 6, row: 1, columns: 7, rows: 1 }, scenes: { column: 1, row: 2, columns: 12, rows: 2 }, heatpump: { column: 1, row: 4, columns: 12, rows: 1 } }),
 };
 // A new shipped arrangement must use a new storage version. Otherwise an
 // earlier device-specific arrangement always wins over the built-in default.
-const layoutKey = (mode: Mode) => `smarthjem-layout-v10-${mode}`;
-const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v10-${mode}`;
+const layoutKey = (mode: Mode) => `smarthjem-layout-v11-${mode}`;
+const defaultLayoutKey = (mode: Mode) => `smarthjem-default-layout-v11-${mode}`;
 const clampPlacement = (placement: GridPlacement): GridPlacement => {
   const columns = Math.max(1, Math.min(GRID_COLUMNS, placement.columns)); const rows = Math.max(1, Math.min(GRID_ROWS, placement.rows));
   return { columns, rows, column: Math.max(1, Math.min(GRID_COLUMNS + 1 - columns, placement.column)), row: Math.max(1, Math.min(GRID_ROWS + 1 - rows, placement.row)) };
