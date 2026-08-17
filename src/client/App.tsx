@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
 import QRCode from 'qrcode';
-import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState } from '../shared/entities';
+import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
 import * as browserApi from './api';
 import './roomCards.css';
 import {
@@ -11,6 +11,7 @@ import {
 export interface DashboardApi {
   getStates(): Promise<{ states: Record<string, HomeAssistantState> }>;
   runAction(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<{ states: Record<string, HomeAssistantState> }>;
+  runLightCommand(light: LightControlKey, command: LightCommand): Promise<{ states: Record<string, HomeAssistantState> }>;
   setTemperature(temperature: number): Promise<{ states: Record<string, HomeAssistantState> }>;
 }
 
@@ -30,14 +31,19 @@ const WeatherGlyph = ({ condition, large = false }: { condition?: string; large?
 );
 
 function ModeSelector({ mode, setMode }: { mode: Mode; setMode: (mode: Mode) => void }) {
-  return <div className="mode-selector" role="tablist" aria-label="Dashboardmodus">
-    {([
-      ['regular', 'home', 'Full'], ['guest', 'person', 'Gjest'], ['child', 'child_care', 'Barn'],
-    ] as const).map(([value, icon, label]) => <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? 'selected' : ''} onClick={() => setMode(value)}><Icon filled={mode === value}>{icon}</Icon>{label}{mode === value && <Icon>check</Icon>}</button>)}
+  const [open, setOpen] = useState(false);
+  const selectMode = (nextMode: Mode) => { setMode(nextMode); setOpen(false); };
+  return <div className={`mode-selector${open ? ' open' : ''}`}>
+    <div id="dashboard-mode-options" className="mode-options" role="tablist" aria-label="Dashboardmodus" aria-hidden={!open}>
+      {([
+        ['regular', 'home', 'Full'], ['guest', 'person', 'Gjest'], ['child', 'child_care', 'Barn'],
+      ] as const).map(([value, icon, label]) => <button key={value} type="button" role="tab" tabIndex={open ? 0 : -1} aria-selected={mode === value} className={mode === value ? 'selected' : ''} onClick={() => selectMode(value)}><Icon filled={mode === value}>{icon}</Icon>{label}{mode === value && <Icon>check</Icon>}</button>)}
+    </div>
+    <button type="button" className="mode-toggle" aria-expanded={open} aria-controls="dashboard-mode-options" onClick={() => setOpen(!open)}>Modus</button>
   </div>;
 }
 
-function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing, setEditing, resetLayout, saveDefaultLayout, action, pending, errors }: { mode: Mode; setMode: (mode: Mode) => void; repair: boolean; openRepair: () => void; repairRef: React.RefObject<HTMLButtonElement>; editing: boolean; setEditing: (editing: boolean) => void; resetLayout: () => void; saveDefaultLayout: () => void; action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string> }) {
+function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing, setEditing, resetLayout, saveDefaultLayout, action, pending, errors, states }: { mode: Mode; setMode: (mode: Mode) => void; repair: boolean; openRepair: () => void; repairRef: React.RefObject<HTMLButtonElement>; editing: boolean; setEditing: (editing: boolean) => void; resetLayout: () => void; saveDefaultLayout: () => void; action: (key: DashboardAction) => void; pending: Record<string, boolean>; errors: Record<string, string>; states: Record<string, HomeAssistantState> }) {
   const [time, setTime] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setTime(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
   return <header className="dashboard-header">
@@ -45,6 +51,7 @@ function DashboardHeader({ mode, setMode, repair, openRepair, repairRef, editing
       <div className="context">{repair && mode === 'regular' && <button ref={repairRef} type="button" className="repair-inline" onClick={openRepair}><Icon>build</Icon>Reparer smarthuset</button>}{mode !== 'child' && <SceneButtons action={action} pending={pending} errors={errors} header />}</div>
     </div>
     <ModeSelector mode={mode} setMode={setMode} />
+    {mode !== 'child' && <WeatherAlerts states={states} header/>}
     <div className="layout-actions"><button type="button" className={editing ? 'selected' : ''} aria-label={editing ? 'Fullfør tilpassing av oppsett' : 'Tilpass oppsett'} title={editing ? 'Fullfør' : 'Tilpass oppsett'} aria-pressed={editing} onClick={() => setEditing(!editing)}><Icon>dashboard_customize</Icon></button>{editing && <><button type="button" className="reset-layout" onClick={saveDefaultLayout}>Lagre som standard</button><button type="button" className="reset-layout" onClick={resetLayout}>Tilbakestill</button><span className="layout-hint" role="status">Dra kort med håndtaket · endre størrelse nederst til høyre</span></>}</div>
     <time dateTime={time.toISOString()}>{time.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</time>
   </header>;
@@ -288,6 +295,33 @@ function ForecastStrip({ points }: { points: ForecastPoint[] }) {
   return <div className="forecast-strip">{days.length ? days.map((point) => <div className="forecast-day" key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>{fmt(point.templow, '°')}</small></div>) : <div className="unavailable">— Prognose ikke tilgjengelig</div>}</div>;
 }
 
+type WeatherAlert = { kind: 'meteoalarm' | 'lightning' | 'wind' | 'aurora'; icon: string; label: string; value?: string };
+const osloDayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Oslo' });
+
+function WeatherAlerts({ states, header = false }: { states: Record<string, HomeAssistantState>; header?: boolean }) {
+  const hourly = forecastPoints(states.weatherHourly);
+  const previewAllAlerts = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('alerts') === 'all';
+  const today = new Date();
+  const dayKeys = new Set([osloDayKey(today), osloDayKey(new Date(today.getTime() + 24 * 60 * 60 * 1000))]);
+  const maxGust = hourly.reduce<number | undefined>((maximum, point) => {
+    if (!dayKeys.has(osloDayKey(new Date(point.datetime))) || point.windGustSpeed === undefined) return maximum;
+    return maximum === undefined ? point.windGustSpeed : Math.max(maximum, point.windGustSpeed);
+  }, undefined);
+  const lightningDistance = previewAllAlerts ? 8 : numericState(states.lightningDistance);
+  const alerts: WeatherAlert[] = [
+    ...(previewAllAlerts || stateValue(states.meteoAlarm)?.toLowerCase() === 'on' ? [{ kind: 'meteoalarm' as const, icon: 'warning', label: 'Farevarsel' }] : []),
+    ...(lightningDistance !== undefined && lightningDistance < 10 ? [{ kind: 'lightning' as const, icon: 'bolt', label: 'Lyn', value: `${fmt(lightningDistance, ' km')}` }] : []),
+    ...((previewAllAlerts || (maxGust !== undefined && maxGust > 10)) ? [{ kind: 'wind' as const, icon: 'air', label: 'Vindkast', value: `${fmt(previewAllAlerts ? 12 : maxGust, ' m/s')}` }] : []),
+    ...(previewAllAlerts || stateValue(states.auroraVisibility)?.toLowerCase() === 'on' ? [{ kind: 'aurora' as const, icon: 'graphic_eq', label: 'Nordlys' }] : []),
+  ];
+  return <aside className={`weather-alerts${header ? ' header-alerts' : ''}${alerts.length ? ' has-alerts' : ''}`} aria-label="Varsler">
+    <span className="weather-alerts-title">Varsler</span>
+    {alerts.length ? <div className="weather-alert-list">{alerts.map((alert) => <div className={`weather-alert weather-alert-${alert.kind}`} key={alert.kind} title={alert.value ? `${alert.label}: ${alert.value}` : alert.label}>
+      <Icon>{alert.icon}</Icon><span>{alert.label}</span>{alert.value && <strong>{alert.value}</strong>}
+    </div>)}</div> : <span className="weather-alerts-empty">Ingen varsler</span>}
+  </aside>;
+}
+
 function WeatherOverview({ states, regular, onDetails }: { states: Record<string, HomeAssistantState>; regular?: boolean; onDetails?: () => void }) {
   const daily = forecastPoints(states.weatherDaily);
   const hourly = forecastPoints(states.weatherHourly);
@@ -320,11 +354,54 @@ const quickControls = [
   ['settings', 'Innstillinger'],
 ] as const;
 
-function QuickControls({ openHeatPump, openVacuum, openKlaraAi, heatPumpButtonRef, vacuumButtonRef, klaraButtonRef }: { openHeatPump: () => void; openVacuum: () => void; openKlaraAi: () => void; heatPumpButtonRef: React.RefObject<HTMLButtonElement>; vacuumButtonRef: React.RefObject<HTMLButtonElement>; klaraButtonRef: React.RefObject<HTMLButtonElement> }) {
+function QuickControls({ openLights, openHeatPump, openVacuum, openKlaraAi, lightsButtonRef, heatPumpButtonRef, vacuumButtonRef, klaraButtonRef }: { openLights: () => void; openHeatPump: () => void; openVacuum: () => void; openKlaraAi: () => void; lightsButtonRef: React.RefObject<HTMLButtonElement>; heatPumpButtonRef: React.RefObject<HTMLButtonElement>; vacuumButtonRef: React.RefObject<HTMLButtonElement>; klaraButtonRef: React.RefObject<HTMLButtonElement> }) {
   return <nav className="quick-controls" aria-label="Hurtigkontroller">
-    {quickControls.map(([icon, label]) => <button ref={icon === 'mode_fan' ? heatPumpButtonRef : icon === 'vacuum' ? vacuumButtonRef : undefined} key={icon} type="button" aria-label={label} title={label} onClick={icon === 'mode_fan' ? openHeatPump : icon === 'vacuum' ? openVacuum : undefined}><Icon>{icon}</Icon></button>)}
+    {quickControls.map(([icon, label]) => <button ref={icon === 'lightbulb' ? lightsButtonRef : icon === 'mode_fan' ? heatPumpButtonRef : icon === 'vacuum' ? vacuumButtonRef : undefined} key={icon} type="button" aria-label={label} title={label} onClick={icon === 'lightbulb' ? openLights : icon === 'mode_fan' ? openHeatPump : icon === 'vacuum' ? openVacuum : undefined}><Icon>{icon}</Icon></button>)}
     <button ref={klaraButtonRef} type="button" className="klara-ai-button" aria-label="Klara AI" title="Klara AI" onClick={openKlaraAi}><Icon>auto_awesome</Icon></button>
   </nav>;
+}
+
+type LightControl = { key: LightControlKey; label: string; description?: string };
+type LightRoom = { id: string; label: string; icon: string; controls: LightControl[] };
+const lightFloors: Array<{ label: string; rooms: LightRoom[] }> = [
+  { label: '1. etasje', rooms: [
+    { id: 'living', label: 'Stue og lounge', icon: 'weekend', controls: [{ key: 'lightLoungeDownlights', label: 'Lounge downlights', description: '7 lamper' }, { key: 'lightCove', label: 'Cove', description: 'Egen sone' }, { key: 'lightWindowLights', label: 'Vindulys', description: '5 lamper' }, { key: 'lightLivingCeiling', label: 'Takspot stue', description: '4 spotter' }, { key: 'lightStairStrip', label: 'LED-list under trapp', description: 'WLED' }] },
+    { id: 'dining', label: 'Spisestue', icon: 'table-restaurant', controls: [{ key: 'lightDining', label: 'Spisestuebord', description: '2 lamper' }] },
+    { id: 'kitchen', label: 'Kjøkken', icon: 'countertops', controls: [{ key: 'lightKitchen', label: 'Takspot', description: '4 spotter' }] },
+    { id: 'hall', label: 'Gang og entré', icon: 'door_front', controls: [{ key: 'lightInnerHall', label: 'Innergang', description: '3 spotter' }, { key: 'lightEntrance', label: 'Yttergang', description: '5 spotter' }] },
+    { id: 'bathroom', label: 'Bad', icon: 'bathroom', controls: [{ key: 'lightBathroom', label: 'Belysning' }] },
+  ] },
+  { label: '2. etasje', rooms: [
+    { id: 'bedroom', label: 'Soverom HA', icon: 'bed', controls: [{ key: 'lightBedroom', label: 'Alle lys' }] },
+    { id: 'jacob', label: 'Soverom Jacob', icon: 'child_care', controls: [{ key: 'lightJacob', label: 'Alle lys' }, { key: 'lightJacobCeiling', label: 'Taklampe', description: '3 pærer' }, { key: 'lightJacobBed', label: 'LED-list seng' }] },
+    { id: 'upper-hall', label: 'Gang 2. etasje', icon: 'stairs', controls: [{ key: 'lightUpperHall', label: 'Takspot', description: '4 spotter' }] },
+    { id: 'toilet', label: 'Toalett 2. etasje', icon: 'wc', controls: [{ key: 'lightUpstairsToilet', label: 'Takspot', description: '3 spotter' }] },
+    { id: 'office', label: 'Kontor', icon: 'desk', controls: [{ key: 'lightOffice', label: 'Arbeidslys', description: '2 lamper' }] },
+  ] },
+];
+
+const lightBrightness = (state?: HomeAssistantState): number => {
+  if (state?.state !== 'on') return 1;
+  const brightness = Number(state.attributes.brightness);
+  return Number.isFinite(brightness) ? Math.max(1, Math.min(100, Math.round(brightness / 2.55))) : 100;
+};
+
+function LightControlRow({ control, state, pending, command }: { control: LightControl; state?: HomeAssistantState; pending: boolean; command: (light: LightControlKey, next: LightCommand) => void }) {
+  const confirmedBrightness = lightBrightness(state);
+  const [brightness, setBrightness] = useState(confirmedBrightness);
+  useEffect(() => setBrightness(confirmedBrightness), [confirmedBrightness]);
+  const available = state && state.state !== 'unavailable';
+  const on = state?.state === 'on';
+  const commitBrightness = () => { if (available && !pending && brightness !== confirmedBrightness) command(control.key, { brightness }); };
+  return <div className="lights-control-row"><div><strong>{control.label}</strong>{control.description && <small>{control.description}</small>}</div><input aria-label={`${control.label} lysstyrke`} type="range" min="1" max="100" value={brightness} style={{ background: `linear-gradient(90deg,var(--mint) 0%,var(--mint) ${brightness}%,#34423f ${brightness}%,#34423f 100%)` }} disabled={!available || pending} onChange={(event) => setBrightness(Number(event.target.value))} onPointerUp={commitBrightness} onBlur={commitBrightness}/><output>{!state ? '—' : on ? `${brightness}%` : 'Av'}</output><button type="button" className={`lights-switch${on ? ' on' : ''}`} aria-label={`${on ? 'Slå av' : 'Slå på'} ${control.label}`} aria-pressed={on} disabled={!available || pending} onClick={() => command(control.key, { on: !on })}><span/></button></div>;
+}
+
+function LightsModal({ states, pending, errors, command, close, closeButtonRef }: { states: Record<string, HomeAssistantState>; pending: Record<string, boolean>; errors: Record<string, string>; command: (light: LightControlKey, next: LightCommand) => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+  const [openRoom, setOpenRoom] = useState<string | null>('living');
+  const allLights = states.lightAll;
+  const allOn = allLights?.state === 'on';
+  const lightError = Object.entries(errors).find(([key, value]) => key.startsWith('light') && value)?.[1];
+  return <div className="lights-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="lights-modal" role="dialog" aria-modal="true" aria-labelledby="lights-title"><header><div><h2 id="lights-title"><Icon filled>lightbulb</Icon>Lys i huset</h2><p>Rom gruppert etter etasje</p></div><button ref={closeButtonRef} type="button" aria-label="Lukk lysstyring" onClick={close}><Icon>close</Icon></button></header><div className="lights-master"><div><strong>Alle innelys</strong><small>Styr alle rom samtidig</small></div><button type="button" className={`lights-switch${allOn ? ' on' : ''}`} aria-label={allOn ? 'Slå av alle innelys' : 'Slå på alle innelys'} aria-pressed={allOn} disabled={!allLights || allLights.state === 'unavailable' || pending.lightAll} onClick={() => command('lightAll', { on: !allOn })}><span/></button></div><div className="lights-room-list">{lightFloors.map((floor) => <section className="lights-floor" key={floor.label}><h3>{floor.label}</h3>{floor.rooms.map((room) => { const expanded = openRoom === room.id; const activeCount = room.controls.filter((control) => states[control.key]?.state === 'on').length; return <article className={`lights-room${expanded ? ' expanded' : ''}`} key={room.id}><button type="button" className="lights-room-toggle" aria-expanded={expanded} onClick={() => setOpenRoom(expanded ? null : room.id)}><Icon>{room.icon}</Icon><span><strong>{room.label}</strong><small>{activeCount ? `${activeCount} ${activeCount === 1 ? 'gruppe' : 'grupper'} på` : 'Alle lys av'}</small></span><Icon>expand_more</Icon></button>{expanded && <div className="lights-room-controls">{room.controls.map((control) => <LightControlRow key={control.key} control={control} state={states[control.key]} pending={Boolean(pending[control.key])} command={command}/>)}</div>}</article>; })}</section>)}</div>{lightError && <p className="card-error" role="alert">{lightError}</p>}</section></div>;
 }
 
 function KlaraAiModal({ states, close, closeButtonRef }: { states: Record<string, HomeAssistantState>; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
@@ -616,12 +693,15 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [repairOpen, setRepairOpen] = useState(false);
+  const [lightsOpen, setLightsOpen] = useState(false);
   const [heatPumpOpen, setHeatPumpOpen] = useState(false);
   const [vacuumOpen, setVacuumOpen] = useState(false);
   const [klaraAiOpen, setKlaraAiOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const repairButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const lightsButton = useRef<HTMLButtonElement>(null);
+  const lightsCloseButton = useRef<HTMLButtonElement>(null);
   const heatPumpButton = useRef<HTMLButtonElement>(null);
   const heatPumpCloseButton = useRef<HTMLButtonElement>(null);
   const vacuumButton = useRef<HTMLButtonElement>(null);
@@ -629,6 +709,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const klaraButton = useRef<HTMLButtonElement>(null);
   const klaraCloseButton = useRef<HTMLButtonElement>(null);
   const wasRepairOpen = useRef(false);
+  const wasLightsOpen = useRef(false);
   const wasHeatPumpOpen = useRef(false);
   const wasVacuumOpen = useRef(false);
   const wasKlaraAiOpen = useRef(false);
@@ -670,6 +751,8 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   }, [api]);
   useEffect(() => { if (!repairOpen) return; closeButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setRepairOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [repairOpen]);
   useEffect(() => { if (!repairOpen && wasRepairOpen.current) repairButton.current?.focus(); wasRepairOpen.current = repairOpen; }, [repairOpen]);
+  useEffect(() => { if (!lightsOpen) return; lightsCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setLightsOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [lightsOpen]);
+  useEffect(() => { if (!lightsOpen && wasLightsOpen.current) lightsButton.current?.focus(); wasLightsOpen.current = lightsOpen; }, [lightsOpen]);
   useEffect(() => { if (!heatPumpOpen) return; heatPumpCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setHeatPumpOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [heatPumpOpen]);
   useEffect(() => { if (!heatPumpOpen && wasHeatPumpOpen.current) heatPumpButton.current?.focus(); wasHeatPumpOpen.current = heatPumpOpen; }, [heatPumpOpen]);
   useEffect(() => { if (!vacuumOpen) return; vacuumCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setVacuumOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [vacuumOpen]);
@@ -680,6 +763,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
 
   const confirm = async (key: string, operation: () => Promise<{ states: Record<string, HomeAssistantState> }>) => { setPending((value) => ({ ...value, [key]: true })); setErrors((value) => ({ ...value, [key]: '' })); try { const result = await operation(); setStates((value) => ({ ...value, ...result.states })); if (key in sceneConfirmation) setToast(sceneConfirmation[key as keyof typeof sceneConfirmation]); } catch { setErrors((value) => ({ ...value, [key]: updateError })); } finally { setPending((value) => { const next = { ...value }; delete next[key]; return next; }); } };
   const action = (key: DashboardAction, option?: HeatPumpMode | FanSpeed) => { void confirm(key, () => api.runAction(key, option)); };
+  const lightCommand = (light: LightControlKey, next: LightCommand) => { void confirm(light, () => api.runLightCommand(light, next)); };
   const vacuumAction = (_key: string, option?: string) => { void confirm('vacuum', () => browserApi.runVacuumAction(_key, option)); };
   const baseline = temperatureNumber(states.climate) ?? currentTemperatureNumber(states.climate);
   const adjust = (offset: number) => { if (baseline !== undefined) void confirm('temperature', () => api.setTemperature(baseline + offset)); };
@@ -693,5 +777,5 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const resetLayout = () => setLayouts((current) => { window.localStorage.removeItem(layoutKey(mode)); return { ...current, [mode]: loadLayout(mode) }; });
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={() => setKlaraAiOpen(true)} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal states={states} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={() => setKlaraAiOpen(true)} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal states={states} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }

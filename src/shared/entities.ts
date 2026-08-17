@@ -2,6 +2,13 @@ export const dashboardTitle = 'Smarthjem';
 
 export type HeatPumpMode = 'cool' | 'heat' | 'heat_cool' | 'fan_only';
 export type FanSpeed = 'quiet' | 'medium' | 'strong';
+export const lightControlKeys = [
+  'lightAll', 'lightLoungeDownlights', 'lightCove', 'lightWindowLights', 'lightLivingCeiling', 'lightStairStrip', 'lightDining', 'lightKitchen',
+  'lightInnerHall', 'lightEntrance', 'lightBathroom', 'lightBedroom', 'lightJacob',
+  'lightJacobCeiling', 'lightJacobBed', 'lightUpperHall', 'lightUpstairsToilet', 'lightOffice',
+] as const;
+export type LightControlKey = (typeof lightControlKeys)[number];
+export type LightCommand = { on: boolean } | { brightness: number };
 export type DashboardAction =
   | 'home' | 'guestMode' | 'guestVoucher' | 'morning' | 'evening' | 'night'
   | 'cooling' | 'heatPump' | 'fanSpeed' | 'securityMode' | 'lockDoor' | 'unlockDoor';
@@ -9,10 +16,11 @@ export type DashboardAction =
 export const dashboardStateKeys = [
   'home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night',
   'cooling', 'climate', 'outdoor', 'securityMode', 'frontDoorLock', 'doorbellCamera', 'courtyardCamera',
-  'weatherHourly', 'weatherDaily', 'weatherSummary', 'energyToday', 'energyYesterday', 'energyHourlyConsumption', 'energyPower', 'energyPrice', 'roomLiving',
+  'weatherHourly', 'weatherDaily', 'weatherSummary', 'meteoAlarm', 'lightningDistance', 'auroraVisibility', 'energyToday', 'energyYesterday', 'energyHourlyConsumption', 'energyPower', 'energyPrice', 'roomLiving',
   'roomBedroom', 'roomBathroom', 'roomLivingHumidity', 'roomLivingCo2', 'roomBedroomHumidity', 'roomBedroomCo2', 'roomBathroomHumidity', 'roomBathroomCo2', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
   'andreasTravelTime', 'hegeTravelTime', 'calendar', 'repairHealth',
   'vacuum', 'vacuumBattery', 'vacuumStatus', 'vacuumProgress', 'vacuumArea', 'vacuumTime', 'vacuumRoom', 'vacuumCharging', 'vacuumCleaning', 'vacuumMopAttached', 'vacuumWaterBoxAttached', 'vacuumWaterShortage', 'vacuumMopDrying', 'vacuumCleaningMode', 'vacuumMopMode', 'vacuumMopIntensity', 'vacuumVolume', 'vacuumMap',
+  ...lightControlKeys,
 ] as const;
 
 export type DashboardStateKey = (typeof dashboardStateKeys)[number];
@@ -49,6 +57,9 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   doorbellCamera: '',
   courtyardCamera: 'camera.gaardsplass_fluent_lens_0',
   weatherSummary: '',
+  meteoAlarm: 'binary_sensor.meteoalarm',
+  lightningDistance: 'sensor.blitzortung_lightning_distance',
+  auroraVisibility: 'binary_sensor.aurora_visibility_visibility_alert',
   energyToday: 'sensor.accumulated_consumption_klaras_vei_14',
   energyYesterday: '',
   energyHourlyConsumption: 'sensor.accumulated_consumption_current_hour_klaras_vei_14',
@@ -90,6 +101,24 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   vacuumMopIntensity: 'select.roborock_s8_mop_intensity',
   vacuumVolume: 'number.sucky_v2_volume',
   vacuumMap: 'image.sucky_v2_forste_etasje',
+  lightAll: 'light.alle_lys',
+  lightLoungeDownlights: 'light.lounge_downlights',
+  lightCove: 'light.cove',
+  lightWindowLights: 'light.vindulys',
+  lightLivingCeiling: 'light.takspot_stue',
+  lightStairStrip: 'light.trapp',
+  lightDining: 'light.spisestuebord',
+  lightKitchen: 'light.kjokken',
+  lightInnerHall: 'light.innergang',
+  lightEntrance: 'light.yttergang',
+  lightBathroom: 'light.lysbryter_bad',
+  lightBedroom: 'light.soverom',
+  lightJacob: 'light.alle_lys_soverom_jacob',
+  lightJacobCeiling: 'light.soverom_jacob_taklampe',
+  lightJacobBed: 'light.soverom_jacob_ledlist_seng',
+  lightUpperHall: 'light.gang_2_etg',
+  lightUpstairsToilet: 'light.takspot_toalett_2_etg',
+  lightOffice: 'light.kontor',
 };
 
 export interface HomeAssistantState {

@@ -21,6 +21,7 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3100}:3000"
     environment:
+      TZ: Europe/Oslo
       HA_URL: ${HA_URL}
       HA_TOKEN: ${HA_TOKEN}
       HA_HOME_MODE_ENTITY_ID: ${HA_HOME_MODE_ENTITY_ID:-input_select.home_mode}

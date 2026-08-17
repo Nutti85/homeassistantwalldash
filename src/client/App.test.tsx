@@ -13,17 +13,30 @@ const baseStates: Record<string, HomeAssistantState> = {
   repairHealth: state('binary_sensor.health', 'ok'),
 };
 const createApi = (overrides: Record<string, HomeAssistantState> = {}): DashboardApi => ({
-  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), runAction: vi.fn(), setTemperature: vi.fn(),
+  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
-const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => fireEvent.click(await screen.findByRole('tab', { name }));
+const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Modus' })); fireEvent.click(await screen.findByRole('tab', { name })); };
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
   it('starts in Full and never exposes guest Wi-Fi there', async () => {
     render(<App api={createApi()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Modus' }));
     expect(await screen.findByRole('tab', { name: 'Full' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('Gjeste-WiFi')).not.toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 3 })).toEqual(expect.arrayContaining([]));
+  });
+
+  it('reveals modes from the Modus button and closes the picker after a choice', async () => {
+    render(<App api={createApi()} />);
+    const toggle = await screen.findByRole('button', { name: 'Modus' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('tab', { name: 'Gjest' })).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Gjest' }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('tab', { name: 'Gjest' })).not.toBeInTheDocument();
   });
 
   it('opens the heat-pump card from the bottom fan control and can close it', async () => {
@@ -37,6 +50,24 @@ describe('redesigned dashboard', () => {
     fireEvent.click(fan);
     fireEvent.click(screen.getByRole('button', { name: 'Lukk varmepumpe' }));
     expect(screen.queryByRole('dialog', { name: 'Varmepumpe' })).not.toBeInTheDocument();
+  });
+
+  it('opens the floor-grouped lights dialog and keeps only one room expanded', async () => {
+    const api = createApi({
+      lightAll: state('light.alle_lys', 'on'), lightLoungeDownlights: state('light.lounge_downlights', 'on', { brightness: 184 }), lightCove: state('light.cove', 'on', { brightness: 112 }), lightWindowLights: state('light.vindulys', 'on'),
+      lightLivingCeiling: state('light.takspot_stue', 'off'), lightStairStrip: state('light.trapp', 'on', { brightness: 125 }), lightDining: state('light.spisestuebord', 'on', { brightness: 128 }), lightKitchen: state('light.kjokken', 'on'), lightInnerHall: state('light.innergang', 'on'), lightEntrance: state('light.yttergang', 'on'), lightBathroom: state('light.lysbryter_bad', 'on'), lightBedroom: state('light.soverom', 'off'), lightJacob: state('light.alle_lys_soverom_jacob', 'off'), lightJacobCeiling: state('light.soverom_jacob_taklampe', 'off'), lightJacobBed: state('light.soverom_jacob_ledlist_seng', 'off'), lightUpperHall: state('light.gang_2_etg', 'off'), lightUpstairsToilet: state('light.takspot_toalett_2_etg', 'off'), lightOffice: state('light.kontor', 'off'),
+    });
+    render(<App api={api}/>);
+    const lights = await screen.findByRole('button', { name: 'Styr lys' });
+    fireEvent.click(lights);
+    expect(screen.getByRole('dialog', { name: 'Lys i huset' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Stue og lounge/ })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /Soverom Jacob/ }));
+    expect(screen.getByRole('button', { name: /Stue og lounge/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Soverom Jacob/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('slider', { name: 'LED-list seng lysstyrke' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Spisestue/ }));
+    expect(screen.getByRole('slider', { name: 'Spisestuebord lysstyrke' })).toBeInTheDocument();
   });
 
   it('offers a deliberate layout editing mode with move, resize and reset controls', async () => {
@@ -94,14 +125,14 @@ describe('redesigned dashboard', () => {
 
     unmount();
     render(<App api={createApi()} />);
-    expect((await screen.findByRole('tab', { name: 'Full' })).closest('.dashboard')).not.toBeNull();
+    expect((await screen.findByRole('button', { name: 'Modus' })).closest('.dashboard')).not.toBeNull();
     expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
   });
 
   it('uses the shipped default instead of a layout saved by the prior release', async () => {
     localStorage.setItem('smarthjem-layout-v10-regular', JSON.stringify({ frontDoor: { column: 11, row: 4, columns: 4, rows: 1 } }));
     render(<App api={createApi()} />);
-    expect((await screen.findByRole('tab', { name: 'Full' })).closest('.dashboard')).not.toBeNull();
+    expect((await screen.findByRole('button', { name: 'Modus' })).closest('.dashboard')).not.toBeNull();
     expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '1 / span 4', gridRow: '1 / span 1' });
     expect(document.querySelector('[data-layout-id="energy"]')).toHaveStyle({ gridColumn: '9 / span 8', gridRow: '5 / span 4' });
     expect(document.querySelector('[data-layout-id="roomClimate"]')).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '5 / span 4' });
@@ -225,6 +256,26 @@ describe('redesigned dashboard', () => {
     const legend = screen.getByLabelText('Tegnforklaring');
     ['Temperatur', 'Nedbør', 'Sannsynlighet', 'Vind', 'Kast', 'Skydekke'].forEach((label) => expect(within(legend).getByText(label)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /Temperatur/ })).not.toBeInTheDocument();
+  });
+
+  it('shows only active weather alerts and falls back to Ingen varsler', async () => {
+    const quietForecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 8 }];
+    const forecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 11.8 }];
+    const { rerender } = render(<App api={createApi({ weatherHourly: state('sensor.hourly', 'rainy', { forecast: quietForecast }) })} />);
+    expect(await screen.findByText('Ingen varsler')).toBeInTheDocument();
+
+    rerender(<App api={createApi({
+      weatherHourly: state('sensor.hourly', 'rainy', { forecast }),
+      meteoAlarm: state('binary_sensor.meteoalarm', 'on'),
+      lightningDistance: state('sensor.blitzortung_lightning_distance', '8.2'),
+      auroraVisibility: state('binary_sensor.aurora_visibility_visibility_alert', 'on'),
+    })} />);
+    const alerts = await screen.findByLabelText('Varsler');
+    expect(alerts).toHaveTextContent('Farevarsel');
+    expect(alerts).toHaveTextContent('Lyn8,2 km');
+    expect(alerts).toHaveTextContent('Vindkast11,8 m/s');
+    expect(alerts).toHaveTextContent('Nordlys');
+    expect(alerts).not.toHaveTextContent('Ingen varsler');
   });
 
   it('shows camera fallback and accessible controls', async () => {

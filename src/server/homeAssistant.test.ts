@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { findBroadcastBody, HomeAssistantClient, hourlyConsumption, hourlyConsumptionFromHourlySensor, resampleRoomTrend } from './homeAssistant';
+import { findBroadcastBody, HomeAssistantClient, hourlyConsumption, hourlyConsumptionFromHourlySensor, resampleRoomTrend, yesterdayConsumptionFromStatistics } from './homeAssistant';
 import {
   climateStateKey,
   coolingStateKey,
@@ -54,9 +54,32 @@ describe('HomeAssistantClient', () => {
     ], start, end, '0.5')).toEqual([0.8, 1.3, 0.6, 0.5]);
   });
 
+  it('calculates yesterday from recorder sums instead of the largest resettable sensor state', () => {
+    const midnight = Date.parse('2026-08-17T00:00:00.000Z');
+
+    expect(yesterdayConsumptionFromStatistics({
+      'sensor.daily_energy': [
+        { end: midnight - 86_400_000, sum: 36_717.731227, state: 61.342159 },
+        { end: midnight, sum: 36_752.818802, state: 0.000588 },
+      ],
+    }, 'sensor.daily_energy', midnight)).toBe(35.087575);
+  });
+
   it('exports stable dashboard state keys', () => {
     expect([homeStateKey, homeModeStateKey, guestModeStateKey, guestVoucherStateKey, morningStateKey, eveningStateKey, nightStateKey, coolingStateKey, climateStateKey, outdoorStateKey])
       .toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
+  });
+
+  it('sets an allowlisted light group brightness and returns its confirmed state', async () => {
+    const fetcher = vi.fn().mockResolvedValue(stateResponse('light.cove', 'on', { brightness: 112 }));
+    const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, defaultDashboardEntityIds);
+
+    const result = await client.executeLight('lightCove', { brightness: 44 });
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, 'http://ha:8123/api/services/light/turn_on', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ entity_id: 'light.cove', brightness_pct: 44 }),
+    }));
+    expect(result.states.lightCove).toMatchObject({ entity_id: 'light.cove', state: 'on' });
   });
 
   it('opens the allowlisted Home Assistant camera proxy stream with server-side authorization', async () => {
@@ -258,58 +281,7 @@ describe('HomeAssistantClient', () => {
   });
 
   it('gets all dashboard entities including the guest voucher', async () => {
-    const entityIds = [
-      'input_select.home_state',
-      'input_select.home_mode',
-      'input_boolean.gjest',
-      'sensor.67647a4bca314858fac0f8fc_voucher',
-      'automation.modus_god_morgen',
-      'script.1572988362234',
-      'script.1569099501074',
-      'automation.klima_automatisk_kjoling_optimalisert',
-      'climate.stue',
-      'sensor.indoor_ute_temperature',
-      'input_number.toggle_security_mode',
-      'lock.aqara_smart_lock_u200_2',
-      'sensor.weather_hourly',
-      'sensor.weather_daily',
-      'camera.gaardsplass_fluent_lens_0',
-      'sensor.accumulated_consumption_klaras_vei_14',
-      'sensor.accumulated_consumption_current_hour_klaras_vei_14',
-      'sensor.power_klaras_vei_14',
-      'sensor.nordpool_kwh_no2_nok_3_10_025',
-      'sensor.indoor_temperature',
-      'sensor.indoor_soverom_ha_temperature',
-      'sensor.indoor_soverom_j_temperature',
-      'sensor.indoor_humidity',
-      'sensor.indoor_carbon_dioxide',
-      'sensor.indoor_soverom_ha_humidity',
-      'sensor.indoor_soverom_ha_carbon_dioxide',
-      'sensor.indoor_soverom_j_humidity',
-      'sensor.indoor_soverom_j_carbon_dioxide',
-      'sensor.next_garbage_collection',
-      'sensor.ee14199_range_electric',
-      'sensor.ee14199_state_of_charge',
-      'calendar.outlook_andreas_felles',
-      'vacuum.roborock_s8',
-      'sensor.sucky_v2_battery',
-      'sensor.sucky_v2_status',
-      'sensor.sucky_v2_cleaning_progress',
-      'sensor.sucky_v2_cleaning_area',
-      'sensor.sucky_v2_cleaning_time',
-      'sensor.sucky_v2_current_room',
-      'binary_sensor.sucky_v2_charging',
-      'binary_sensor.sucky_v2_cleaning',
-      'binary_sensor.sucky_v2_mop_attached',
-      'binary_sensor.sucky_v2_water_box_attached',
-      'binary_sensor.sucky_v2_water_shortage',
-      'binary_sensor.sucky_v2_dock_mop_drying',
-      'select.sucky_v2_cleaning_mode',
-      'select.roborock_s8_mop_mode',
-      'select.roborock_s8_mop_intensity',
-      'number.sucky_v2_volume',
-      'image.sucky_v2_forste_etasje',
-    ];
+    const entityIds = Object.values(defaultDashboardEntityIds).filter(Boolean);
     const fetcher = vi.fn();
     entityIds.forEach((entityId) => fetcher.mockResolvedValueOnce(stateResponse(entityId)));
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify([
@@ -322,8 +294,8 @@ describe('HomeAssistantClient', () => {
     expect(fetcher.mock.calls.slice(0, entityIds.length).map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
     expect(fetcher.mock.calls[entityIds.length][0]).toMatch(/^http:\/\/ha:8123\/api\/calendars\/calendar\.outlook_andreas_felles\?start=.*&end=.*/);
     expect(fetcher.mock.calls[entityIds.length + 1][0]).toMatch(/^http:\/\/ha:8123\/api\/history\/period\//);
-    expect(Object.keys(result.states)).toHaveLength(58);
-    expect(result.states.energyYesterday).toMatchObject({ state: '31.2' });
+    expect(Object.keys(result.states)).toHaveLength(Object.keys(defaultDashboardEntityIds).length);
+    expect(result.states.energyYesterday).toMatchObject({ state: 'unavailable' });
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });
     expect(result.states.calendar?.attributes.events).toEqual([
       { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },

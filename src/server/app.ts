@@ -1,6 +1,6 @@
 import express, { type Express, type Request, type Response } from 'express';
 import type { HomeAssistantClient, VacuumAction } from './homeAssistant';
-import type { DashboardAction, FanSpeed, HeatPumpMode } from '../shared/entities';
+import { lightControlKeys, type DashboardAction, type FanSpeed, type HeatPumpMode, type LightCommand, type LightControlKey } from '../shared/entities';
 
 type DashboardActionResult = Awaited<ReturnType<HomeAssistantClient['execute']>>;
 type DashboardStates = Awaited<ReturnType<HomeAssistantClient['getDashboardStates']>>;
@@ -8,6 +8,7 @@ type DashboardStates = Awaited<ReturnType<HomeAssistantClient['getDashboardState
 export interface DashboardClient {
   getDashboardStates(): Promise<DashboardStates>;
   execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<DashboardActionResult>;
+  executeLight?(light: LightControlKey, command: LightCommand): Promise<DashboardActionResult>;
   executeVacuum?(action: VacuumAction, option?: string): Promise<DashboardActionResult>;
   setTemperature(temperature: number): Promise<DashboardActionResult>;
   getCameraImage?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
@@ -28,6 +29,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 const isHomeOption = (value: unknown): value is 'Hjemme' | 'Borte' => value === 'Hjemme' || value === 'Borte';
 const isHeatPumpMode = (value: unknown): value is HeatPumpMode => value === 'cool' || value === 'heat' || value === 'heat_cool' || value === 'fan_only';
 const isFanSpeed = (value: unknown): value is FanSpeed => value === 'quiet' || value === 'medium' || value === 'strong';
+const lightControls = new Set<string>(lightControlKeys);
+const isLightCommand = (value: Record<string, unknown>): value is LightCommand => (
+  (Object.keys(value).length === 1 && typeof value.on === 'boolean')
+  || (Object.keys(value).length === 1 && typeof value.brightness === 'number' && Number.isInteger(value.brightness) && value.brightness >= 1 && value.brightness <= 100)
+);
 
 const sendClientError = (_error: unknown, response: Response): void => {
   response.status(502).json(updateError);
@@ -183,6 +189,14 @@ export const createApp = (client: DashboardClient): Express => {
     if ((action === 'cleaningMode' || action === 'mopMode' || action === 'mopIntensity' || action === 'volume') && !body.option) { response.sendStatus(400); return; }
     if (!(action === 'cleaningMode' || action === 'mopMode' || action === 'mopIntensity' || action === 'volume') && Object.keys(body).length !== 0) { response.sendStatus(400); return; }
     try { response.json(await client.executeVacuum(action, body.option as string | undefined)); } catch (error) { sendClientError(error, response); }
+  });
+
+  app.post('/api/lights/:light', async (request: Request, response: Response) => {
+    const light = request.params.light;
+    const body = request.body as unknown;
+    if (!client.executeLight || typeof light !== 'string' || !lightControls.has(light)) { response.sendStatus(404); return; }
+    if (!isRecord(body) || !isLightCommand(body)) { response.sendStatus(400); return; }
+    try { response.json(await client.executeLight(light as LightControlKey, body)); } catch (error) { sendClientError(error, response); }
   });
 
   app.post('/api/temperature', async (request: Request, response: Response) => {

@@ -1,4 +1,4 @@
-import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, guestVoucherCreateButtonEntityId, type FanSpeed, type HeatPumpMode, type HomeAssistantState } from '../shared/entities';
+import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, guestVoucherCreateButtonEntityId, type FanSpeed, type HeatPumpMode, type HomeAssistantState, type LightCommand, type LightControlKey } from '../shared/entities';
 
 type DashboardStates = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 type CommandResult = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
@@ -146,6 +146,30 @@ export const hourlyConsumptionFromHourlySensor = (series: unknown, startMs: numb
   return values.map((value) => Number((value ?? 0).toFixed(3)));
 };
 
+/**
+ * Calculates a completed day's consumption from recorder statistics. `sum` is
+ * monotonically increasing even when a daily energy sensor resets at midnight,
+ * unlike the sensor's raw state history.
+ */
+export const yesterdayConsumptionFromStatistics = (statistics: unknown, statisticId: string, dayEndMs: number): number | undefined => {
+  if (!isRecord(statistics) || !Array.isArray(statistics[statisticId])) return undefined;
+
+  const readings = statistics[statisticId].flatMap((item) => {
+    if (!isRecord(item)) return [] as { end: number; sum: number }[];
+    const end = Number(item.end);
+    const sum = Number(item.sum);
+    return Number.isFinite(end) && Number.isFinite(sum) ? [{ end, sum }] : [];
+  }).sort((left, right) => left.end - right.end);
+
+  const yesterday = readings.find((reading) => reading.end === dayEndMs);
+  if (!yesterday) return undefined;
+  const previousDay = readings.filter((reading) => reading.end < dayEndMs).at(-1);
+  if (!previousDay) return undefined;
+
+  const consumption = yesterday.sum - previousDay.sum;
+  return consumption >= 0 ? Number(consumption.toFixed(6)) : undefined;
+};
+
 export class HomeAssistantClient {
   public constructor(
     private readonly baseUrl: string,
@@ -180,9 +204,9 @@ export class HomeAssistantClient {
         // Keep the unavailable summary state when the trace is not reachable.
       }
     }
-    // Tibber's accumulated-consumption sensor is reset every midnight. The
-    // history endpoint supplies the completed total for the preceding day,
-    // without requiring the user to create a second helper sensor in HA.
+    // The daily Tibber sensor resets at midnight. Use recorder statistics for
+    // yesterday because raw history includes the state immediately before the
+    // requested period, which can otherwise make yesterday include two days.
     try {
       states.energyYesterday = await this.getYesterdayConsumption();
     } catch {
@@ -228,33 +252,63 @@ export class HomeAssistantClient {
   }
 
   private async getYesterdayConsumption(): Promise<HomeAssistantState> {
-    const end = new Date();
-    end.setHours(0, 0, 0, 0);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 1);
-    const query = new URLSearchParams({
-      filter_entity_id: this.entities.energyToday,
-      end_time: end.toISOString(),
-      minimal_response: 'true',
-      no_attributes: 'true',
-    });
-    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/history/period/${start.toISOString()}?${query}`, {
-      method: 'GET', headers: this.headers(),
-    });
-    if (!response.ok) throw communicationError();
-    const payload: unknown = await response.json();
-    if (!Array.isArray(payload) || !Array.isArray(payload[0])) throw communicationError();
-    const readings = payload[0].flatMap((item) => {
-      if (!isRecord(item) || typeof item.state !== 'string') return [] as number[];
-      const value = Number(item.state);
-      return Number.isFinite(value) ? [value] : [];
-    });
-    if (!readings.length) throw communicationError();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const start = new Date(todayStart);
+    start.setDate(start.getDate() - 2);
+    const statistics = await this.callRecorderStatistics(start, todayStart);
+    const consumption = yesterdayConsumptionFromStatistics(statistics, this.entities.energyToday, todayStart.getTime());
+    if (consumption === undefined) throw communicationError();
     return {
       entity_id: this.entities.energyToday,
-      state: String(Math.max(...readings)),
-      attributes: { unit_of_measurement: 'kWh', source: 'history' },
+      state: String(consumption),
+      attributes: { unit_of_measurement: 'kWh', source: 'recorder statistics' },
     };
+  }
+
+  private async callRecorderStatistics(start: Date, end: Date): Promise<unknown> {
+    const websocketUrl = `${this.baseUrl.replace(/^http/, 'ws')}/api/websocket`;
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(websocketUrl);
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        socket.close();
+        callback();
+      };
+      const fail = () => finish(() => reject(communicationError()));
+      timeout = setTimeout(() => fail(), requestTimeoutMs);
+      socket.addEventListener('error', fail);
+      socket.addEventListener('close', () => { if (!settled) reject(communicationError()); });
+      socket.addEventListener('message', (event) => {
+        let message: unknown;
+        try { message = JSON.parse(String(event.data)); } catch { fail(); return; }
+        if (!isRecord(message)) return;
+        if (message.type === 'auth_required') {
+          socket.send(JSON.stringify({ type: 'auth', access_token: this.token }));
+          return;
+        }
+        if (message.type === 'auth_ok') {
+          socket.send(JSON.stringify({
+            id: 1,
+            type: 'recorder/statistics_during_period',
+            start_time: start.toISOString(),
+            end_time: end.toISOString(),
+            statistic_ids: [this.entities.energyToday],
+            period: 'day',
+            types: ['sum'],
+          }));
+          return;
+        }
+        if (message.type === 'result' && message.id === 1) {
+          if (message.success !== true) { fail(); return; }
+          finish(() => resolve(message.result));
+        }
+      });
+    });
   }
 
   private async getHourlyConsumption(current: HomeAssistantState): Promise<number[]> {
@@ -419,6 +473,23 @@ export class HomeAssistantClient {
 
   public async getCameraImage(): Promise<{ bytes: ArrayBuffer; contentType: string }> {
     return this.getCameraImageFor(this.entities.doorbellCamera);
+  }
+
+  public async executeLight(light: LightControlKey, command: LightCommand): Promise<CommandResult> {
+    try {
+      const entityId = this.entities[light];
+      if (!entityId) throw communicationError();
+      if ('on' in command) {
+        await this.request(command.on ? 'light/turn_on' : 'light/turn_off', { entity_id: entityId });
+      } else if (Number.isInteger(command.brightness) && command.brightness >= 1 && command.brightness <= 100) {
+        await this.request('light/turn_on', { entity_id: entityId, brightness_pct: command.brightness });
+      } else {
+        throw communicationError();
+      }
+      return { states: { [light]: await this.getState(entityId) } };
+    } catch {
+      throw communicationError();
+    }
   }
 
   public async executeVacuum(action: VacuumAction, option?: string): Promise<CommandResult> {

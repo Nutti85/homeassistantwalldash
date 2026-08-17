@@ -26,6 +26,7 @@ const dashboardStates = {
 const createClient = (): DashboardClient => ({
   getDashboardStates: vi.fn(),
   execute: vi.fn(),
+  executeLight: vi.fn(),
   setTemperature: vi.fn(),
 });
 
@@ -154,6 +155,18 @@ describe('dashboard API', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual(result);
     expect(client.setTemperature).toHaveBeenCalledWith(21.5);
+  });
+
+  it('forwards allowlisted light commands and rejects arbitrary entities', async () => {
+    const client = createClient();
+    vi.mocked(client.executeLight!).mockResolvedValue({ states: { lightCove: { entity_id: 'light.cove', state: 'on', attributes: {} } } });
+
+    const response = await request(createApp(client)).post('/api/lights/lightCove').send({ brightness: 44 });
+
+    expect(response.status).toBe(200);
+    expect(client.executeLight!).toHaveBeenCalledWith('lightCove', { brightness: 44 });
+    await request(createApp(client)).post('/api/lights/light.anything').send({ on: true }).expect(404);
+    await request(createApp(client)).post('/api/lights/lightCove').send({ brightness: 0 }).expect(400);
   });
 
   it('proxies a camera stream without caching it', async () => {

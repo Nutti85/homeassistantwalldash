@@ -1,4 +1,4 @@
-import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState } from '../shared/entities';
+import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
 
 export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
@@ -78,4 +78,10 @@ export const runVacuumAction = async (action: string, option?: string): Promise<
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(option === undefined ? {} : { option }),
+});
+
+export const runLightCommand = async (light: LightControlKey, command: LightCommand): Promise<DashboardResponse> => request(`/api/lights/${light}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(command),
 });
