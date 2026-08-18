@@ -263,19 +263,38 @@ describe('redesigned dashboard', () => {
     const forecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 11.8 }];
     const { rerender } = render(<App api={createApi({ weatherHourly: state('sensor.hourly', 'rainy', { forecast: quietForecast }) })} />);
     expect(await screen.findByText('Ingen varsler')).toBeInTheDocument();
+    expect(screen.getByLabelText('Varsler')).not.toHaveClass('has-alerts');
 
     rerender(<App api={createApi({
       weatherHourly: state('sensor.hourly', 'rainy', { forecast }),
-      meteoAlarm: state('binary_sensor.meteoalarm', 'on'),
+      meteoAlarm: state('sensor.met_weather_alerts_county_39', 'Skogbrannfare, gult nivå, Deler av Agder og Østlandet sør for Mjøsa, 2026-08-05T08:30:00+00:00, 2026-08-25T21:59:00+00:00', { event: 'forestFire', eventAwarenessName: 'Skogbrannfare', riskMatrixColor: 'Yellow', area: 'Deler av Agder og Østlandet sør for Mjøsa', description: 'Lokal skogbrannfare.', instruction: 'Ikke bruk åpen ild.' }),
       lightningDistance: state('sensor.blitzortung_lightning_distance', '8.2'),
       auroraVisibility: state('binary_sensor.aurora_visibility_visibility_alert', 'on'),
     })} />);
     const alerts = await screen.findByLabelText('Varsler');
     expect(alerts).toHaveTextContent('Farevarsel');
+    expect(alerts).toHaveTextContent('Gult nivå');
+    expect(alerts.querySelector('.weather-alert-meteoalarm')).toHaveClass('weather-alert-yellow');
+    expect(alerts).toHaveClass('weather-alerts-meteoalarm-yellow');
+    expect(alerts.querySelector('.weather-alert-meteoalarm .material-symbols-outlined')).toHaveTextContent('local_fire_department');
     expect(alerts).toHaveTextContent('Lyn8,2 km');
     expect(alerts).toHaveTextContent('Vindkast11,8 m/s');
     expect(alerts).toHaveTextContent('Nordlys');
     expect(alerts).not.toHaveTextContent('Ingen varsler');
+    expect(alerts).toHaveClass('has-alerts');
+    const meteoAlarmButton = screen.getByRole('button', { name: /Farevarsel/ });
+    expect(meteoAlarmButton).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(meteoAlarmButton);
+    expect(meteoAlarmButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Lokal skogbrannfare.')).toBeVisible();
+    expect(screen.getByText('Ikke bruk åpen ild.')).toBeVisible();
+  });
+
+  it('hides the meteoalarm card when there is no warning', async () => {
+    render(<App api={createApi({ meteoAlarm: state('sensor.met_weather_alerts_county_39', '0') })} />);
+    const alerts = await screen.findByLabelText('Varsler');
+    expect(alerts).toHaveTextContent('Ingen varsler');
+    expect(alerts.querySelector('.weather-alert-meteoalarm')).toBeNull();
   });
 
   it('shows camera fallback and accessible controls', async () => {

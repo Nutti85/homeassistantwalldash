@@ -295,10 +295,53 @@ function ForecastStrip({ points }: { points: ForecastPoint[] }) {
   return <div className="forecast-strip">{days.length ? days.map((point) => <div className="forecast-day" key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>{fmt(point.templow, '°')}</small></div>) : <div className="unavailable">— Prognose ikke tilgjengelig</div>}</div>;
 }
 
-type WeatherAlert = { kind: 'meteoalarm' | 'lightning' | 'wind' | 'aurora'; icon: string; label: string; value?: string };
+type AlertSeverity = 'yellow' | 'orange' | 'red';
+type WeatherAlert = { kind: 'meteoalarm' | 'lightning' | 'wind' | 'aurora'; icon: string; label: string; value?: string; severity?: AlertSeverity };
+type MeteoAlert = { events: string[]; severity?: AlertSeverity; name: string; description?: string; consequences?: string; instruction?: string; area?: string; response?: string; seriousness?: string; startsAt?: string; endsAt?: string; incidentName?: string; altitude?: string };
 const osloDayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Oslo' });
 
+const meteoEventMeta: Record<string, { label: string; icon: string }> = {
+  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'air' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy' }, snow: { label: 'Snø', icon: 'ac_unit' }, blowingSnow: { label: 'Snøfokk', icon: 'ac_unit' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'local_fire_department' }, icing: { label: 'Ising', icon: 'severe_cold' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
+};
+const severityLabel: Record<AlertSeverity, string> = { yellow: 'Gult nivå', orange: 'Oransje nivå', red: 'Rødt nivå' };
+
+function meteoAlarmSeverity(value?: string): AlertSeverity | undefined {
+  const normalized = value?.trim().toLocaleLowerCase('nb-NO');
+  if (normalized?.includes('red') || normalized?.includes('rødt')) return 'red';
+  if (normalized?.includes('orange') || normalized?.includes('oransje')) return 'orange';
+  if (normalized?.includes('yellow') || normalized?.includes('gult')) return 'yellow';
+  return undefined;
+}
+
+const attrText = (attributes: Record<string, unknown>, ...keys: string[]) => {
+  const value = keys.map((key) => attributes[key]).find((candidate) => typeof candidate === 'string' && candidate.trim());
+  return typeof value === 'string' ? value.trim() : undefined;
+};
+const attrEvents = (attributes: Record<string, unknown>) => {
+  const value = attributes.event;
+  return (Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;|]/) : []).map((event) => String(event).trim()).filter(Boolean);
+};
+const isoTimes = (value?: string) => value?.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})/g) ?? [];
+const formatWarningTime = (value?: string) => {
+  if (!value || Number.isNaN(new Date(value).getTime())) return undefined;
+  return new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Oslo' }).format(new Date(value));
+};
+function parseMeteoAlert(attributes: Record<string, unknown>, state?: string): MeteoAlert {
+  const [startsAt, endsAt] = [attrText(attributes, 'onset', 'effective', 'startsAt', 'start'), attrText(attributes, 'expires', 'ends', 'endsAt', 'end')];
+  const stateTimes = isoTimes(state);
+  const events = attrEvents(attributes);
+  const name = attrText(attributes, 'eventAwarenessName', 'headline', 'title') ?? (events.map((event) => meteoEventMeta[event]?.label ?? event).join(' · ') || state?.split(',')[0]?.trim() || 'Farevarsel');
+  return { events, severity: meteoAlarmSeverity(attrText(attributes, 'riskMatrixColor', 'awareness_level') ?? state), name, description: attrText(attributes, 'description'), consequences: attrText(attributes, 'consequences'), instruction: attrText(attributes, 'instruction'), area: attrText(attributes, 'area', 'areaDesc'), response: attrText(attributes, 'awarenessResponse'), seriousness: attrText(attributes, 'awarenessSeriousness'), startsAt: startsAt ?? stateTimes[0], endsAt: endsAt ?? stateTimes[1], incidentName: attrText(attributes, 'incidentName'), altitude: attrText(attributes, 'altitude', 'ceiling') };
+}
+function meteoAlarmEntries(state?: HomeAssistantState): MeteoAlert[] {
+  if (!state || !state.state || ['0', 'ingen farevarsel', 'unavailable', 'unknown'].includes(state.state.trim().toLocaleLowerCase('nb-NO'))) return [];
+  const alerts = state.attributes.alerts;
+  if (Array.isArray(alerts)) return alerts.filter((alert): alert is Record<string, unknown> => typeof alert === 'object' && alert !== null && !Array.isArray(alert)).map((alert) => parseMeteoAlert(alert));
+  return [parseMeteoAlert(state.attributes, state.state)];
+}
+
 function WeatherAlerts({ states, header = false }: { states: Record<string, HomeAssistantState>; header?: boolean }) {
+  const [meteoAlarmOpen, setMeteoAlarmOpen] = useState(false);
   const hourly = forecastPoints(states.weatherHourly);
   const previewAllAlerts = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('alerts') === 'all';
   const today = new Date();
@@ -308,17 +351,28 @@ function WeatherAlerts({ states, header = false }: { states: Record<string, Home
     return maximum === undefined ? point.windGustSpeed : Math.max(maximum, point.windGustSpeed);
   }, undefined);
   const lightningDistance = previewAllAlerts ? 8 : numericState(states.lightningDistance);
+  const meteoAlerts = meteoAlarmEntries(states.meteoAlarm);
+  const meteoAlarmSeverityLevel = meteoAlerts.reduce<AlertSeverity | undefined>((highest, alert) => !highest || (alert.severity === 'red') || (alert.severity === 'orange' && highest === 'yellow') ? alert.severity ?? highest : highest, undefined);
+  const meteoIcons = [...new Set(meteoAlerts.flatMap((alert) => alert.events))];
   const alerts: WeatherAlert[] = [
-    ...(previewAllAlerts || stateValue(states.meteoAlarm)?.toLowerCase() === 'on' ? [{ kind: 'meteoalarm' as const, icon: 'warning', label: 'Farevarsel' }] : []),
+    ...(previewAllAlerts || meteoAlerts.length
+      ? [{ kind: 'meteoalarm' as const, icon: 'warning', label: 'Farevarsel', value: meteoAlarmSeverityLevel ? severityLabel[meteoAlarmSeverityLevel] : undefined, severity: meteoAlarmSeverityLevel }]
+      : []),
     ...(lightningDistance !== undefined && lightningDistance < 10 ? [{ kind: 'lightning' as const, icon: 'bolt', label: 'Lyn', value: `${fmt(lightningDistance, ' km')}` }] : []),
     ...((previewAllAlerts || (maxGust !== undefined && maxGust > 10)) ? [{ kind: 'wind' as const, icon: 'air', label: 'Vindkast', value: `${fmt(previewAllAlerts ? 12 : maxGust, ' m/s')}` }] : []),
     ...(previewAllAlerts || stateValue(states.auroraVisibility)?.toLowerCase() === 'on' ? [{ kind: 'aurora' as const, icon: 'graphic_eq', label: 'Nordlys' }] : []),
   ];
-  return <aside className={`weather-alerts${header ? ' header-alerts' : ''}${alerts.length ? ' has-alerts' : ''}`} aria-label="Varsler">
+  const hasMeteoAlarm = meteoAlerts.length > 0;
+  return <aside className={`weather-alerts${header ? ' header-alerts' : ''}${alerts.length ? ' has-alerts' : ''}${meteoAlarmSeverityLevel ? ` weather-alerts-meteoalarm-${meteoAlarmSeverityLevel}` : ''}${meteoAlarmOpen ? ' meteoalarm-open' : ''}`} aria-label="Varsler">
     <span className="weather-alerts-title">Varsler</span>
-    {alerts.length ? <div className="weather-alert-list">{alerts.map((alert) => <div className={`weather-alert weather-alert-${alert.kind}`} key={alert.kind} title={alert.value ? `${alert.label}: ${alert.value}` : alert.label}>
-      <Icon>{alert.icon}</Icon><span>{alert.label}</span>{alert.value && <strong>{alert.value}</strong>}
-    </div>)}</div> : <span className="weather-alerts-empty">Ingen varsler</span>}
+    {hasMeteoAlarm && <div className="meteoalarm-details" id="meteoalarm-details" aria-hidden={!meteoAlarmOpen}>{meteoAlerts.map((alert, index) => <article className="meteoalarm-detail" key={`${alert.name}-${index}`}><div className="meteoalarm-detail-heading"><span className="meteoalarm-icons">{alert.events.map((event) => <Icon key={event}>{meteoEventMeta[event]?.icon ?? 'warning'}</Icon>)}</span><div><strong>{alert.name}</strong>{alert.area && <small>{alert.area}</small>}</div>{alert.severity && <b>{severityLabel[alert.severity]}</b>}</div>{(alert.seriousness || alert.response) && <p className="meteoalarm-context">{[alert.seriousness, alert.response].filter(Boolean).join(' · ')}</p>}{alert.description && <p>{alert.description}</p>}{alert.consequences && <section><strong>Konsekvenser</strong><p>{alert.consequences}</p></section>}{alert.instruction && <section className="meteoalarm-instruction"><strong>Råd</strong><p>{alert.instruction}</p></section>}{(alert.startsAt || alert.endsAt) && <p className="meteoalarm-times">{alert.startsAt && <>Gjelder fra {formatWarningTime(alert.startsAt)}</>}{alert.startsAt && alert.endsAt && <br/>}{alert.endsAt && <>til {formatWarningTime(alert.endsAt)}</>}</p>}{alert.incidentName && <small>Ekstremvær: {alert.incidentName}</small>}{alert.altitude && <small>Høyde: {alert.altitude}</small>}</article>)}</div>}
+    {alerts.length ? <div className="weather-alert-list">{alerts.map((alert) => alert.kind === 'meteoalarm'
+      ? <button type="button" className={`weather-alert weather-alert-${alert.kind}${alert.severity ? ` weather-alert-${alert.severity}` : ''}`} key={alert.kind} title={meteoAlerts.map((entry) => entry.name).join(' · ')} aria-expanded={meteoAlarmOpen} aria-controls="meteoalarm-details" onClick={() => setMeteoAlarmOpen((open) => !open)}>
+        <span className="meteoalarm-icons">{meteoIcons.length ? meteoIcons.map((event) => <Icon key={event}>{meteoEventMeta[event]?.icon ?? 'warning'}</Icon>) : <Icon>{alert.icon}</Icon>}</span><span>{alert.label}</span>{alert.value && <strong>{alert.value}</strong>}
+      </button>
+      : <div className={`weather-alert weather-alert-${alert.kind}`} key={alert.kind} title={alert.value ? `${alert.label}: ${alert.value}` : alert.label}>
+        <Icon>{alert.icon}</Icon><span>{alert.label}</span>{alert.value && <strong>{alert.value}</strong>}
+      </div>)}</div> : <span className="weather-alerts-empty">Ingen varsler</span>}
   </aside>;
 }
 

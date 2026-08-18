@@ -57,7 +57,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   doorbellCamera: '',
   courtyardCamera: 'camera.gaardsplass_fluent_lens_0',
   weatherSummary: '',
-  meteoAlarm: 'binary_sensor.meteoalarm',
+  meteoAlarm: 'sensor.met_weather_alerts_county_39',
   lightningDistance: 'sensor.blitzortung_lightning_distance',
   auroraVisibility: 'binary_sensor.aurora_visibility_visibility_alert',
   energyToday: 'sensor.accumulated_consumption_klaras_vei_14',
