@@ -721,17 +721,20 @@ html,body,#root,.weather-detail{max-width:100%;overflow-x:hidden}
 .sun-moon-card{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(90px,.7fr);grid-template-rows:auto 1fr;min-height:clamp(210px,15.75vw,242px);padding:clamp(14px,1.3vw,20px)}
 .sun-moon-card>header{grid-column:1/-1}
 .sun-moon-card>header>.material-symbols-outlined{display:none}
-.sun-arc{--sun-arc-height:clamp(56px,10vh,96px);align-self:stretch;display:flex;align-items:end;margin:0 clamp(4px,.8vw,12px);padding:clamp(70px,11vh,104px) 0 0;border:0;border-radius:0}
-.sun-arc:before{top:auto;bottom:47px;left:10%;width:80%;height:var(--sun-arc-height);border:2px dashed #e5a313;border-bottom:0;border-radius:50% 50% 0 0 / 100% 100% 0 0;background:transparent;box-shadow:none;transform:none}
-.sun-arc:after{content:'';position:absolute;right:0;bottom:42px;left:0;height:11px;background:linear-gradient(#d9a226,#d9a226) center/100% 1px no-repeat,radial-gradient(circle at 10% 50%,#e5a313 0 5px,transparent 5.5px),radial-gradient(circle at 90% 50%,#e5a313 0 5px,transparent 5.5px)}
-.sun-arc i{position:absolute;top:auto;bottom:calc(33px + var(--sun-arc-height));left:50%;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#f4bb2b;color:#211a09;box-shadow:0 0 14px rgba(229,163,19,.6);transform:translateX(-50%)}
+.sun-arc{--sun-line-bottom:42px;--sun-arc-height:clamp(48px,52%,96px);align-self:stretch;display:block;min-height:0;margin:0 clamp(4px,.8vw,12px);padding:0;border:0;border-radius:0}
+.sun-arc:before{top:auto;bottom:var(--sun-line-bottom);left:10%;width:80%;height:var(--sun-arc-height);border:2px dashed #e5a313;border-bottom:0;border-radius:50% 50% 0 0 / 100% 100% 0 0;background:transparent;box-shadow:none;transform:none}
+.sun-arc:after{content:'';position:absolute;right:0;bottom:calc(var(--sun-line-bottom) - 5px);left:0;height:11px;background:linear-gradient(#d9a226,#d9a226) center/100% 1px no-repeat,radial-gradient(circle at 10% 50%,#e5a313 0 5px,transparent 5.5px),radial-gradient(circle at 90% 50%,#e5a313 0 5px,transparent 5.5px)}
+.sun-arc i{position:absolute;top:auto;bottom:calc(var(--sun-line-bottom) + var(--sun-arc-height) - 14px);left:50%;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#f4bb2b;color:#211a09;box-shadow:0 0 14px rgba(229,163,19,.6);transform:translateX(-50%)}
+.sun-arc span{position:absolute;bottom:0}
+.sun-arc span:first-child{left:0}
+.sun-arc span:last-child{right:0}
 .sun-arc i .material-symbols-outlined{font-size:18px}
-.sun-arc strong{font-size:19px}
+.sun-arc strong{font-size:clamp(15px,1.25vw,19px)}
 .moon-phase{align-self:stretch;min-width:0;flex-direction:column;align-items:center;justify-content:center;margin:0 0 0 clamp(10px,1.3vw,20px);padding-left:clamp(10px,1.3vw,20px);border-left:1px solid rgba(255,255,255,.38);text-align:center}
 .moon-phase>.material-symbols-outlined{font-size:clamp(42px,3.8vw,58px)}
 .moon-phase small{display:none}
 .moon-phase strong{max-width:120px;font-size:17px;line-height:1.25}
-@media(max-width:800px){.sun-moon-card{min-height:210px}.sun-arc{--sun-arc-height:82px;padding-top:92px}.moon-phase{margin-left:12px;padding-left:12px}}
+@media(max-width:800px){.sun-moon-card{min-height:210px}.sun-arc{--sun-line-bottom:40px;--sun-arc-height:clamp(52px,48%,82px);padding:0}.moon-phase{margin-left:12px;padding-left:12px}}
 
 /* Layered aurora from the concept: star field, glowing ribbon, and fine wave lines. */
 .aurora-card{isolation:isolate;background:linear-gradient(145deg,#0b1718 0%,#0c1d1c 48%,#0a1718 100%)}
@@ -745,16 +748,17 @@ html,body,#root,.weather-detail{max-width:100%;overflow-x:hidden}
   .weather-detail{height:100%;overflow:hidden}
   .weather-detail-grid.today-view{height:calc(100% - 70px);min-height:0;grid-template-rows:minmax(0,1.08fr) minmax(0,.94fr) minmax(0,.72fr)}
   .today-view>.detail-chart,.today-view>.radar-card,.today-view>.lightning-map-card,.today-view>.pollen-card,.today-view>.sun-moon-card,.today-view>.aurora-card{min-height:0}
-  .today-view>.detail-chart{grid-template-columns:minmax(0,5fr) minmax(168px,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:16px;overflow:hidden}
+  .today-view>.detail-chart{grid-template-columns:minmax(0,5fr) minmax(168px,1fr);grid-template-rows:minmax(0,1fr);column-gap:16px;overflow:hidden}
   .today-view .detail-chart-heading{display:contents}
-  .today-view .detail-chart-heading>h2{grid-column:1;grid-row:1}
-  .today-view .weather-live-readings{grid-column:2;grid-row:1/3;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:0;padding-left:14px;border-left:1px solid rgba(255,255,255,.18)}
+  .today-view .detail-chart-heading>h2{display:none}
+  .today-view .weather-live-readings{grid-column:2;grid-row:1;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:0;padding-left:14px;border-left:1px solid rgba(255,255,255,.18)}
   .today-view .local-reading{align-items:center;min-width:0;padding:8px 0;border-left:0;border-bottom:1px solid rgba(255,255,255,.11)}
   .today-view .local-reading:last-child{border-bottom:0}
   .today-view .local-reading>.material-symbols-outlined{font-size:30px}
   .today-view .local-reading strong{font-size:clamp(15px,1.35vw,21px)}
-  .today-view .detail-chart .weather-chart-wrap{grid-column:1;grid-row:2;display:grid;height:100%;min-height:0;grid-template-rows:auto minmax(0,1fr);margin-top:6px;overflow:hidden}
-  .today-view .detail-chart .weather-chart{height:100%;min-height:0}
+  .today-view .detail-chart .weather-chart-wrap{grid-column:1;grid-row:1;display:grid;height:100%;min-height:0;grid-template-rows:minmax(0,1fr) auto;margin:0;overflow:hidden}
+  .today-view .detail-chart .weather-chart{grid-row:1;height:100%;min-height:0}
+  .today-view .detail-chart .chart-legend{grid-row:2;margin:5px 0 0}
   .today-view>.radar-card,.today-view>.lightning-map-card{grid-template-rows:auto minmax(0,1fr) auto}
   .today-view .radar-card iframe,.today-view .lightning-map,.today-view .lightning-map iframe{height:100%;min-height:0}
 }
