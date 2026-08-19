@@ -287,13 +287,15 @@ describe('HomeAssistantClient', () => {
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify([
       { summary: 'Tannlege', start: '2026-08-13T08:30:00+02:00', end: '2026-08-13T09:00:00+02:00' },
     ]), { status: 200 }));
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify([[{ state: '27.4' }, { state: '31.2' }]]), { status: 200 }));
 
     const result = await new HomeAssistantClient('http://ha:8123', 'secret', fetcher).getDashboardStates();
 
     expect(fetcher.mock.calls.slice(0, entityIds.length).map(([url]) => url)).toEqual(entityIds.map((entityId) => `http://ha:8123/api/states/${entityId}`));
     expect(fetcher.mock.calls[entityIds.length][0]).toMatch(/^http:\/\/ha:8123\/api\/calendars\/calendar\.outlook_andreas_felles\?start=.*&end=.*/);
-    expect(fetcher.mock.calls[entityIds.length + 1][0]).toMatch(/^http:\/\/ha:8123\/api\/history\/period\//);
+    expect(fetcher.mock.calls[entityIds.length + 1][0]).toBe('http://ha:8123/api/states');
+    expect(fetcher.mock.calls[entityIds.length + 2][0]).toMatch(/^http:\/\/ha:8123\/api\/history\/period\//);
     expect(Object.keys(result.states)).toHaveLength(Object.keys(defaultDashboardEntityIds).length);
     expect(result.states.energyYesterday).toMatchObject({ state: 'unavailable' });
     expect(result.states.doorbellCamera).toMatchObject({ state: 'unavailable' });

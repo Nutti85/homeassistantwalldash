@@ -196,6 +196,11 @@ export class HomeAssistantClient {
         states[key] = { entity_id: entityId, state: 'unavailable', attributes: {} };
       }
     }));
+    try {
+      states.lightningStrikes = await this.getLightningStrikes();
+    } catch {
+      states.lightningStrikes = { entity_id: 'geo_location.lightning_strike_*', state: 'unavailable', attributes: { strikes: [] } };
+    }
     if (this.weatherAutomationTraceId) {
       try {
         const summary = await this.getWeatherSummaryFromTrace();
@@ -647,6 +652,22 @@ export class HomeAssistantClient {
       state: payload.state,
       attributes: payload.attributes,
     };
+  }
+
+  private async getLightningStrikes(): Promise<HomeAssistantState> {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/states`, { method: 'GET', headers: this.headers() });
+    if (!response.ok) throw communicationError();
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) throw communicationError();
+    const strikes = payload.flatMap((item) => {
+      if (!isPlainObject(item) || typeof item.entity_id !== 'string' || !item.entity_id.startsWith('geo_location.lightning_strike_') || typeof item.state !== 'string' || !isPlainObject(item.attributes)) return [] as HomeAssistantState[];
+      const latitude = Number(item.attributes.latitude);
+      const longitude = Number(item.attributes.longitude);
+      return Number.isFinite(latitude) && Number.isFinite(longitude)
+        ? [{ entity_id: item.entity_id, state: item.state, attributes: item.attributes }]
+        : [];
+    });
+    return { entity_id: 'geo_location.lightning_strike_*', state: strikes.length ? 'on' : 'off', attributes: { strikes } };
   }
 
   private async getCalendarState(state: HomeAssistantState): Promise<HomeAssistantState> {

@@ -240,6 +240,24 @@ describe('redesigned dashboard', () => {
     const week = screen.getByRole('tab', { name: 'Neste 7 dager' }); fireEvent.click(week); expect(week).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('shows local weather readings, pollen and coordinate-backed lightning in I dag', async () => {
+    render(<App api={createApi({
+      netatmoPressure: state('sensor.pressure', '1018'), netatmoWindSpeed: state('sensor.wind', '4.2'), netatmoWindGust: state('sensor.gust', '7.8'), netatmoWindDirection: state('sensor.direction', 'NV'),
+      netatmoRain: state('sensor.rain', '0'), netatmoRainToday: state('sensor.rain_today', '1.8'), auroraChance: state('sensor.aurora', '34'), auroraVisibility: state('binary_sensor.aurora', 'off'), moonPhase: state('sensor.moon', 'waxing_crescent'), sun: state('sun.sun', 'above_horizon', { next_rising: '2026-08-20T03:44:00+00:00', next_setting: '2026-08-19T19:05:00+00:00' }),
+      pollenBirch: state('sensor.pollen_birch', '1', { level_name: 'Lav' }), pollenGrass: state('sensor.pollen_grass', '0', { level_name: 'Ingen' }), pollenMugwort: state('sensor.pollen_mugwort', '0', { level_name: 'Ingen' }),
+      lightningDistance: state('sensor.lightning_distance', '8.2'), lightningStrikes: state('geo_location.lightning_strike_*', 'on', { strikes: [state('geo_location.lightning_strike_example', '0', { latitude: 59.25399, longitude: 10.56956, publication_date: '2026-08-15T21:32:28.310916+00:00' })] }),
+    })} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Åpne detaljert vær' }));
+    expect(await screen.findByText('Live Blitzortung-posisjoner')).toBeInTheDocument();
+    expect(screen.getByTitle('Kart over lyn i nærheten av Sandefjord')).toBeInTheDocument();
+    expect(screen.getByText('Voksende sigd')).toBeInTheDocument();
+    expect(screen.getByText('05:44')).toBeInTheDocument();
+    expect(screen.getByText('21:05')).toBeInTheDocument();
+    expect(screen.getByText('Nærmeste 8,2 km')).toBeInTheDocument();
+    expect(screen.getByText('Bjørk')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Time for time' })).not.toBeInTheDocument();
+  });
+
   it('shows all weather series together in one accessible graph', async () => {
     const forecast = Array.from({ length: 9 }, (_, index) => ({
       datetime: new Date(Date.parse('2026-08-10T21:00:00+02:00') + index * 3 * 60 * 60 * 1000).toISOString(),

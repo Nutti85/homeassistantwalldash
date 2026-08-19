@@ -729,11 +729,56 @@ function ChildDashboard({ states, pending, errors, action, adjust, editing, layo
   return <EditableDashboard mode="child" editing={editing} layout={layout} updateLayout={updateLayout} children={[{ id: 'guest', label: 'Gjestemodus', content: <GuestSwitch child on={states.guestMode?.state === 'on'} pending={pending.guestMode} action={() => action('guestMode')}/> }, { id: 'weather', label: 'Vær', content: <WeatherOverview states={states}/> }, { id: 'scenes', label: 'Scener', content: <section className="card scenes-card large"><h2>Scener</h2><SceneButtons action={action} pending={pending} errors={errors}/></section> }]}/>;
 }
 
+const numberState = (state?: HomeAssistantState) => {
+  const value = Number(stateValue(state));
+  return Number.isFinite(value) ? value : undefined;
+};
+const attributeTime = (state: HomeAssistantState | undefined, key: string) => {
+  const value = state?.attributes[key];
+  const date = typeof value === 'number' ? new Date(value * 1000) : typeof value === 'string' ? new Date(value) : undefined;
+  return date && !Number.isNaN(date.getTime())
+    ? date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
+};
+const pollenLevel = (state?: HomeAssistantState) => {
+  const value = numberState(state);
+  const label = typeof state?.attributes.level_name === 'string' ? state.attributes.level_name : ['Ingen', 'Lav', 'Moderat', 'Høy', 'Ekstrem'][value ?? 0] ?? '—';
+  return { value, label };
+};
+const moonLabel = (state?: HomeAssistantState) => ({
+  'new_moon': 'Nymåne', 'waxing_crescent': 'Voksende sigd', 'first_quarter': 'Første kvarter', 'waxing_gibbous': 'Voksende måne',
+  'full_moon': 'Fullmåne', 'waning_gibbous': 'Avtagende måne', 'last_quarter': 'Siste kvarter', 'waning_crescent': 'Avtagende sigd',
+}[stateValue(state) ?? ''] ?? '—');
+type LightningStrike = { id: string; latitude: number; longitude: number; published?: string };
+const lightningStrikes = (state?: HomeAssistantState): LightningStrike[] => {
+  const raw = state?.attributes.strikes;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [] as LightningStrike[];
+    const strike = item as HomeAssistantState;
+    const latitude = Number(strike.attributes?.latitude); const longitude = Number(strike.attributes?.longitude);
+    return Number.isFinite(latitude) && Number.isFinite(longitude) ? [{ id: strike.entity_id, latitude, longitude, published: typeof strike.attributes.publication_date === 'string' ? strike.attributes.publication_date : undefined }] : [];
+  }).sort((a, b) => Date.parse(b.published ?? '') - Date.parse(a.published ?? '')).slice(0, 24);
+};
+
+function LightningMap({ strikes, distance }: { strikes: LightningStrike[]; distance?: number }) {
+  const bounds = { west: 9.94, east: 10.50, south: 58.97, north: 59.30 };
+  const markerStyle = (strike: LightningStrike): CSSProperties => ({ left: `${(strike.longitude - bounds.west) / (bounds.east - bounds.west) * 100}%`, top: `${(bounds.north - strike.latitude) / (bounds.north - bounds.south) * 100}%` });
+  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bounds.west}%2C${bounds.south}%2C${bounds.east}%2C${bounds.north}&layer=mapnik&marker=59.1312%2C10.2166`;
+  return <section className="card lightning-map-card"><header><div><h2>Lyn</h2><small>Live Blitzortung-posisjoner</small></div><Icon>thunderstorm</Icon></header><div className="lightning-map" aria-label="Kart over lyn i nærheten av Sandefjord"><iframe title="Kart over lyn i nærheten av Sandefjord" src={mapUrl} loading="lazy"/><div className="lightning-markers">{strikes.map((strike) => <span key={strike.id} className="lightning-marker" style={markerStyle(strike)} title={strike.published ? `Lynnedslag ${new Date(strike.published).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : 'Lynnedslag'}><Icon>bolt</Icon></span>)}</div>{!strikes.length && <p className="lightning-empty">Ingen aktive lynnedslag</p>}</div><footer><span>{distance === undefined ? 'Nærmeste —' : `Nærmeste ${fmt(distance, ' km')}`}</span><span>{strikes.length ? `${strikes.length} aktive markører` : 'Ingen markører'}</span></footer></section>;
+}
+
+function LocalReading({ icon, label, value, detail }: { icon: string; label: string; value: string; detail?: string }) {
+  return <div className="local-reading"><Icon>{icon}</Icon><span><small>{label}</small><strong>{value}</strong>{detail && <em>{detail}</em>}</span></div>;
+}
+
 function DetailedWeather({ states, close }: { states: Record<string, HomeAssistantState>; close: () => void }) {
   const [tab, setTab] = useState<WeatherTab>('today');
-  const hourly = forecastPoints(states.weatherHourly);
-  const daily = forecastPoints(states.weatherDaily);
-  return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected={tab === 'today'} className={tab === 'today' ? 'selected' : ''} onClick={() => setTab('today')}>I dag</button><button type="button" role="tab" aria-selected={tab === 'week'} className={tab === 'week' ? 'selected' : ''} onClick={() => setTab('week')}>Neste 7 dager</button></div></header><div className="weather-detail-grid"><section className="card detail-chart"><h2>{tab === 'today' ? 'I dag' : 'Neste 7 dager'}</h2><WeatherChart points={tab === 'today' ? hourly : daily} detailed/></section><section className="card hourly-card"><h2>Time for time</h2><div className="hourly-strip">{hourly.slice(0, 7).map((point) => <div key={point.datetime}><time>{new Date(point.datetime).toLocaleTimeString('nb-NO', {hour:'2-digit', minute:'2-digit'})}</time><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>{fmt(point.precipitation, ' mm')}</small><small>{fmt(point.windSpeed, ' m/s')}</small></div>)}{!hourly.length && <p>— Timevarsel ikke tilgjengelig</p>}</div></section><section className="card week-card"><h2>Neste 7 dager</h2>{daily.slice(0,7).map((point) => <div key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO',{weekday:'short'})}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>/ {fmt(point.templow, '°')}</small></div>)}{!daily.length && <p>— Ukesvarsel ikke tilgjengelig</p>}</section></div></main>;
+  const hourly = forecastPoints(states.weatherHourly); const daily = forecastPoints(states.weatherDaily);
+  const strikes = lightningStrikes(states.lightningStrikes); const distance = numberState(states.lightningDistance);
+  const pollen = [['Bjørk', states.pollenBirch], ['Gress', states.pollenGrass], ['Burot', states.pollenMugwort]] as const;
+  const windDirection = stateValue(states.netatmoWindDirection) ?? '—';
+  if (tab === 'week') return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected={false} onClick={() => setTab('today')}>I dag</button><button type="button" role="tab" aria-selected className="selected">Neste 7 dager</button></div></header><div className="weather-detail-grid week-view"><section className="card detail-chart"><h2>Neste 7 dager</h2><WeatherChart points={daily} detailed/></section><section className="card week-card"><h2>Utsikt</h2>{daily.slice(0, 7).map((point) => <div key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>/ {fmt(point.templow, '°')}</small></div>)}</section><section className="card hourly-card"><h2>Planlegg uken</h2><p className="weather-detail-copy">Varslet beholder fokus på temperatur, nedbør og vind. Pollenstatus og lokale målinger vises på fanen I dag.</p></section></div></main>;
+  return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected className="selected">I dag</button><button type="button" role="tab" aria-selected={false} onClick={() => setTab('week')}>Neste 7 dager</button></div></header><div className="weather-detail-grid today-view"><section className="card detail-chart"><div className="detail-chart-heading"><h2>I dag · vær og prognose</h2><div className="weather-live-readings"><LocalReading icon="air" label="Vind" value={`${fmt(numberState(states.netatmoWindSpeed), ' m/s')} ${windDirection}`} detail={`Kast ${fmt(numberState(states.netatmoWindGust), ' m/s')}`}/><LocalReading icon="water_drop" label="Regn" value={fmt(numberState(states.netatmoRain), ' mm')} detail={`${fmt(numberState(states.netatmoRainToday), ' mm')} i dag`}/><LocalReading icon="speed" label="Trykk" value={fmt(numberState(states.netatmoPressure), ' hPa')}/></div></div><WeatherChart points={hourly} detailed/></section><section className="card radar-card"><header><h2>Radar</h2><small>Windy · Sandefjord</small></header><iframe title="Nedbørsradar for Sandefjord" loading="lazy" src="https://embed.windy.com/embed2.html?lat=59.1312&lon=10.2166&zoom=8&level=surface&overlay=radar&menu=&message=false&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&detailLat=59.1312&detailLon=10.2166&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&radarRange=-1"/><footer>Radar © Windy</footer></section><LightningMap strikes={strikes} distance={distance}/><section className="card pollen-card"><header><div><h2>Pollen</h2><small>Østlandet med Oslo</small></div><Icon>eco</Icon></header>{pollen.map(([label, state]) => <div className="pollen-row" key={label}><span>{label}</span><b className={`pollen-level level-${pollenLevel(state).value ?? 0}`}>{pollenLevel(state).label}</b></div>)}<p>{stateValue(states.pollenForecast) ?? 'Pollenvarsel ikke tilgjengelig'}</p></section><section className="card sun-moon-card"><header><h2>Sol og måne</h2><Icon>light_mode</Icon></header><div className="sun-arc"><span><small>Soloppgang</small><strong>{attributeTime(states.sun, 'next_rising')}</strong></span><i><Icon>light_mode</Icon></i><span><small>Solnedgang</small><strong>{attributeTime(states.sun, 'next_setting')}</strong></span></div><div className="moon-phase"><Icon>brightness_2</Icon><span><small>Månefase</small><strong>{moonLabel(states.moonPhase)}</strong></span></div></section><section className="card aurora-card"><header><h2>Nordlys</h2><Icon>flare</Icon></header><strong>{fmt(numberState(states.auroraChance), ' %')}</strong><span>{stateValue(states.auroraVisibility) === 'on' ? 'Mulig synlighet nå' : 'Lav synlighet akkurat nå'}</span><div className="aurora-lines" aria-hidden="true"/></section></div></main>;
 }
 
 const stateRefreshIntervalMs = 30_000;
