@@ -240,10 +240,31 @@ describe('redesigned dashboard', () => {
     const week = screen.getByRole('tab', { name: 'Neste 7 dager' }); fireEvent.click(week); expect(week).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('reloads the detailed-weather radar every 15 minutes', async () => {
+    vi.useFakeTimers();
+    render(<App api={createApi()} />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Åpne detaljert vær' }));
+    const radar = screen.getByTitle('Nedbørsradar for Sandefjord');
+    expect(radar).toHaveAttribute('src', expect.stringContaining('refresh=0'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60 * 1000); });
+    expect(screen.getByTitle('Nedbørsradar for Sandefjord')).toHaveAttribute('src', expect.stringContaining('refresh=1'));
+    vi.useRealTimers();
+  });
+
+  it('shows Netatmo wind readings and points the compass arrow where the wind is travelling', async () => {
+    render(<App api={createApi({
+      netatmoWindAngle: state('sensor.wind_angle', '225'), netatmoWindDirection: state('sensor.wind_direction', 'SV'),
+      netatmoWindSpeed: state('sensor.wind_speed', '4.2'), netatmoWindGust: state('sensor.wind_gust', '7.8'),
+    })} />);
+    expect(await screen.findByLabelText('Vind: 4,2 m/s. Kast: 7,8 m/s. Vindretning SV. Pilen peker mot NØ.')).toBeInTheDocument();
+    expect(document.querySelector('.wind-compass-arrow')).toHaveStyle({ transform: 'translate(-50%, -50%) rotate(45deg)' });
+  });
+
   it('shows local weather readings, pollen and coordinate-backed lightning in I dag', async () => {
     render(<App api={createApi({
       netatmoPressure: state('sensor.pressure', '1018'), netatmoWindSpeed: state('sensor.wind', '4.2'), netatmoWindGust: state('sensor.gust', '7.8'), netatmoWindDirection: state('sensor.direction', 'NV'),
-      netatmoRain: state('sensor.rain', '0'), netatmoRainToday: state('sensor.rain_today', '1.8'), auroraChance: state('sensor.aurora', '34'), auroraVisibility: state('binary_sensor.aurora', 'off'), moonPhase: state('sensor.moon', 'waxing_crescent'), sun: state('sun.sun', 'above_horizon', { next_rising: '2026-08-20T03:44:00+00:00', next_setting: '2026-08-19T19:05:00+00:00' }),
+      netatmoRain: state('sensor.rain', '0'), netatmoRainToday: state('sensor.rain_today', '1.8'), auroraChance: state('sensor.aurora', '34'), auroraVisibility: state('binary_sensor.aurora', 'off'), moonPhase: state('sensor.moon', 'waxing_crescent'), sun: state('sun.sun', 'above_horizon', { elevation: 18.5, azimuth: 232.4, next_rising: '2026-08-20T03:44:00+00:00', next_setting: '2026-08-19T19:05:00+00:00' }),
       pollenBirch: state('sensor.pollen_birch', '1', { level_name: 'Lav' }), pollenGrass: state('sensor.pollen_grass', '0', { level_name: 'Ingen' }), pollenMugwort: state('sensor.pollen_mugwort', '0', { level_name: 'Ingen' }),
       lightningDistance: state('sensor.lightning_distance', '8.2'), lightningStrikes: state('geo_location.lightning_strike_*', 'on', { strikes: [state('geo_location.lightning_strike_example', '0', { latitude: 59.25399, longitude: 10.56956, publication_date: '2026-08-15T21:32:28.310916+00:00' })] }),
     })} />);
@@ -251,8 +272,10 @@ describe('redesigned dashboard', () => {
     expect(await screen.findByText('Live Blitzortung-posisjoner')).toBeInTheDocument();
     expect(screen.getByTitle('Kart over lyn i nærheten av Sandefjord')).toBeInTheDocument();
     expect(screen.getByText('Voksende sigd')).toBeInTheDocument();
-    expect(screen.getByText('05:44')).toBeInTheDocument();
-    expect(screen.getByText('21:05')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Sol 18,5° over horisonten, asimut 232,4°/ })).toBeInTheDocument();
+    expect(screen.getByText('Soloppgang')).toBeInTheDocument();
+    expect(screen.getByText('Solnedgang')).toBeInTheDocument();
+    expect(screen.getAllByText(/i morgen/)).toHaveLength(2);
     expect(screen.getByText('Nærmeste 8,2 km')).toBeInTheDocument();
     expect(screen.getByText('Bjørk')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Time for time' })).not.toBeInTheDocument();

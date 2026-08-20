@@ -113,6 +113,7 @@ body{background:#060d0e}
     gap:14px;
   }
   .regular-layout>.layout-item[data-layout-id="weather"] .weather-now{grid-column:1}
+  .regular-layout>.layout-item[data-layout-id="weather"] .weather-wind-reading{grid-column:3;grid-row:1;align-self:start;justify-self:end}
   .regular-layout>.layout-item[data-layout-id="weather"] .weather-summary{grid-column:2 / -1;width:auto}
   .regular-layout>.layout-item[data-layout-id="weather"] .weather-summary p{
     display:block;
@@ -350,7 +351,8 @@ body{min-width:0}
   .weather-regular .weather-now{gap:12px}
   .weather-regular .weather-now>.material-symbols-outlined{font-size:68px}
   .weather-regular .weather-now h2{font-size:38px}
-  .weather-regular .weather-now span{font-size:15px}
+.weather-regular .weather-now span{font-size:15px}
+.weather-wind-reading{display:flex;align-items:center;justify-self:end;gap:9px;min-width:138px;font-variant-numeric:tabular-nums}.wind-compass{position:relative;width:58px;height:58px;flex:0 0 58px;border:1px solid rgba(255,255,255,.17);border-radius:50%;color:var(--mint);box-shadow:inset 0 0 0 5px rgba(103,199,151,.035)}.wind-compass b{position:absolute;color:var(--text-muted);font-size:9px;font-weight:600;line-height:1}.wind-compass .compass-n{top:5px;left:50%;transform:translateX(-50%)}.wind-compass .compass-e{right:6px;top:50%;transform:translateY(-50%)}.wind-compass .compass-s{bottom:5px;left:50%;transform:translateX(-50%)}.wind-compass .compass-w{left:6px;top:50%;transform:translateY(-50%)}.wind-compass .material-symbols-outlined{position:absolute;top:50%;left:50%;display:block;color:var(--mint);font-size:25px;line-height:1;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}.wind-compass-arrow{transform-origin:center}.wind-compass.is-unavailable{color:var(--text-muted)}.wind-reading-values{display:grid;gap:5px;min-width:67px}.wind-reading-values>span{display:grid;gap:1px}.wind-reading-values small{color:var(--text-muted);font-size:9px;font-weight:500;letter-spacing:.07em;text-transform:uppercase}.wind-reading-values strong{color:var(--text);font-size:14px;font-weight:500;line-height:1.05;white-space:nowrap}
    .weather-regular .weather-chart-wrap{grid-column:1 / -1;grid-row:1;align-self:end;height:calc(100% - 95px);margin:0;padding:0;overflow:hidden}
   .weather-regular .weather-chart{min-height:0;height:100%;flex:1 1 auto}
   .weather-regular .chart-legend{margin-top:7px;font-size:12px}
@@ -718,23 +720,19 @@ body{min-width:0}
   .today-view>.aurora-card{grid-column:3}
 }
 html,body,#root,.weather-detail{max-width:100%;overflow-x:hidden}
-.sun-moon-card{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(90px,.7fr);grid-template-rows:auto 1fr;min-height:clamp(210px,15.75vw,242px);padding:clamp(14px,1.3vw,20px)}
-.sun-moon-card>header{grid-column:1/-1}
-.sun-moon-card>header>.material-symbols-outlined{display:none}
-.sun-arc{--sun-line-bottom:42px;--sun-arc-height:clamp(48px,52%,96px);align-self:stretch;display:block;min-height:0;margin:0 clamp(4px,.8vw,12px);padding:0;border:0;border-radius:0}
-.sun-arc:before{top:auto;bottom:var(--sun-line-bottom);left:10%;width:80%;height:var(--sun-arc-height);border:2px dashed #e5a313;border-bottom:0;border-radius:50% 50% 0 0 / 100% 100% 0 0;background:transparent;box-shadow:none;transform:none}
-.sun-arc:after{content:'';position:absolute;right:0;bottom:calc(var(--sun-line-bottom) - 5px);left:0;height:11px;background:linear-gradient(#d9a226,#d9a226) center/100% 1px no-repeat,radial-gradient(circle at 10% 50%,#e5a313 0 5px,transparent 5.5px),radial-gradient(circle at 90% 50%,#e5a313 0 5px,transparent 5.5px)}
-.sun-arc i{position:absolute;top:auto;bottom:calc(var(--sun-line-bottom) + var(--sun-arc-height) - 14px);left:50%;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#f4bb2b;color:#211a09;box-shadow:0 0 14px rgba(229,163,19,.6);transform:translateX(-50%)}
-.sun-arc span{position:absolute;bottom:0}
-.sun-arc span:first-child{left:0}
-.sun-arc span:last-child{right:0}
-.sun-arc i .material-symbols-outlined{font-size:18px}
-.sun-arc strong{font-size:clamp(15px,1.25vw,19px)}
-.moon-phase{align-self:stretch;min-width:0;flex-direction:column;align-items:center;justify-content:center;margin:0 0 0 clamp(10px,1.3vw,20px);padding-left:clamp(10px,1.3vw,20px);border-left:1px solid rgba(255,255,255,.38);text-align:center}
-.moon-phase>.material-symbols-outlined{font-size:clamp(42px,3.8vw,58px)}
-.moon-phase small{display:none}
-.moon-phase strong{max-width:120px;font-size:17px;line-height:1.25}
-@media(max-width:800px){.sun-moon-card{min-height:210px}.sun-arc{--sun-line-bottom:40px;--sun-arc-height:clamp(52px,48%,82px);padding:0}.moon-phase{margin-left:12px;padding-left:12px}}
+.sun-moon-card{position:relative;display:block;min-height:clamp(210px,15.75vw,242px);padding:0;overflow:hidden;isolation:isolate;transition:background 1.5s ease}
+.sun-moon-card.sky-night{background:radial-gradient(circle at 14% 28%,rgba(223,239,245,.65) 0 1px,transparent 1.5px),radial-gradient(circle at 67% 19%,rgba(223,239,245,.55) 0 1px,transparent 1.5px),radial-gradient(circle at 84% 46%,rgba(223,239,245,.5) 0 1px,transparent 1.5px),linear-gradient(180deg,#07101d 0%,#0a1927 62%,#172127 100%)}
+.sun-moon-card.sky-astronomical{background:radial-gradient(circle at 18% 23%,rgba(235,241,246,.42) 0 1px,transparent 1.5px),radial-gradient(circle at 79% 31%,rgba(235,241,246,.4) 0 1px,transparent 1.5px),linear-gradient(180deg,#10172b 0%,#19233a 60%,#493743 100%)}
+.sun-moon-card.sky-nautical{background:linear-gradient(180deg,#172640 0%,#35435b 57%,#9a655b 100%)}
+.sun-moon-card.sky-civil.sky-rising{background:radial-gradient(ellipse at 25% 92%,rgba(255,211,137,.72),transparent 32%),linear-gradient(180deg,#344c6a 0%,#a46c68 62%,#edaa72 100%)}
+.sun-moon-card.sky-civil.sky-setting{background:radial-gradient(ellipse at 75% 92%,rgba(255,174,101,.75),transparent 34%),linear-gradient(180deg,#303c63 0%,#945d6c 58%,#df8b61 100%)}
+.sun-moon-card.sky-golden.sky-rising{background:radial-gradient(circle at 25% 78%,rgba(255,231,155,.72),transparent 28%),linear-gradient(180deg,#5686a4 0%,#9ab0b2 58%,#e7b77c 100%)}
+.sun-moon-card.sky-golden.sky-setting{background:radial-gradient(circle at 75% 78%,rgba(255,205,113,.72),transparent 28%),linear-gradient(180deg,#537596 0%,#a5939e 58%,#d99368 100%)}
+.sun-moon-card.sky-day{background:linear-gradient(180deg,#315f79 0%,#5f8999 65%,#92aaa7 100%)}
+.sky-position-chart{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%}.sky-altitude-line{fill:none;stroke:rgba(255,255,255,.28);stroke-width:.8;stroke-dasharray:3 4}.sky-altitude-line+*{pointer-events:none}.sky-cardinals text{fill:rgba(247,249,247,.78);font-size:8px;font-weight:600;text-shadow:0 1px 2px #000}.sun-trajectory,.moon-trajectory{fill:none;vector-effect:non-scaling-stroke}.sun-trajectory{stroke:rgba(255,211,83,.78);stroke-width:1.5;stroke-dasharray:4 3}.moon-trajectory{stroke:rgba(226,237,240,.55);stroke-width:1.2;stroke-dasharray:2 3}
+.celestial-marker{position:absolute;z-index:3;transform:translate(-50%,-50%);pointer-events:none}.sun-marker{width:15px;height:15px;border:1px solid #ffe49a;border-radius:50%;background:#ffd24b;box-shadow:0 0 7px 2px rgba(255,200,59,.72)}.moon-marker{width:18px;height:18px}.moon-marker svg{display:block;width:100%;height:100%;overflow:visible}.moon-dark{fill:#263136;stroke:#e3ecee;stroke-width:.65}.moon-lit{fill:#f1f4f5;filter:drop-shadow(0 0 3px rgba(218,232,236,.6))}.sun-marker.below-horizon,.moon-marker.below-horizon{opacity:.48}
+.sun-times{position:absolute;top:0;right:0;left:0;z-index:4;display:flex;align-items:start;justify-content:space-between;padding:11px 12px 20px;background:linear-gradient(180deg,rgba(5,12,15,.56),transparent);text-shadow:0 1px 3px #000}.sun-times>span{display:grid;padding:5px 7px;border:1px solid rgba(255,255,255,.09);border-radius:7px;background:rgba(5,12,15,.25);backdrop-filter:blur(4px)}.sun-times .sunset-time{text-align:right}.sun-times small{color:rgba(239,244,242,.72);font-size:9px}.sun-times strong{font-size:17px;font-weight:600;line-height:1.05}.sun-times em{margin-top:2px;color:rgba(239,244,242,.7);font-size:9px;font-style:normal}
+@media(max-width:800px){.sun-moon-card{min-height:220px}}
 
 /* Layered aurora from the concept: star field, glowing ribbon, and fine wave lines. */
 .aurora-card{isolation:isolate;background:linear-gradient(145deg,#0b1718 0%,#0c1d1c 48%,#0a1718 100%)}

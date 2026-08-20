@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import QRCode from 'qrcode';
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
 import * as browserApi from './api';
+import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, type SkyPosition } from './astronomy';
 import './roomCards.css';
 import {
   calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, wasteDaysUntil,
@@ -22,6 +23,7 @@ type GridLayouts = Record<string, GridPlacement>;
 type LayoutChild = { id: string; label: string; content: ReactElement };
 const GRID_COLUMNS = 24;
 const GRID_ROWS = 8;
+const radarRefreshIntervalMs = 15 * 60 * 1000;
 const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const fmt = (value: number | undefined, unit = '') => value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`;
@@ -29,6 +31,33 @@ const fmt = (value: number | undefined, unit = '') => value === undefined ? '—
 const WeatherGlyph = ({ condition, large = false }: { condition?: string; large?: boolean }) => (
   <Icon filled={conditionIcon(condition) === 'sunny'}>{conditionIcon(condition)}</Icon>
 );
+
+const compassDirections: Array<[string, number, string]> = [
+  ['N', 0, 'N'], ['NØ', 45, 'NØ'], ['Ø', 90, 'Ø'], ['SØ', 135, 'SØ'],
+  ['S', 180, 'S'], ['SV', 225, 'SV'], ['V', 270, 'V'], ['NV', 315, 'NV'],
+];
+const compassBearing = (direction?: string) => {
+  const normalized = direction?.trim().toUpperCase().replaceAll('ØST', 'Ø').replaceAll('VEST', 'V').replaceAll('NORD', 'N').replaceAll('SØR', 'S');
+  return compassDirections.find(([short]) => short === normalized)?.[1];
+};
+const compassDirection = (bearing: number) => compassDirections.reduce((nearest, option) => Math.abs((((bearing - option[1]) + 540) % 360) - 180) < Math.abs((((bearing - nearest[1]) + 540) % 360) - 180) ? option : nearest)[2];
+
+function WindReading({ states }: { states: Record<string, HomeAssistantState> }) {
+  const speed = numberState(states.netatmoWindSpeed);
+  const gust = numberState(states.netatmoWindGust);
+  const speedUnit = typeof states.netatmoWindSpeed?.attributes.unit_of_measurement === 'string' ? states.netatmoWindSpeed.attributes.unit_of_measurement : 'm/s';
+  const gustUnit = typeof states.netatmoWindGust?.attributes.unit_of_measurement === 'string' ? states.netatmoWindGust.attributes.unit_of_measurement : speedUnit;
+  const reportedDirection = stateValue(states.netatmoWindDirection);
+  const bearingFrom = numberState(states.netatmoWindAngle) ?? numberState(states.netatmoWindDirection) ?? compassBearing(reportedDirection);
+  const bearingTo = bearingFrom === undefined ? undefined : (bearingFrom + 180) % 360;
+  const from = reportedDirection && !Number.isFinite(Number(reportedDirection)) ? reportedDirection : bearingFrom === undefined ? '—' : compassDirection(bearingFrom);
+  const to = bearingTo === undefined ? undefined : compassDirection(bearingTo);
+  const label = `Vind: ${fmt(speed, ` ${speedUnit}`)}. Kast: ${fmt(gust, ` ${gustUnit}`)}. Vindretning ${from}${to ? `. Pilen peker mot ${to}.` : ''}`;
+  return <div className="weather-wind-reading" aria-label={label}>
+    <div className="wind-reading-values"><span><small>Vind</small><strong>{fmt(speed, ` ${speedUnit}`)}</strong></span><span><small>Kast</small><strong>{fmt(gust, ` ${gustUnit}`)}</strong></span></div>
+    <div className={`wind-compass${bearingTo === undefined ? ' is-unavailable' : ''}`} aria-hidden="true"><b className="compass-n">N</b><b className="compass-e">Ø</b><b className="compass-s">S</b><b className="compass-w">V</b>{bearingTo !== undefined && <span className="material-symbols-outlined wind-compass-arrow" style={{ transform: `translate(-50%, -50%) rotate(${bearingTo}deg)` }}>navigation</span>}</div>
+  </div>;
+}
 
 function ModeSelector({ mode, setMode }: { mode: Mode; setMode: (mode: Mode) => void }) {
   const [open, setOpen] = useState(false);
@@ -384,6 +413,7 @@ function WeatherOverview({ states, regular, onDetails }: { states: Record<string
   return <section className={`card weather-card ${regular ? 'weather-regular' : ''}`} aria-labelledby={regular ? undefined : 'weather-title'} role={regular ? 'button' : undefined} tabIndex={regular ? 0 : undefined} aria-label={regular ? 'Åpne detaljert vær' : undefined} onClick={regular ? onDetails : undefined} onKeyDown={regular ? (event) => { if ((event.key === 'Enter' || event.key === ' ') && onDetails) { event.preventDefault(); onDetails(); } } : undefined}>
     <div className="weather-top">
       <div className="weather-now"><WeatherGlyph condition={condition} large/><div><h2 id="weather-title">{fmt(current, '°C')}</h2><span>{conditionLabel(condition)}</span></div></div>
+      {regular && <WindReading states={states}/>}
       {!regular && <ForecastStrip points={daily}/>} 
     </div>
     {regular && <WeatherChart points={hourly}/>} 
@@ -733,12 +763,6 @@ const numberState = (state?: HomeAssistantState) => {
   const value = Number(stateValue(state));
   return Number.isFinite(value) ? value : undefined;
 };
-const attributeTime = (state: HomeAssistantState | undefined, key: string) => {
-  const value = state?.attributes[key];
-  const date = typeof value === 'number' ? new Date(value * 1000) : typeof value === 'string' ? new Date(value) : undefined;
-  return date && !Number.isNaN(date.getTime())
-    ? date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
-};
 const pollenLevel = (state?: HomeAssistantState) => {
   const value = numberState(state);
   const label = typeof state?.attributes.level_name === 'string' ? state.attributes.level_name : ['Ingen', 'Lav', 'Moderat', 'Høy', 'Ekstrem'][value ?? 0] ?? '—';
@@ -748,6 +772,85 @@ const moonLabel = (state?: HomeAssistantState) => ({
   'new_moon': 'Nymåne', 'waxing_crescent': 'Voksende sigd', 'first_quarter': 'Første kvarter', 'waxing_gibbous': 'Voksende måne',
   'full_moon': 'Fullmåne', 'waning_gibbous': 'Avtagende måne', 'last_quarter': 'Siste kvarter', 'waning_crescent': 'Avtagende sigd',
 }[stateValue(state) ?? ''] ?? '—');
+
+const skyY = (altitude: number) => Math.max(5, Math.min(113, 88 - altitude * 0.9));
+const skyPoint = (position: SkyPosition) => ({ x: position.azimuth, y: skyY(position.altitude) });
+const trajectoryPaths = (date: Date, positionAt: (sample: Date) => SkyPosition) => {
+  const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const paths: string[] = [];
+  let path = '';
+  let previousX: number | undefined;
+  for (let sampleIndex = 0; sampleIndex <= 48; sampleIndex += 1) {
+    const position = positionAt(new Date(midnight.getTime() + sampleIndex * 30 * 60 * 1000));
+    if (position.altitude < -28) { if (path) paths.push(path); path = ''; previousX = undefined; continue; }
+    const point = skyPoint(position);
+    if (previousX !== undefined && Math.abs(point.x - previousX) > 180) { if (path) paths.push(path); path = ''; }
+    path += `${path ? ' L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+    previousX = point.x;
+  }
+  if (path) paths.push(path);
+  return paths;
+};
+const moonDiskPath = (phase: number, radius = 7) => {
+  const waxing = phase <= 0.5;
+  const boundary = Array.from({ length: 25 }, (_, index) => {
+    const y = -radius + index * radius * 2 / 24;
+    const edge = Math.sqrt(Math.max(0, radius * radius - y * y));
+    const x = (waxing ? Math.cos(phase * Math.PI * 2) : -Math.cos(phase * Math.PI * 2)) * edge;
+    return `${x.toFixed(2)} ${y.toFixed(2)}`;
+  });
+  const outside = Array.from({ length: 25 }, (_, index) => {
+    const y = radius - index * radius * 2 / 24;
+    const edge = Math.sqrt(Math.max(0, radius * radius - y * y));
+    return `${(waxing ? edge : -edge).toFixed(2)} ${y.toFixed(2)}`;
+  });
+  return `M${boundary.join(' L')} L${outside.join(' L')} Z`;
+};
+const angleLabel = (degrees: number) => `${degrees.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}°`;
+const eventTime = (date?: Date) => date?.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) ?? '—';
+
+function SunMoonSky({ sunState, moonPhase }: { sunState?: HomeAssistantState; moonPhase?: HomeAssistantState }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const calculatedSun = getSunPosition(now);
+  const sunAltitude = Number(sunState?.attributes.elevation);
+  const sunAzimuth = Number(sunState?.attributes.azimuth);
+  const sun = {
+    altitude: Number.isFinite(sunAltitude) ? sunAltitude : calculatedSun.altitude,
+    azimuth: Number.isFinite(sunAzimuth) ? sunAzimuth : calculatedSun.azimuth,
+  };
+  const moon = getMoonPosition(now);
+  const illumination = getMoonIllumination(now);
+  const sunPoint = skyPoint(sun);
+  const moonPoint = skyPoint(moon);
+  const dayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  const day = useMemo(() => {
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return {
+      paths: { moon: trajectoryPaths(now, getMoonPosition), sun: trajectoryPaths(now, getSunPosition) },
+      today: getSunEvents(now),
+      tomorrow: getSunEvents(tomorrow),
+    };
+  }, [dayKey]);
+  const twilight = sun.altitude <= -18 ? 'night' : sun.altitude <= -12 ? 'astronomical' : sun.altitude <= -6 ? 'nautical' : sun.altitude < 0 ? 'civil' : sun.altitude < 8 ? 'golden' : 'day';
+  const direction = sunState?.attributes.rising === true || (sunState?.attributes.rising === undefined && now.getHours() < 12) ? 'rising' : 'setting';
+  const sunVisibility = sun.altitude >= 0 ? 'over horisonten' : 'under horisonten';
+  const moonVisibility = moon.altitude >= 0 ? 'over horisonten' : 'under horisonten';
+  const markerStyle = (point: { x: number; y: number }): CSSProperties => ({ left: `${point.x / 360 * 100}%`, top: `${point.y / 124 * 100}%` });
+  return <section className={`card sun-moon-card sky-${twilight} sky-${direction}`} aria-label="Sol og måne">
+    <svg className="sky-position-chart" viewBox="0 0 360 124" preserveAspectRatio="none" role="img" aria-label={`Himmelretning og høyde. Sol ${angleLabel(sun.altitude)} ${sunVisibility}, asimut ${angleLabel(sun.azimuth)}. Måne ${angleLabel(moon.altitude)} ${moonVisibility}, asimut ${angleLabel(moon.azimuth)}.`}>
+      <path className="sky-altitude-line" d="M0 47.5H360M0 88H360"/>
+      <g className="sky-cardinals" aria-hidden="true"><text x="3" y="84">N</text><text x="90" y="84" textAnchor="middle">Ø</text><text x="180" y="84" textAnchor="middle">S</text><text x="270" y="84" textAnchor="middle">V</text><text x="357" y="84" textAnchor="end">N</text><text x="4" y="45">45°</text></g>
+      <g aria-hidden="true">{day.paths.sun.map((path, index) => <path className="sun-trajectory" d={path} key={`sun-${index}`}/>)}{day.paths.moon.map((path, index) => <path className="moon-trajectory" d={path} key={`moon-${index}`}/>)}</g>
+    </svg>
+    <div className={`celestial-marker sun-marker${sun.altitude < 0 ? ' below-horizon' : ''}`} style={markerStyle(sunPoint)} title={`Sol: ${angleLabel(sun.altitude)} · ${sunVisibility}`}/>
+    <div className={`celestial-marker moon-marker${moon.altitude < 0 ? ' below-horizon' : ''}`} style={markerStyle(moonPoint)} title={`${moonLabel(moonPhase)}: ${angleLabel(moon.altitude)} · ${moonVisibility}`}><svg viewBox="-8 -8 16 16" aria-hidden="true"><circle className="moon-dark" r="7"/><path className="moon-lit" d={moonDiskPath(illumination.phase)}/></svg></div>
+    <footer className="sun-times"><span className="sunrise-time"><small>Soloppgang</small><strong>{eventTime(day.today.rising)}</strong><em>(i morgen {eventTime(day.tomorrow.rising)})</em></span><span className="sunset-time"><small>Solnedgang</small><strong>{eventTime(day.today.setting)}</strong><em>(i morgen {eventTime(day.tomorrow.setting)})</em></span></footer>
+  </section>;
+}
 type LightningStrike = { id: string; latitude: number; longitude: number; published?: string };
 const lightningStrikes = (state?: HomeAssistantState): LightningStrike[] => {
   const raw = state?.attributes.strikes;
@@ -771,6 +874,16 @@ function LocalReading({ icon, label, value, detail }: { icon: string; label: str
   return <div className="local-reading"><Icon>{icon}</Icon><span><small>{label}</small><strong>{value}</strong>{detail && <em>{detail}</em>}</span></div>;
 }
 
+function WeatherRadar() {
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setReloadKey((key) => key + 1), radarRefreshIntervalMs);
+    return () => window.clearInterval(timer);
+  }, []);
+  const source = `https://embed.windy.com/embed2.html?lat=59.1312&lon=10.2166&zoom=8&level=surface&overlay=radar&menu=&message=false&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&detailLat=59.1312&detailLon=10.2166&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&radarRange=-1&refresh=${reloadKey}`;
+  return <section className="card radar-card"><header><h2>Radar</h2><small>Windy · Sandefjord</small></header><iframe key={reloadKey} title="Nedbørsradar for Sandefjord" loading="lazy" src={source}/><footer>Radar © Windy</footer></section>;
+}
+
 function DetailedWeather({ states, close }: { states: Record<string, HomeAssistantState>; close: () => void }) {
   const [tab, setTab] = useState<WeatherTab>('today');
   const hourly = forecastPoints(states.weatherHourly); const daily = forecastPoints(states.weatherDaily);
@@ -778,7 +891,7 @@ function DetailedWeather({ states, close }: { states: Record<string, HomeAssista
   const pollen = [['Bjørk', states.pollenBirch], ['Gress', states.pollenGrass], ['Burot', states.pollenMugwort]] as const;
   const windDirection = stateValue(states.netatmoWindDirection) ?? '—';
   if (tab === 'week') return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected={false} onClick={() => setTab('today')}>I dag</button><button type="button" role="tab" aria-selected className="selected">Neste 7 dager</button></div></header><div className="weather-detail-grid week-view"><section className="card detail-chart"><h2>Neste 7 dager</h2><WeatherChart points={daily} detailed/></section><section className="card week-card"><h2>Utsikt</h2>{daily.slice(0, 7).map((point) => <div key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>/ {fmt(point.templow, '°')}</small></div>)}</section><section className="card hourly-card"><h2>Planlegg uken</h2><p className="weather-detail-copy">Varslet beholder fokus på temperatur, nedbør og vind. Pollenstatus og lokale målinger vises på fanen I dag.</p></section></div></main>;
-  return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected className="selected">I dag</button><button type="button" role="tab" aria-selected={false} onClick={() => setTab('week')}>Neste 7 dager</button></div></header><div className="weather-detail-grid today-view"><section className="card detail-chart"><div className="detail-chart-heading"><h2>I dag · vær og prognose</h2><div className="weather-live-readings"><LocalReading icon="air" label="Vind" value={`${fmt(numberState(states.netatmoWindSpeed), ' m/s')} ${windDirection}`} detail={`Kast ${fmt(numberState(states.netatmoWindGust), ' m/s')}`}/><LocalReading icon="water_drop" label="Regn" value={fmt(numberState(states.netatmoRain), ' mm')} detail={`${fmt(numberState(states.netatmoRainToday), ' mm')} i dag`}/><LocalReading icon="speed" label="Trykk" value={fmt(numberState(states.netatmoPressure), ' hPa')}/></div></div><WeatherChart points={hourly} detailed/></section><section className="card radar-card"><header><h2>Radar</h2><small>Windy · Sandefjord</small></header><iframe title="Nedbørsradar for Sandefjord" loading="lazy" src="https://embed.windy.com/embed2.html?lat=59.1312&lon=10.2166&zoom=8&level=surface&overlay=radar&menu=&message=false&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&detailLat=59.1312&detailLon=10.2166&metricRain=mm&metricTemp=%C2%B0C&metricWind=m%2Fs&radarRange=-1"/><footer>Radar © Windy</footer></section><LightningMap strikes={strikes} distance={distance}/><section className="card pollen-card"><header><div><h2>Pollen</h2><small>Østlandet med Oslo</small></div><Icon>eco</Icon></header>{pollen.map(([label, state]) => <div className="pollen-row" key={label}><span>{label}</span><b className={`pollen-level level-${pollenLevel(state).value ?? 0}`}>{pollenLevel(state).label}</b></div>)}<p>{stateValue(states.pollenForecast) ?? 'Pollenvarsel ikke tilgjengelig'}</p></section><section className="card sun-moon-card"><header><h2>Sol og måne</h2><Icon>light_mode</Icon></header><div className="sun-arc"><span><small>Soloppgang</small><strong>{attributeTime(states.sun, 'next_rising')}</strong></span><i><Icon>light_mode</Icon></i><span><small>Solnedgang</small><strong>{attributeTime(states.sun, 'next_setting')}</strong></span></div><div className="moon-phase"><Icon>brightness_2</Icon><span><small>Månefase</small><strong>{moonLabel(states.moonPhase)}</strong></span></div></section><section className="card aurora-card"><header><h2>Nordlys</h2><Icon>flare</Icon></header><strong>{fmt(numberState(states.auroraChance), ' %')}</strong><span>{stateValue(states.auroraVisibility) === 'on' ? 'Mulig synlighet nå' : 'Lav synlighet akkurat nå'}</span><div className="aurora-lines" aria-hidden="true"/></section></div></main>;
+  return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected className="selected">I dag</button><button type="button" role="tab" aria-selected={false} onClick={() => setTab('week')}>Neste 7 dager</button></div></header><div className="weather-detail-grid today-view"><section className="card detail-chart"><div className="detail-chart-heading"><h2>I dag · vær og prognose</h2><div className="weather-live-readings"><LocalReading icon="air" label="Vind" value={`${fmt(numberState(states.netatmoWindSpeed), ' m/s')} ${windDirection}`} detail={`Kast ${fmt(numberState(states.netatmoWindGust), ' m/s')}`}/><LocalReading icon="water_drop" label="Regn" value={fmt(numberState(states.netatmoRain), ' mm')} detail={`${fmt(numberState(states.netatmoRainToday), ' mm')} i dag`}/><LocalReading icon="speed" label="Trykk" value={fmt(numberState(states.netatmoPressure), ' hPa')}/></div></div><WeatherChart points={hourly} detailed/></section><WeatherRadar/><LightningMap strikes={strikes} distance={distance}/><section className="card pollen-card"><header><div><h2>Pollen</h2><small>Østlandet med Oslo</small></div><Icon>eco</Icon></header>{pollen.map(([label, state]) => <div className="pollen-row" key={label}><span>{label}</span><b className={`pollen-level level-${pollenLevel(state).value ?? 0}`}>{pollenLevel(state).label}</b></div>)}<p>{stateValue(states.pollenForecast) ?? 'Pollenvarsel ikke tilgjengelig'}</p></section><SunMoonSky sunState={states.sun} moonPhase={states.moonPhase}/><section className="card aurora-card"><header><h2>Nordlys</h2></header><strong>{fmt(numberState(states.auroraChance), ' %')}</strong><span>{stateValue(states.auroraVisibility) === 'on' ? 'Mulig synlighet nå' : 'Lav synlighet akkurat nå'}</span><div className="aurora-lines" aria-hidden="true"/></section></div></main>;
 }
 
 const stateRefreshIntervalMs = 30_000;
