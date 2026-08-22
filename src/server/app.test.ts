@@ -168,6 +168,34 @@ describe('dashboard API', () => {
     expect(result.body).toEqual({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt });
   });
 
+  it('uses the configured report source when no local report has been published', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ report: '## Vær\nSol.', publishedAt: '2026-08-22T08:00:00.000Z' }), { status: 200 }));
+    const result = await request(createApp(createClient(), '', 'http://192.168.1.50:3100')).get('/api/ai-report').expect(200);
+    expect(result.body.report).toBe('## Vær\nSol.');
+    expect(fetchMock).toHaveBeenCalledWith('http://192.168.1.50:3100/api/ai-report');
+    fetchMock.mockRestore();
+  });
+
+  it('starts an on-demand AI report through the configured n8n webhook', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+    await request(createApp(createClient(), '', '', 'http://n8n.test/webhook/refresh'))
+      .post('/api/ai-report/refresh').send({ mode: 'on_demand', requestedAt: '2026-08-23T12:00:00.000Z' }).expect(202);
+    expect(fetchMock).toHaveBeenCalledWith('http://n8n.test/webhook/refresh', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ mode: 'on_demand', requestedAt: '2026-08-23T12:00:00.000Z' }),
+    }));
+    fetchMock.mockRestore();
+  });
+
+  it('forwards coming-home report intent and rejects unsupported modes', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+    const app = createApp(createClient(), '', '', 'http://n8n.test/webhook/refresh');
+    await request(app).post('/api/ai-report/refresh').send({ mode: 'coming_home' }).expect(202);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ mode: 'coming_home' });
+    await request(app).post('/api/ai-report/refresh').send({ mode: 'bedtime' }).expect(400);
+    fetchMock.mockRestore();
+  });
+
   it('forwards allowlisted light commands and rejects arbitrary entities', async () => {
     const client = createClient();
     vi.mocked(client.executeLight!).mockResolvedValue({ states: { lightCove: { entity_id: 'light.cove', state: 'on', attributes: {} } } });

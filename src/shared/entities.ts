@@ -14,7 +14,7 @@ export type DashboardAction =
   | 'cooling' | 'heatPump' | 'fanSpeed' | 'securityMode' | 'lockDoor' | 'unlockDoor';
 
 export const dashboardStateKeys = [
-  'home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night',
+  'home', 'homeMode', 'guestMode', 'guestVoucher', 'family', 'morning', 'evening', 'night',
   'cooling', 'climate', 'outdoor', 'securityMode', 'frontDoorLock', 'doorbellCamera', 'courtyardCamera',
   'weatherHourly', 'weatherDaily', 'meteoAlarm', 'lightningDistance', 'lightningStrikes', 'auroraVisibility', 'auroraChance', 'moonPhase', 'sun',
   'netatmoPressure', 'netatmoWindAngle', 'netatmoWindDirection', 'netatmoWindSpeed', 'netatmoWindGust', 'netatmoRain', 'netatmoRainToday', 'netatmoRainLastHour',
@@ -47,6 +47,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   homeMode: 'input_select.home_mode',
   guestMode: 'input_boolean.gjest',
   guestVoucher: 'sensor.67647a4bca314858fac0f8fc_voucher',
+  family: 'group.family',
   morning: 'automation.modus_god_morgen',
   evening: 'script.1572988362234',
   night: 'script.1569099501074',

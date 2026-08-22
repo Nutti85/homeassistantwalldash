@@ -13,7 +13,7 @@ const baseStates: Record<string, HomeAssistantState> = {
   repairHealth: state('binary_sensor.health', 'ok'),
 };
 const createApi = (overrides: Record<string, HomeAssistantState> = {}): DashboardApi => ({
-  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
+  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Anbefalinger\n• Ta med paraply.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Modus' })); fireEvent.click(await screen.findByRole('tab', { name })); };
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -227,11 +227,16 @@ describe('redesigned dashboard', () => {
     expect(await screen.findByText('Morgen er sendt til Home Assistant')).toBeInTheDocument();
   });
 
-  it('shows populated and unavailable AI summary states', async () => {
-    const { rerender } = render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' })); expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
-    rerender(<App api={createApi({ weatherSummary: state('', 'unavailable') })} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
-    expect(await screen.findByText('Værmelding ikke tilgjengelig')).toBeInTheDocument();
+  it('shows the n8n AI report from the bottom control', async () => {
+    render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
+    expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Klara AI' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Vær' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Kveld · lør\. 22\.08\./ })).toBeInTheDocument();
+    expect(screen.getByText('Regn i kveld.').tagName).toBe('LI');
+    expect(screen.getByRole('heading', { name: 'Anbefalinger' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Personlig oversikt' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Oppdater' })).toBeInTheDocument();
   });
 
   it('opens detailed weather and switches its tabs', async () => {
@@ -292,8 +297,10 @@ describe('redesigned dashboard', () => {
     expect(await screen.findByRole('img', { name: /Samlet graf/ })).toBeInTheDocument();
     const graph = screen.getByRole('img', { name: /Samlet graf/ });
     expect(graph).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
-    expect(Array.from(graph.querySelectorAll('.axis-left')).map((label) => label.textContent)).toEqual(['22° · 1.0 mm', '19° · 0.8 mm', '16° · 0.5 mm', '13° · 0.3 mm', '10° · 0.0 mm']);
-    expect(Array.from(graph.querySelectorAll('.axis-right')).map((label) => label.textContent)).toEqual(['100% · 8.0 m/s', '75% · 6.0 m/s', '50% · 4.0 m/s', '25% · 2.0 m/s', '0% · 0.0 m/s']);
+    expect(Array.from(graph.querySelectorAll('.axis-left')).map((label) => label.textContent)).toEqual(['19° · 1.0 mm', '17° · 0.8 mm', '15° · 0.5 mm', '12° · 0.3 mm', '10° · 0.0 mm']);
+    expect(Array.from(graph.querySelectorAll('.axis-right')).map((label) => label.textContent)).toEqual(['100%', '75%', '50%', '25%', '0%']);
+    expect(Array.from(graph.querySelectorAll('.axis-wind-label')).map((label) => label.textContent)).toEqual(['· 6.5 m/s', '· 4.9 m/s', '· 3.3 m/s', '· 1.6 m/s', '· 0.0 m/s']);
+    expect(graph.querySelectorAll('.time-label')).toHaveLength(6);
     const legend = screen.getByLabelText('Tegnforklaring');
     ['Temperatur', 'Nedbør', 'Sannsynlighet', 'Vind', 'Kast', 'Skydekke'].forEach((label) => expect(within(legend).getByText(label)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /Temperatur/ })).not.toBeInTheDocument();

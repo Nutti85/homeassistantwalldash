@@ -8,6 +8,8 @@ import { defaultDashboardEntityIds } from '../shared/entities';
 const haUrl = process.env.HA_URL;
 const haToken = process.env.HA_TOKEN;
 const aiReportSecret = process.env.AI_REPORT_SECRET?.trim() || '';
+const aiReportSourceUrl = process.env.AI_REPORT_SOURCE_URL?.trim() || '';
+const aiReportRefreshUrl = process.env.N8N_AI_REPORT_REFRESH_URL?.trim() || '';
 
 if (!haUrl || !haToken) {
   throw new Error('HA_URL og HA_TOKEN må være satt');
@@ -19,6 +21,7 @@ const entities = {
   homeMode: process.env.HA_HOME_MODE_ENTITY_ID?.trim() || defaultDashboardEntityIds.homeMode,
   guestMode: process.env.HA_GUEST_MODE_ENTITY_ID?.trim() || defaultDashboardEntityIds.guestMode,
   guestVoucher: process.env.HA_GUEST_VOUCHER_SENSOR_ID?.trim() || defaultDashboardEntityIds.guestVoucher,
+  family: process.env.HA_FAMILY_GROUP_ENTITY_ID?.trim() || defaultDashboardEntityIds.family,
   securityMode: process.env.HA_SECURITY_MODE_ENTITY_ID?.trim() || defaultDashboardEntityIds.securityMode,
   frontDoorLock: process.env.HA_FRONT_DOOR_LOCK_ENTITY_ID?.trim() || defaultDashboardEntityIds.frontDoorLock,
   weatherHourly: process.env.HA_WEATHER_HOURLY_ENTITY_ID?.trim() || defaultDashboardEntityIds.weatherHourly,
@@ -52,7 +55,7 @@ const entities = {
   repairHealth: process.env.HA_REPAIR_HEALTH_ENTITY_ID?.trim() || '',
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
-const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId), aiReportSecret);
+const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId), aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl);
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

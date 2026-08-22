@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import QRCode from 'qrcode';
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
 import * as browserApi from './api';
-import type { AiReportResponse } from './api';
+import type { AiReportRefreshMode, AiReportResponse } from './api';
 import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, type SkyPosition } from './astronomy';
 import './roomCards.css';
 import {
@@ -13,6 +13,7 @@ import {
 export interface DashboardApi {
   getStates(): Promise<{ states: Record<string, HomeAssistantState> }>;
   getAiReport?(): Promise<AiReportResponse | undefined>;
+  requestAiReportRefresh?(mode?: AiReportRefreshMode): Promise<void>;
   runAction(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<{ states: Record<string, HomeAssistantState> }>;
   runLightCommand(light: LightControlKey, command: LightCommand): Promise<{ states: Record<string, HomeAssistantState> }>;
   setTemperature(temperature: number): Promise<{ states: Record<string, HomeAssistantState> }>;
@@ -176,7 +177,10 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
 
 function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; detailed?: boolean }) {
   const width = 900;
-  const data = points.slice(0, detailed ? 25 : 22);
+  // Keep the dashboard preview deliberately short so its axis labels can be
+  // assessed at the card's compact size. The detailed weather view retains a
+  // full day of hourly forecast data.
+  const data = points.slice(0, detailed ? 25 : 6);
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewport, setViewport] = useState(() => ({ width, height: detailed ? 248 : 178 }));
@@ -209,7 +213,10 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
   const height = Math.max(120, width * viewport.height / viewport.width - 28);
   const plot = detailed
     ? { left: 80, right: 96, top: 6, bottom: 25 }
-    : { left: 80, right: 96, top: 4, bottom: 21 };
+    // The dashboard uses deliberately generous side gutters: the labels are
+    // end/start anchored into them, so the larger type neither overlaps the
+    // plotted data nor is clipped at the card edge.
+    : { left: 175, right: 175, top: 31, bottom: 25 };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
   const pathFor = (values: Array<number | undefined>, rangeMin: number, rangeMax: number) => values.map((value, index) => {
@@ -230,7 +237,7 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
     <div className="chart-legend" aria-label="Tegnforklaring"><span className="temp">Temperatur</span><span className="rain">Nedbør</span><span className="probability">Sannsynlighet</span><span className="wind">Vind</span><span className="gust">Kast</span><span className="cloud">Skydekke</span></div>
     {data.length ? <svg ref={svgRef} className="weather-chart" role="img" aria-label="Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke" viewBox={`0 0 ${width} ${height + 28}`} preserveAspectRatio="xMidYMid meet">
       <defs><linearGradient id={`temperature-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f4b17b" stopOpacity=".62"/><stop offset="1" stopColor="#f4b17b" stopOpacity=".08"/></linearGradient><linearGradient id={`cloud-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#aeb4b3" stopOpacity=".2"/><stop offset="1" stopColor="#aeb4b3" stopOpacity=".02"/></linearGradient></defs>
-      {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" textAnchor="end" x={plot.left - 12} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan><tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan></text><text className="axis-label axis-right" textAnchor="start" x={width - plot.right + 12} y={y + 4}><tspan>{percent}%</tspan><tspan className="axis-wind-value"> · {wind.toFixed(1)} m/s</tspan></text></g>; })}
+      {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" textAnchor="start" x={10} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan><tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan></text><text className="axis-label axis-right" textAnchor="start" x={width - plot.right + 10} y={y + 4}>{percent}%</text><text className="axis-label axis-wind-label" textAnchor="end" x={width - 10} y={y + 4}>· {wind.toFixed(1)} m/s</text></g>; })}
       {cloudPath && <><path className="cloud-area" fill={`url(#cloud-fill-${detailed})`} d={`${cloudPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`}/><path className="cloud-line" d={cloudPath}/></>}
       {data.map((point, index) => point.precipitation !== undefined && <rect key={point.datetime} className="rainbar" x={plot.left + index * plotWidth / data.length + 2} y={plot.top + plotHeight - Math.min(point.precipitation / precipitationMax * plotHeight, plotHeight)} width={Math.max(4, plotWidth / data.length - 5)} height={Math.min(point.precipitation / precipitationMax * plotHeight, plotHeight)} />)}
       {tempPath && <><path className="temperature-area" d={`${tempPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`} /><path className="temperature-line" d={tempPath} /></>}
@@ -490,18 +497,67 @@ function LightsModal({ states, pending, errors, command, close, closeButtonRef }
   return <div className="lights-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="lights-modal" role="dialog" aria-modal="true" aria-labelledby="lights-title"><header><div><h2 id="lights-title"><Icon filled>lightbulb</Icon>Lys i huset</h2><p>Rom gruppert etter etasje</p></div><button ref={closeButtonRef} type="button" aria-label="Lukk lysstyring" onClick={close}><Icon>close</Icon></button></header><div className="lights-master"><div><strong>Alle innelys</strong><small>Styr alle rom samtidig</small></div><button type="button" className={`lights-switch${allOn ? ' on' : ''}`} aria-label={allOn ? 'Slå av alle innelys' : 'Slå på alle innelys'} aria-pressed={allOn} disabled={!allLights || allLights.state === 'unavailable' || pending.lightAll} onClick={() => command('lightAll', { on: !allOn })}><span/></button></div><div className="lights-room-list">{lightFloors.map((floor) => <section className="lights-floor" key={floor.label}><h3>{floor.label}</h3>{floor.rooms.map((room) => { const expanded = openRoom === room.id; const activeCount = room.controls.filter((control) => states[control.key]?.state === 'on').length; return <article className={`lights-room${expanded ? ' expanded' : ''}`} key={room.id}><button type="button" className="lights-room-toggle" aria-expanded={expanded} onClick={() => setOpenRoom(expanded ? null : room.id)}><Icon>{room.icon}</Icon><span><strong>{room.label}</strong><small>{activeCount ? `${activeCount} ${activeCount === 1 ? 'gruppe' : 'grupper'} på` : 'Alle lys av'}</small></span><Icon>expand_more</Icon></button>{expanded && <div className="lights-room-controls">{room.controls.map((control) => <LightControlRow key={control.key} control={control} state={states[control.key]} pending={Boolean(pending[control.key])} command={command}/>)}</div>}</article>; })}</section>)}</div>{lightError && <p className="card-error" role="alert">{lightError}</p>}</section></div>;
 }
 
-const reportSections = (report: string) => report.split(/\n(?=##\s+)/).map((section) => {
-  const lines = section.trim().split('\n');
-  const heading = lines[0]?.replace(/^##\s+/, '').trim();
-  return heading && section.trimStart().startsWith('## ') ? { heading, text: lines.slice(1).join('\n').trim() } : { text: section.trim() };
-}).filter((section) => section.text || section.heading);
+const hiddenReportHeadings = new Set(['personlig oversikt', 'full rapport', 'klara ai']);
+const isHiddenReportHeading = (value: string) => hiddenReportHeadings.has(value.replace(/^#{1,6}\s+/, '').replace(/^\*\*(.+)\*\*$/, '$1').trim().toLocaleLowerCase('nb-NO'));
 
-function KlaraAiModal({ report, loading, error, close, closeButtonRef }: { report?: AiReportResponse; loading: boolean; error?: string; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+const reportSections = (report: string) => {
+  const sections: Array<{ heading?: string; text: string }> = [];
+  let heading: string | undefined;
+  let lines: string[] = [];
+  const addSection = () => {
+    const text = lines.join('\n').trim();
+    if (text) sections.push({ heading, text });
+  };
+
+  report.trim().split('\n').filter((line) => !isHiddenReportHeading(line)).forEach((line) => {
+    const match = line.match(/^#{1,2}\s+(.+?)\s*#*$/);
+    if (!match) { lines.push(line); return; }
+    addSection();
+    heading = match[1].replace(/^\*\*(.+)\*\*$/, '$1').trim();
+    lines = [];
+  });
+  addSection();
+
+  return sections.length ? sections : [{ heading: 'Oppsummering', text: report.trim() }];
+};
+
+const renderReportContent = (text: string): ReactElement[] => {
+  const blocks: ReactElement[] = [];
+  let bullets: string[] = [];
+  const flushBullets = () => {
+    if (!bullets.length) return;
+    blocks.push(<ul key={`list-${blocks.length}`}>{bullets.map((bullet, index) => <li key={`${bullet}-${index}`}>{bullet}</li>)}</ul>);
+    bullets = [];
+  };
+
+  text.split('\n').forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) { flushBullets(); return; }
+    const subheading = line.match(/^#{3,6}\s+(.+?)\s*#*$/);
+    if (subheading) {
+      flushBullets();
+      blocks.push(<h4 key={`heading-${blocks.length}`}>{subheading[1]}</h4>);
+      return;
+    }
+    const bullet = line.match(/^[•*+-]\s+(.+)$/);
+    if (bullet) { bullets.push(bullet[1]); return; }
+    flushBullets();
+    blocks.push(<p key={`paragraph-${blocks.length}`}>{line}</p>);
+  });
+  flushBullets();
+  return blocks;
+};
+
+function KlaraAiModal({ report, loading, error, refreshing, refreshProgress, refresh, close, closeButtonRef }: { report?: AiReportResponse; loading: boolean; error?: string; refreshing: boolean; refreshProgress?: string; refresh: () => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+  const sections = report ? reportSections(report.report) : [];
+  const reportPeriod = sections.find((section) => section.heading === 'Rapportperiode');
+  const visibleSections = sections.filter((section) => section.heading !== 'Rapportperiode');
   return <div className="klara-ai-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <section className="klara-ai-modal" role="dialog" aria-modal="true" aria-labelledby="klara-ai-title">
       <button ref={closeButtonRef} className="klara-ai-close" type="button" aria-label="Lukk Klara AI" onClick={close}><Icon>close</Icon></button>
       <header className="klara-ai-header"><div><h2 id="klara-ai-title">Klara AI</h2></div><Icon filled>auto_awesome</Icon></header>
-      <article className="klara-ai-report">{loading ? 'Henter rapport …' : error ? error : report ? <><time dateTime={report.publishedAt}>Oppdatert {new Date(report.publishedAt).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })}</time><div className="klara-ai-sections">{reportSections(report.report).map((section, index) => <section key={`${section.heading ?? 'rapport'}-${index}`}>{section.heading && <h3>{section.heading}</h3>}<p>{section.text}</p></section>)}</div></> : 'Ingen AI-rapport er publisert ennå.'}</article>
+      <article className="klara-ai-report">{loading ? 'Henter rapport …' : error ? error : report ? <><div className="klara-ai-report-meta">{reportPeriod && <div><strong>Rapportperiode</strong><span>{reportPeriod.text}</span></div>}<time dateTime={report.publishedAt}>Oppdatert {new Date(report.publishedAt).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })}</time></div><div className="klara-ai-sections">{visibleSections.map((section, index) => <section key={`${section.heading ?? 'rapport'}-${index}`}>{section.heading && <h3>{section.heading}</h3>}<div className="klara-ai-section-content">{renderReportContent(section.text)}</div></section>)}</div></> : 'Ingen AI-rapport er publisert ennå.'}</article>
+      <footer className="klara-ai-actions"><button type="button" onClick={refresh} disabled={refreshing}><Icon>{refreshing ? 'progress_activity' : 'refresh'}</Icon>Oppdater</button>{refreshProgress && <p role="status">{refreshProgress}</p>}</footer>
     </section>
   </div>;
 }
@@ -915,6 +971,8 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [aiReport, setAiReport] = useState<AiReportResponse | undefined>();
   const [aiReportLoading, setAiReportLoading] = useState(false);
   const [aiReportError, setAiReportError] = useState<string>();
+  const [aiReportRefreshing, setAiReportRefreshing] = useState(false);
+  const [aiReportRefreshProgress, setAiReportRefreshProgress] = useState<string>();
   const [toast, setToast] = useState<string | null>(null);
   const repairButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -993,7 +1051,43 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     setKlaraAiOpen(true); setAiReportLoading(true); setAiReportError(undefined);
     void (api.getAiReport ?? browserApi.getAiReport)().then(setAiReport).catch(() => setAiReportError('Kunne ikke hente AI-rapporten. Prøv igjen.')).finally(() => setAiReportLoading(false));
   };
+  const lastReportPublishedAt = useRef<string>();
+  const lastFamilyState = useRef<string>();
+  useEffect(() => {
+    const checkForNewReport = () => { void (api.getAiReport ?? browserApi.getAiReport)().then((next) => {
+      if (!next) return;
+      if (lastReportPublishedAt.current && lastReportPublishedAt.current !== next.publishedAt) { setAiReport(next); setKlaraAiOpen(true); }
+      lastReportPublishedAt.current = next.publishedAt;
+    }).catch(() => undefined); };
+    checkForNewReport();
+    const timer = window.setInterval(checkForNewReport, stateRefreshIntervalMs);
+    return () => window.clearInterval(timer);
+  }, [api]);
+  const refreshAiReport = async (mode: AiReportRefreshMode = 'on_demand') => {
+    if (aiReportRefreshing) return;
+    const previousPublishedAt = aiReport?.publishedAt ?? lastReportPublishedAt.current;
+    setKlaraAiOpen(true); setAiReportRefreshing(true);
+    setAiReportRefreshProgress(mode === 'coming_home' ? 'Lager en fersk hjemkomstrapport …' : 'Starter ny rapport …');
+    setAiReportError(undefined);
+    try {
+      await (api.requestAiReportRefresh ?? browserApi.requestAiReportRefresh)(mode);
+      setAiReportRefreshProgress(mode === 'coming_home' ? 'Tilpasser rapporten til resten av dagen …' : 'Klara AI lager rapporten …');
+      for (let attempt = 0; attempt < 45; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+        const next = await (api.getAiReport ?? browserApi.getAiReport)();
+        if (next && next.publishedAt !== previousPublishedAt) { setAiReport(next); setAiReportRefreshProgress('Ny rapport er klar.'); return; }
+        if (attempt === 14) setAiReportRefreshProgress('Henter oppdateringen fra Klara AI …');
+      }
+      setAiReportRefreshProgress('Rapporten bruker lengre tid enn vanlig. Prøv igjen om litt.');
+    } catch (refreshError) { setAiReportRefreshProgress(refreshError instanceof Error ? refreshError.message : 'Kunne ikke starte AI-oppdateringen. Prøv igjen.'); }
+    finally { setAiReportRefreshing(false); }
+  };
+  useEffect(() => {
+    const nextState = states.family?.state;
+    if (lastFamilyState.current && lastFamilyState.current !== 'home' && nextState === 'home') void refreshAiReport('coming_home');
+    lastFamilyState.current = nextState;
+  }, [states.family?.state]);
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} loading={aiReportLoading} error={aiReportError} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} loading={aiReportLoading} error={aiReportError} refreshing={aiReportRefreshing} refreshProgress={aiReportRefreshProgress} refresh={() => { void refreshAiReport('on_demand'); }} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }

@@ -5,7 +5,7 @@ const node = process.execPath;
 const environment = existsSync('.env') ? ['--env-file=.env'] : [];
 const backend = spawn(node, [...environment, '--import', 'tsx', 'src/server/index.ts'], {
   stdio: 'inherit',
-  env: { ...process.env, DASHBOARD_SERVE_STATIC: 'false' },
+  env: { ...process.env, DASHBOARD_SERVE_STATIC: 'false', AI_REPORT_SOURCE_URL: process.env.AI_REPORT_SOURCE_URL || 'http://192.168.1.50:3100' },
 });
 const frontend = spawn(node, ['node_modules/vite/bin/vite.js', ...process.argv.slice(2)], {
   stdio: 'inherit',

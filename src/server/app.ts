@@ -87,7 +87,7 @@ const proxyCameraStream = async (
   }
 };
 
-export const createApp = (client: DashboardClient, aiReportSecret = ''): Express => {
+export const createApp = (client: DashboardClient, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = ''): Express => {
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   let aiReport: AiReport | undefined;
@@ -106,9 +106,33 @@ export const createApp = (client: DashboardClient, aiReportSecret = ''): Express
     response.status(202).json({ publishedAt: aiReport.publishedAt });
   });
 
-  app.get('/api/ai-report', (_request: Request, response: Response) => {
-    if (!aiReport) { response.sendStatus(204); return; }
-    response.json(aiReport);
+  app.get('/api/ai-report', async (_request: Request, response: Response) => {
+    if (aiReport) { response.json(aiReport); return; }
+    if (aiReportSourceUrl) {
+      try {
+        const upstream = await fetch(`${aiReportSourceUrl.replace(/\/$/, '')}/api/ai-report`);
+        if (upstream.status === 204) { response.sendStatus(204); return; }
+        if (!upstream.ok) { response.sendStatus(502); return; }
+        response.type('application/json').send(await upstream.text());
+      } catch { response.sendStatus(502); }
+      return;
+    }
+    response.sendStatus(204);
+  });
+
+  app.post('/api/ai-report/refresh', async (request: Request, response: Response) => {
+    if (!aiReportRefreshUrl) { response.status(503).json({ error: 'AI-oppdatering er ikke konfigurert.' }); return; }
+    const body = isRecord(request.body) ? request.body : {};
+    const mode = body.mode === 'coming_home' ? 'coming_home' : body.mode === undefined || body.mode === 'on_demand' ? 'on_demand' : undefined;
+    if (!mode) { response.sendStatus(400); return; }
+    const requestedAt = typeof body.requestedAt === 'string' && Number.isFinite(Date.parse(body.requestedAt))
+      ? body.requestedAt
+      : new Date().toISOString();
+    try {
+      const upstream = await fetch(aiReportRefreshUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, requestedAt }) });
+      if (!upstream.ok) { response.status(502).json({ error: 'Kunne ikke starte AI-oppdateringen. Prøv igjen.' }); return; }
+      response.sendStatus(202);
+    } catch { response.status(502).json({ error: 'Kunne ikke starte AI-oppdateringen. Prøv igjen.' }); }
   });
 
   app.get('/api/states', async (_request: Request, response: Response) => {

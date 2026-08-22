@@ -41,12 +41,15 @@ Legg en HTTP Request-node på slutten av den nye n8n-workflowen:
 ```json
 {
   "report": "{{$json.report}}",
-  "title": "Dagens briefing",
   "publishedAt": "{{$now.toISO()}}"
 }
 ```
 
-Bruk `POST`, URL `http://192.168.1.50:3100/api/ai-report`, header `X-AI-Report-Secret` med samme verdi som `AI_REPORT_SECRET`, og `Content-Type: application/json`. Rapporten lagres i minnet til dashboardet og vises når stjerneknappen nederst trykkes. Etter en container-omstart sender workflowen bare neste rapport på nytt.
+Bruk strukturerte Markdown-overskrifter i `report`, for eksempel `## Kort oppsummert`, `## Vær`, `## Hjemmet` og `## Anbefalinger`. De vises som egne, lettleste seksjoner i Klara AI. `Personlig oversikt` og `Full rapport` trengs ikke som overskrifter. Bruk `POST`, URL `http://192.168.1.50:3100/api/ai-report`, header `X-AI-Report-Secret` med samme verdi som `AI_REPORT_SECRET`, og `Content-Type: application/json`. Rapporten lagres i minnet til dashboardet og vises når stjerneknappen nederst trykkes. Etter en container-omstart sender workflowen bare neste rapport på nytt.
+
+For knappen **Oppdater** i Klara AI, sett `N8N_AI_REPORT_REFRESH_URL` til den aktive n8n-webhooken for briefing-workflowen. Dashboardet ber n8n starte en ny rapport og viser fremdrift til den publiserte rapporten er oppdatert.
+
+Webhooken mottar `{ "mode": "on_demand", "requestedAt": "..." }` ved manuell oppdatering og `{ "mode": "coming_home", "requestedAt": "..." }` når `group.family` går fra borte til `home`. Manuelle rapporter viser de fem neste døgnbolkene kronologisk (`Natt`, `Morgen`, `Formiddag`, `Ettermiddag`, `Kveld`). Morgenplanen viser resten av dagen, kveldsplanen viser neste natt og morgendag, og hjemkomstrapporten begrenses til omtrent de neste 12 timene. Planlagte og nye publiserte rapporter åpnes automatisk i dashboardet.
 
 ## Temperatur
 

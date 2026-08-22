@@ -81,6 +81,20 @@ export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
   }
 };
 
+export type AiReportRefreshMode = 'on_demand' | 'coming_home';
+
+export const requestAiReportRefresh = async (mode: AiReportRefreshMode = 'on_demand'): Promise<void> => {
+  const response = await fetch('/api/ai-report/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, requestedAt: new Date().toISOString() }),
+  });
+  if (response.ok) return;
+  const body: unknown = await response.json().catch(() => undefined);
+  if (isPlainObject(body) && typeof body.error === 'string') throw new Error(body.error);
+  throw new Error('Kunne ikke starte AI-oppdateringen. Prøv igjen.');
+};
+
 export const runAction = async (
   action: DashboardAction,
   option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed,
