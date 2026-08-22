@@ -12,6 +12,7 @@ import {
 
 export interface DashboardApi {
   getStates(): Promise<{ states: Record<string, HomeAssistantState> }>;
+  getAiReport?(): Promise<AiReportResponse | undefined>;
   runAction(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<{ states: Record<string, HomeAssistantState> }>;
   runLightCommand(light: LightControlKey, command: LightCommand): Promise<{ states: Record<string, HomeAssistantState> }>;
   setTemperature(temperature: number): Promise<{ states: Record<string, HomeAssistantState> }>;
