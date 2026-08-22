@@ -157,6 +157,17 @@ describe('dashboard API', () => {
     expect(client.setTemperature).toHaveBeenCalledWith(21.5);
   });
 
+  it('accepts a complete n8n AI report only with the configured secret', async () => {
+    const app = createApp(createClient(), 'n8n-secret');
+    await request(app).post('/api/ai-report').send({ report: 'Hei' }).expect(401);
+
+    const publishedAt = '2026-08-22T08:00:00.000Z';
+    await request(app).post('/api/ai-report').set('X-AI-Report-Secret', 'n8n-secret')
+      .send({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt }).expect(202);
+    const result = await request(app).get('/api/ai-report').expect(200);
+    expect(result.body).toEqual({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt });
+  });
+
   it('forwards allowlisted light commands and rejects arbitrary entities', async () => {
     const client = createClient();
     vi.mocked(client.executeLight!).mockResolvedValue({ states: { lightCove: { entity_id: 'light.cove', state: 'on', attributes: {} } } });

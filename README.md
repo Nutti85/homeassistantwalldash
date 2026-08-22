@@ -27,11 +27,26 @@ For lokal utvikling med automatisk klientoppdatering, bruk `npm.cmd run dev` og 
    - `HA_GUEST_VOUCHER_CREATE_BUTTON_ID` = knappen som oppretter voucher. Standard er `button.67647a4bca314858fac0f8fc_create`.
    - `HA_DOORBELL_CAMERA_ENTITY_ID` = kameraet i ringeklokke-kortet. Standard er `camera.ringeklokke_fluent`.
    - `HA_COURTYARD_CAMERA_ENTITY_ID` = kameraet i Gårdsplassen-kortet. Standard er `camera.gaardsplass_fluent_lens_0`.
+   - `AI_REPORT_SECRET` = en ny, tilfeldig delt hemmelighet for n8n. Når den er satt, kan n8n sende den fullstendige AI-rapporten til `POST http://192.168.1.50:3100/api/ai-report` med headeren `X-AI-Report-Secret`.
    - `GIT_SYNC_REPO` = `https://github.com/Nutti85/homeassistantwalldash.git`
    - `GIT_SYNC_BRANCH` = `main`
 3. Deploy stacken og åpne `http://<proxmox-eller-portainer-vert>:<DASHBOARD_PORT>` fra tableten.
 
 `HA_GUEST_MODE_ENTITY_ID` kan overstyres dersom du vil bruke en annen Gjestemodus-entitet. Entiteten må være en `input_boolean`; dashboardet kaller `input_boolean.turn_on` og leser deretter samme entity tilbake som bekreftelse.
+
+## n8n AI-rapport
+
+Legg en HTTP Request-node på slutten av den nye n8n-workflowen:
+
+```json
+{
+  "report": "{{$json.report}}",
+  "title": "Dagens briefing",
+  "publishedAt": "{{$now.toISO()}}"
+}
+```
+
+Bruk `POST`, URL `http://192.168.1.50:3100/api/ai-report`, header `X-AI-Report-Secret` med samme verdi som `AI_REPORT_SECRET`, og `Content-Type: application/json`. Rapporten lagres i minnet til dashboardet og vises når stjerneknappen nederst trykkes. Etter en container-omstart sender workflowen bare neste rapport på nytt.
 
 ## Temperatur
 

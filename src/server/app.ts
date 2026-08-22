@@ -18,6 +18,12 @@ export interface DashboardClient {
   getVacuumMap?(): Promise<{ bytes: ArrayBuffer; contentType: string }>;
 }
 
+export interface AiReport {
+  report: string;
+  title?: string;
+  publishedAt: string;
+}
+
 const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
 const vacuumActions = new Set<VacuumAction>(['start', 'pause', 'dock', 'locate', 'full', 'gang', 'kjokken', 'lounge', 'stue', 'morgen', 'natt', 'vacMop', 'kitchenRefill', 'cleaningMode', 'mopMode', 'mopIntensity', 'volume']);
 const updateError = { error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' };
@@ -81,12 +87,28 @@ const proxyCameraStream = async (
   }
 };
 
-export const createApp = (client: DashboardClient): Express => {
+export const createApp = (client: DashboardClient, aiReportSecret = ''): Express => {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '256kb' }));
+  let aiReport: AiReport | undefined;
 
   app.get('/health', (_request: Request, response: Response) => {
     response.json({ status: 'ok' });
+  });
+
+  app.post('/api/ai-report', (request: Request, response: Response) => {
+    if (!aiReportSecret || request.get('X-AI-Report-Secret') !== aiReportSecret) { response.sendStatus(401); return; }
+    const body = request.body as unknown;
+    if (!isRecord(body) || typeof body.report !== 'string' || !body.report.trim() || body.report.length > 200_000
+      || (body.title !== undefined && typeof body.title !== 'string')
+      || (body.publishedAt !== undefined && (typeof body.publishedAt !== 'string' || !Number.isFinite(Date.parse(body.publishedAt))))) { response.sendStatus(400); return; }
+    aiReport = { report: body.report.trim(), ...(typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim().slice(0, 160) } : {}), publishedAt: typeof body.publishedAt === 'string' ? body.publishedAt : new Date().toISOString() };
+    response.status(202).json({ publishedAt: aiReport.publishedAt });
+  });
+
+  app.get('/api/ai-report', (_request: Request, response: Response) => {
+    if (!aiReport) { response.sendStatus(204); return; }
+    response.json(aiReport);
   });
 
   app.get('/api/states', async (_request: Request, response: Response) => {

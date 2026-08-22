@@ -7,7 +7,7 @@ import { defaultDashboardEntityIds } from '../shared/entities';
 
 const haUrl = process.env.HA_URL;
 const haToken = process.env.HA_TOKEN;
-const weatherAutomationTraceId = process.env.HA_WEATHER_AUTOMATION_TRACE_ID?.trim() || '1774815930721';
+const aiReportSecret = process.env.AI_REPORT_SECRET?.trim() || '';
 
 if (!haUrl || !haToken) {
   throw new Error('HA_URL og HA_TOKEN må være satt');
@@ -25,7 +25,6 @@ const entities = {
   weatherDaily: process.env.HA_WEATHER_DAILY_ENTITY_ID?.trim() || defaultDashboardEntityIds.weatherDaily,
   doorbellCamera: process.env.HA_DOORBELL_CAMERA_ENTITY_ID?.trim() || '',
   courtyardCamera: process.env.HA_COURTYARD_CAMERA_ENTITY_ID?.trim() || defaultDashboardEntityIds.courtyardCamera,
-  weatherSummary: process.env.HA_WEATHER_SUMMARY_ENTITY_ID?.trim() || '',
   meteoAlarm: process.env.HA_METEOALARM_ENTITY_ID?.trim() || defaultDashboardEntityIds.meteoAlarm,
   lightningDistance: process.env.HA_LIGHTNING_DISTANCE_ENTITY_ID?.trim() || defaultDashboardEntityIds.lightningDistance,
   auroraVisibility: process.env.HA_AURORA_VISIBILITY_ENTITY_ID?.trim() || defaultDashboardEntityIds.auroraVisibility,
@@ -53,7 +52,7 @@ const entities = {
   repairHealth: process.env.HA_REPAIR_HEALTH_ENTITY_ID?.trim() || '',
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
-const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId, weatherAutomationTraceId));
+const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId), aiReportSecret);
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

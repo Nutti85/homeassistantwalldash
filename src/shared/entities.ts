@@ -16,7 +16,7 @@ export type DashboardAction =
 export const dashboardStateKeys = [
   'home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night',
   'cooling', 'climate', 'outdoor', 'securityMode', 'frontDoorLock', 'doorbellCamera', 'courtyardCamera',
-  'weatherHourly', 'weatherDaily', 'weatherSummary', 'meteoAlarm', 'lightningDistance', 'lightningStrikes', 'auroraVisibility', 'auroraChance', 'moonPhase', 'sun',
+  'weatherHourly', 'weatherDaily', 'meteoAlarm', 'lightningDistance', 'lightningStrikes', 'auroraVisibility', 'auroraChance', 'moonPhase', 'sun',
   'netatmoPressure', 'netatmoWindAngle', 'netatmoWindDirection', 'netatmoWindSpeed', 'netatmoWindGust', 'netatmoRain', 'netatmoRainToday', 'netatmoRainLastHour',
   'pollenForecast', 'pollenAlder', 'pollenBirch', 'pollenGrass', 'pollenHazel', 'pollenMugwort', 'pollenWillow',
   'energyToday', 'energyYesterday', 'energyHourlyConsumption', 'energyPower', 'energyPrice', 'roomLiving',
@@ -59,7 +59,6 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   weatherDaily: 'sensor.weather_daily',
   doorbellCamera: '',
   courtyardCamera: 'camera.gaardsplass_fluent_lens_0',
-  weatherSummary: '',
   meteoAlarm: 'sensor.met_weather_alerts_county_39',
   lightningDistance: 'sensor.blitzortung_lightning_distance',
   lightningStrikes: '',

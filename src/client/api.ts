@@ -4,6 +4,12 @@ export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
 }
 
+export interface AiReportResponse {
+  report: string;
+  title?: string;
+  publishedAt: string;
+}
+
 const fallbackError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 const requestTimeoutMs = 10_000;
 
@@ -58,6 +64,22 @@ const request = async (path: string, init?: RequestInit): Promise<DashboardRespo
 };
 
 export const getStates = async (): Promise<DashboardResponse> => request('/api/states');
+
+export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch('/api/ai-report', { signal: controller.signal });
+    if (response.status === 204) return undefined;
+    const body: unknown = await response.json().catch(() => undefined);
+    if (!response.ok || !isPlainObject(body) || typeof body.report !== 'string' || typeof body.publishedAt !== 'string') throw new Error(fallbackError);
+    return { report: body.report, ...(typeof body.title === 'string' ? { title: body.title } : {}), publishedAt: body.publishedAt };
+  } catch {
+    throw new Error(fallbackError);
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+};
 
 export const runAction = async (
   action: DashboardAction,

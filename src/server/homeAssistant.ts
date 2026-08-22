@@ -177,7 +177,6 @@ export class HomeAssistantClient {
     private readonly fetcher: typeof fetch = fetch,
     private readonly entities: DashboardEntityIds = defaultDashboardEntityIds,
     private readonly guestVoucherCreateButtonId: string = guestVoucherCreateButtonEntityId,
-    private readonly weatherAutomationTraceId = '',
   ) {}
 
   public async getDashboardStates(): Promise<DashboardStates> {
@@ -200,14 +199,6 @@ export class HomeAssistantClient {
       states.lightningStrikes = await this.getLightningStrikes();
     } catch {
       states.lightningStrikes = { entity_id: 'geo_location.lightning_strike_*', state: 'unavailable', attributes: { strikes: [] } };
-    }
-    if (this.weatherAutomationTraceId) {
-      try {
-        const summary = await this.getWeatherSummaryFromTrace();
-        if (summary) states.weatherSummary = summary;
-      } catch {
-        // Keep the unavailable summary state when the trace is not reachable.
-      }
     }
     // The daily Tibber sensor resets at midnight. Use recorder statistics for
     // yesterday because raw history includes the state immediately before the
@@ -333,70 +324,6 @@ export class HomeAssistantClient {
     const payload: unknown = await response.json();
     if (!Array.isArray(payload) || !Array.isArray(payload[0])) throw communicationError();
     return hourlyConsumptionFromHourlySensor(payload[0], start.getTime(), end.getTime(), current.state);
-  }
-
-  private async getWeatherSummaryFromTrace(): Promise<HomeAssistantState | undefined> {
-    const trace = await this.callTrace('trace/list');
-    if (!Array.isArray(trace)) return undefined;
-    const runs = trace.filter(isRecord).sort((left, right) => {
-      const leftStart = isRecord(left.timestamp) && typeof left.timestamp.start === 'string' ? left.timestamp.start : '';
-      const rightStart = isRecord(right.timestamp) && typeof right.timestamp.start === 'string' ? right.timestamp.start : '';
-      return rightStart.localeCompare(leftStart);
-    });
-    const runIdValue = runs.find((run) => typeof run.run_id === 'string')?.run_id;
-    if (typeof runIdValue !== 'string') return undefined;
-    const runId = runIdValue;
-    const fullTrace = await this.callTrace('trace/get', runId);
-    const body = findBroadcastBody(fullTrace);
-    if (!body) return undefined;
-    return {
-      entity_id: `automation.${this.weatherAutomationTraceId}`,
-      state: body,
-      attributes: { source: 'automation trace', automation_id: this.weatherAutomationTraceId },
-    };
-  }
-
-  private async callTrace(type: 'trace/list' | 'trace/get', runId?: string): Promise<unknown> {
-    const websocketUrl = `${this.baseUrl.replace(/^http/, 'ws')}/api/websocket`;
-    return new Promise((resolve, reject) => {
-      const socket = new WebSocket(websocketUrl);
-      let settled = false;
-      let timeout: ReturnType<typeof setTimeout>;
-      const finish = (callback: () => void) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        socket.close();
-        callback();
-      };
-      const fail = () => finish(() => reject(communicationError()));
-      timeout = setTimeout(() => fail(), requestTimeoutMs);
-      socket.addEventListener('error', fail);
-      socket.addEventListener('close', () => { if (!settled) reject(communicationError()); });
-      socket.addEventListener('message', (event) => {
-        let message: unknown;
-        try { message = JSON.parse(String(event.data)); } catch { fail(); return; }
-        if (!isRecord(message)) return;
-        if (message.type === 'auth_required') {
-          socket.send(JSON.stringify({ type: 'auth', access_token: this.token }));
-          return;
-        }
-        if (message.type === 'auth_ok') {
-          socket.send(JSON.stringify({
-            id: 1,
-            type,
-            domain: 'automation',
-            item_id: this.weatherAutomationTraceId,
-            ...(runId ? { run_id: runId } : {}),
-          }));
-          return;
-        }
-        if (message.type === 'result' && message.id === 1) {
-          if (message.success !== true) { fail(); return; }
-          finish(() => resolve(message.result));
-        }
-      });
-    });
   }
 
   public async execute(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<CommandResult> {
