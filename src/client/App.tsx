@@ -211,11 +211,11 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
   const windMax = Math.max(2.5, ...windValues);
   const precipitationMax = Math.max(1, ...precipitationValues);
   const height = Math.max(120, width * viewport.height / viewport.width - 28);
+  // The detailed card uses the same visible gaps as the smaller overview
+  // chart. Its SVG is much wider, so the internal gutters scale down with its
+  // smaller label type instead of leaving an oversized empty border.
   const plot = detailed
-    ? { left: 80, right: 96, top: 6, bottom: 25 }
-    // The dashboard uses deliberately generous side gutters: the labels are
-    // end/start anchored into them, so the larger type neither overlaps the
-    // plotted data nor is clipped at the card edge.
+    ? { left: 92, right: 103, top: 31, bottom: 2 }
     : { left: 175, right: 175, top: 31, bottom: 25 };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
@@ -237,7 +237,7 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
     <div className="chart-legend" aria-label="Tegnforklaring"><span className="temp">Temperatur</span><span className="rain">Nedbør</span><span className="probability">Sannsynlighet</span><span className="wind">Vind</span><span className="gust">Kast</span><span className="cloud">Skydekke</span></div>
     {data.length ? <svg ref={svgRef} className="weather-chart" role="img" aria-label="Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke" viewBox={`0 0 ${width} ${height + 28}`} preserveAspectRatio="xMidYMid meet">
       <defs><linearGradient id={`temperature-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f4b17b" stopOpacity=".62"/><stop offset="1" stopColor="#f4b17b" stopOpacity=".08"/></linearGradient><linearGradient id={`cloud-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#aeb4b3" stopOpacity=".2"/><stop offset="1" stopColor="#aeb4b3" stopOpacity=".02"/></linearGradient></defs>
-      {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" textAnchor="start" x={10} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan><tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan></text><text className="axis-label axis-right" textAnchor="start" x={width - plot.right + 10} y={y + 4}>{percent}%</text><text className="axis-label axis-wind-label" textAnchor="end" x={width - 10} y={y + 4}>· {wind.toFixed(1)} m/s</text></g>; })}
+      {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" textAnchor="start" x={10} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan><tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan></text>{detailed ? <text className="axis-label axis-right" textAnchor="end" x={width - 10} y={y + 4}><tspan>{percent}%</tspan><tspan className="axis-wind-value"> · {wind.toFixed(1)} m/s</tspan></text> : <><text className="axis-label axis-right" textAnchor="start" x={width - plot.right + 10} y={y + 4}>{percent}%</text><text className="axis-label axis-wind-label" textAnchor="end" x={width - 10} y={y + 4}>· {wind.toFixed(1)} m/s</text></>}</g>; })}
       {cloudPath && <><path className="cloud-area" fill={`url(#cloud-fill-${detailed})`} d={`${cloudPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`}/><path className="cloud-line" d={cloudPath}/></>}
       {data.map((point, index) => point.precipitation !== undefined && <rect key={point.datetime} className="rainbar" x={plot.left + index * plotWidth / data.length + 2} y={plot.top + plotHeight - Math.min(point.precipitation / precipitationMax * plotHeight, plotHeight)} width={Math.max(4, plotWidth / data.length - 5)} height={Math.min(point.precipitation / precipitationMax * plotHeight, plotHeight)} />)}
       {tempPath && <><path className="temperature-area" d={`${tempPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`} /><path className="temperature-line" d={tempPath} /></>}

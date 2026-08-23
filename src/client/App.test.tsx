@@ -317,6 +317,26 @@ describe('redesigned dashboard', () => {
     expect(screen.queryByRole('button', { name: /Temperatur/ })).not.toBeInTheDocument();
   });
 
+  it('uses the dashboard chart spacing and label anchors in detailed weather', async () => {
+    const forecast = Array.from({ length: 4 }, (_, index) => ({
+      datetime: new Date(Date.parse('2026-08-10T21:00:00+02:00') + index * 60 * 60 * 1000).toISOString(),
+      temperature: 12 + index, precipitation: index / 2, precipitation_probability: 50,
+      wind_speed: 2 + index, wind_gust_speed: 4 + index, cloud_coverage: 70,
+    }));
+    render(<App api={createApi({ weatherHourly: state('sensor.hourly', 'rainy', { forecast }) })} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Åpne detaljert vær' }));
+    const graph = screen.getByRole('img', { name: /Samlet graf/ });
+    const leftAxis = graph.querySelector('.axis-left');
+    const probabilityAxis = graph.querySelector('.axis-right');
+
+    expect(leftAxis).toHaveAttribute('text-anchor', 'start');
+    expect(leftAxis).toHaveAttribute('x', '10');
+    expect(probabilityAxis).toHaveAttribute('text-anchor', 'end');
+    expect(probabilityAxis).toHaveAttribute('x', '890');
+    expect(probabilityAxis).toHaveTextContent(/% · .* m\/s/);
+    expect(graph.querySelector('.axis-wind-label')).toBeNull();
+  });
+
   it('shows only active weather alerts and falls back to Ingen varsler', async () => {
     const quietForecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 8 }];
     const forecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 11.8 }];
