@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getStates, requestAiReportRefresh } from './api';
+import { getAiReport, getStates, requestAiReportRefresh } from './api';
 
 describe('browser dashboard API', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -27,5 +27,23 @@ describe('browser dashboard API', () => {
       body: expect.stringContaining('"mode":"coming_home"'),
     }));
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).requestedAt).toEqual(expect.any(String));
+  });
+
+  it('requests the focused morning report', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await requestAiReportRefresh('morning');
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ mode: 'morning' });
+  });
+
+  it('bypasses the browser cache when polling for a published report', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ report: 'Ny rapport', publishedAt: '2026-08-23T08:00:00.000Z' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getAiReport();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/ai-report', expect.objectContaining({ cache: 'no-store' }));
   });
 });

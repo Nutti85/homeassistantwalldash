@@ -69,7 +69,7 @@ export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch('/api/ai-report', { signal: controller.signal });
+    const response = await fetch('/api/ai-report', { signal: controller.signal, cache: 'no-store' });
     if (response.status === 204) return undefined;
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok || !isPlainObject(body) || typeof body.report !== 'string' || typeof body.publishedAt !== 'string') throw new Error(fallbackError);
@@ -81,9 +81,13 @@ export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
   }
 };
 
-export type AiReportRefreshMode = 'on_demand' | 'coming_home';
+/**
+ * Report intents sent to n8n. `on_demand` is retained so older n8n workflows
+ * can continue to work while they are updated to use `full`.
+ */
+export type AiReportRefreshMode = 'full' | 'morning' | 'midday' | 'afternoon' | 'on_demand' | 'coming_home';
 
-export const requestAiReportRefresh = async (mode: AiReportRefreshMode = 'on_demand'): Promise<void> => {
+export const requestAiReportRefresh = async (mode: AiReportRefreshMode = 'full'): Promise<void> => {
   const response = await fetch('/api/ai-report/refresh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -28,7 +28,7 @@ const GRID_COLUMNS = 24;
 const GRID_ROWS = 8;
 const radarRefreshIntervalMs = 15 * 60 * 1000;
 const updateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
-const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
+const Icon = ({ children, filled = false, className }: { children: string; filled?: boolean; className?: string }) => <span className={`material-symbols-outlined ${className ?? ''}`} style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const fmt = (value: number | undefined, unit = '') => value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`;
 
 const WeatherGlyph = ({ condition, large = false }: { condition?: string; large?: boolean }) => (
@@ -548,16 +548,23 @@ const renderReportContent = (text: string): ReactElement[] => {
   return blocks;
 };
 
-function KlaraAiModal({ report, loading, error, refreshing, refreshProgress, refresh, close, closeButtonRef }: { report?: AiReportResponse; loading: boolean; error?: string; refreshing: boolean; refreshProgress?: string; refresh: () => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
+const reportRequestLabels: Record<Exclude<AiReportRefreshMode, 'coming_home' | 'on_demand'>, { label: string; icon: string }> = {
+  full: { label: 'Full rapport', icon: 'summarize' },
+  morning: { label: 'Morgen', icon: 'wb_twilight' },
+  midday: { label: 'Formiddag', icon: 'light_mode' },
+  afternoon: { label: 'Ettermiddag', icon: 'directions_car' },
+};
+
+function KlaraAiModal({ report, loading, error, refreshing, refreshingMode, refreshProgress, refresh, close, closeButtonRef }: { report?: AiReportResponse; loading: boolean; error?: string; refreshing: boolean; refreshingMode?: AiReportRefreshMode; refreshProgress?: string; refresh: (mode: AiReportRefreshMode) => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
   const sections = report ? reportSections(report.report) : [];
   const reportPeriod = sections.find((section) => section.heading === 'Rapportperiode');
   const visibleSections = sections.filter((section) => section.heading !== 'Rapportperiode');
   return <div className="klara-ai-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <section className="klara-ai-modal" role="dialog" aria-modal="true" aria-labelledby="klara-ai-title">
       <button ref={closeButtonRef} className="klara-ai-close" type="button" aria-label="Lukk Klara AI" onClick={close}><Icon>close</Icon></button>
-      <header className="klara-ai-header"><div><h2 id="klara-ai-title">Klara AI</h2></div><Icon filled>auto_awesome</Icon></header>
+      <header className="klara-ai-header"><div><h2 id="klara-ai-title">{report?.title ?? 'Klara AI'}</h2></div><Icon filled>auto_awesome</Icon></header>
       <article className="klara-ai-report">{loading ? 'Henter rapport …' : error ? error : report ? <><div className="klara-ai-report-meta">{reportPeriod && <div><strong>Rapportperiode</strong><span>{reportPeriod.text}</span></div>}<time dateTime={report.publishedAt}>Oppdatert {new Date(report.publishedAt).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })}</time></div><div className="klara-ai-sections">{visibleSections.map((section, index) => <section key={`${section.heading ?? 'rapport'}-${index}`}>{section.heading && <h3>{section.heading}</h3>}<div className="klara-ai-section-content">{renderReportContent(section.text)}</div></section>)}</div></> : 'Ingen AI-rapport er publisert ennå.'}</article>
-      <footer className="klara-ai-actions"><button type="button" onClick={refresh} disabled={refreshing}><Icon>{refreshing ? 'progress_activity' : 'refresh'}</Icon>Oppdater</button>{refreshProgress && <p role="status">{refreshProgress}</p>}</footer>
+      <footer className="klara-ai-actions"><div role="group" aria-label="Bestill rapport">{(Object.entries(reportRequestLabels) as Array<[keyof typeof reportRequestLabels, typeof reportRequestLabels.full]>).map(([mode, meta]) => { const isRefreshing = refreshing && refreshingMode === mode; return <button key={mode} type="button" onClick={() => refresh(mode)} disabled={refreshing}><Icon className={isRefreshing ? 'report-refresh-spinner' : undefined}>{isRefreshing ? 'progress_activity' : meta.icon}</Icon>{meta.label}</button>; })}</div>{refreshProgress && <p role="status">{refreshProgress}</p>}</footer>
     </section>
   </div>;
 }
@@ -972,6 +979,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [aiReportLoading, setAiReportLoading] = useState(false);
   const [aiReportError, setAiReportError] = useState<string>();
   const [aiReportRefreshing, setAiReportRefreshing] = useState(false);
+  const [aiReportRefreshingMode, setAiReportRefreshingMode] = useState<AiReportRefreshMode>();
   const [aiReportRefreshProgress, setAiReportRefreshProgress] = useState<string>();
   const [toast, setToast] = useState<string | null>(null);
   const repairButton = useRef<HTMLButtonElement>(null);
@@ -1063,11 +1071,19 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     const timer = window.setInterval(checkForNewReport, stateRefreshIntervalMs);
     return () => window.clearInterval(timer);
   }, [api]);
-  const refreshAiReport = async (mode: AiReportRefreshMode = 'on_demand') => {
+  const refreshAiReport = async (mode: AiReportRefreshMode = 'full') => {
     if (aiReportRefreshing) return;
     const previousPublishedAt = aiReport?.publishedAt ?? lastReportPublishedAt.current;
-    setKlaraAiOpen(true); setAiReportRefreshing(true);
-    setAiReportRefreshProgress(mode === 'coming_home' ? 'Lager en fersk hjemkomstrapport …' : 'Starter ny rapport …');
+    setKlaraAiOpen(true); setAiReportRefreshing(true); setAiReportRefreshingMode(mode);
+    const progressByMode: Record<AiReportRefreshMode, string> = {
+      full: 'Lager en full, detaljert rapport …',
+      morning: 'Lager en morgenrapport med reiseoversikt …',
+      midday: 'Lager en formiddagsrapport …',
+      afternoon: 'Lager en ettermiddagsrapport med aktiviteter …',
+      on_demand: 'Starter ny rapport …',
+      coming_home: 'Lager en fersk hjemkomstrapport …',
+    };
+    setAiReportRefreshProgress(progressByMode[mode]);
     setAiReportError(undefined);
     try {
       await (api.requestAiReportRefresh ?? browserApi.requestAiReportRefresh)(mode);
@@ -1080,7 +1096,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
       }
       setAiReportRefreshProgress('Rapporten bruker lengre tid enn vanlig. Prøv igjen om litt.');
     } catch (refreshError) { setAiReportRefreshProgress(refreshError instanceof Error ? refreshError.message : 'Kunne ikke starte AI-oppdateringen. Prøv igjen.'); }
-    finally { setAiReportRefreshing(false); }
+    finally { setAiReportRefreshing(false); setAiReportRefreshingMode(undefined); }
   };
   useEffect(() => {
     const nextState = states.family?.state;
@@ -1089,5 +1105,5 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   }, [states.family?.state]);
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
-  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} loading={aiReportLoading} error={aiReportError} refreshing={aiReportRefreshing} refreshProgress={aiReportRefreshProgress} refresh={() => { void refreshAiReport('on_demand'); }} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} setMode={setMode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} klaraButtonRef={klaraButton}/>{lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} loading={aiReportLoading} error={aiReportError} refreshing={aiReportRefreshing} refreshingMode={aiReportRefreshingMode} refreshProgress={aiReportRefreshProgress} refresh={(reportMode) => { void refreshAiReport(reportMode); }} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }

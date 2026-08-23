@@ -40,6 +40,7 @@ Legg en HTTP Request-node på slutten av den nye n8n-workflowen:
 
 ```json
 {
+  "title": "{{$json.title}}",
   "report": "{{$json.report}}",
   "publishedAt": "{{$now.toISO()}}"
 }
@@ -47,9 +48,11 @@ Legg en HTTP Request-node på slutten av den nye n8n-workflowen:
 
 Bruk strukturerte Markdown-overskrifter i `report`, for eksempel `## Kort oppsummert`, `## Vær`, `## Hjemmet` og `## Anbefalinger`. De vises som egne, lettleste seksjoner i Klara AI. `Personlig oversikt` og `Full rapport` trengs ikke som overskrifter. Bruk `POST`, URL `http://192.168.1.50:3100/api/ai-report`, header `X-AI-Report-Secret` med samme verdi som `AI_REPORT_SECRET`, og `Content-Type: application/json`. Rapporten lagres i minnet til dashboardet og vises når stjerneknappen nederst trykkes. Etter en container-omstart sender workflowen bare neste rapport på nytt.
 
-For knappen **Oppdater** i Klara AI, sett `N8N_AI_REPORT_REFRESH_URL` til den aktive n8n-webhooken for briefing-workflowen. Dashboardet ber n8n starte en ny rapport og viser fremdrift til den publiserte rapporten er oppdatert.
+Sett `N8N_AI_REPORT_REFRESH_URL` til den aktive n8n-webhooken for briefing-workflowen. Klara AI viser knappene **Full rapport**, **Morgen**, **Formiddag** og **Ettermiddag** og viser fremdrift til den publiserte rapporten er oppdatert.
 
-Webhooken mottar `{ "mode": "on_demand", "requestedAt": "..." }` ved manuell oppdatering og `{ "mode": "coming_home", "requestedAt": "..." }` når `group.family` går fra borte til `home`. Manuelle rapporter viser de fem neste døgnbolkene kronologisk (`Natt`, `Morgen`, `Formiddag`, `Ettermiddag`, `Kveld`). Morgenplanen viser resten av dagen, kveldsplanen viser neste natt og morgendag, og hjemkomstrapporten begrenses til omtrent de neste 12 timene. Planlagte og nye publiserte rapporter åpnes automatisk i dashboardet.
+Webhooken mottar `{ "mode": "full", "requestedAt": "..." }`, `{ "mode": "morning", "requestedAt": "..." }`, `{ "mode": "midday", "requestedAt": "..." }` eller `{ "mode": "afternoon", "requestedAt": "..." }`. `on_demand` støttes fortsatt av hensyn til eldre kall og behandles som `full`; `{ "mode": "coming_home", "requestedAt": "..." }` brukes når `group.family` går fra borte til `home`.
+
+Rapportperiodene i n8n og outputen er: `Natt` 23:00–06:00, `Morgen` 06:00–09:00, `Formiddag` 09:00–15:00, `Ettermiddag` 16:00–19:00 og `Kveld` 19:00–23:00. Mellomrommet 15:00–16:00 har bevisst ingen navngitt periode. Morgenrapporten prioriterer morgen og reise til jobb, skole og barnehage 07:30–09:30 på arbeidsdager. Ettermiddagsrapporten prioriterer 16:00–19:00, aktiviteter og kalenderhendelser. Full rapport er den detaljerte oversikten. Planlagte kjøringer (06:30 og 22:00) beholdes uendret, og nye publiserte rapporter åpnes automatisk i dashboardet.
 
 ## Temperatur
 

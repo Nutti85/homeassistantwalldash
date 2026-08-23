@@ -236,7 +236,11 @@ describe('redesigned dashboard', () => {
     expect(screen.getByText('Regn i kveld.').tagName).toBe('LI');
     expect(screen.getByRole('heading', { name: 'Anbefalinger' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Personlig oversikt' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Oppdater' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Full rapport' })).toBeInTheDocument();
+    const reportDialog = screen.getByRole('dialog');
+    expect(within(reportDialog).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
+    expect(within(reportDialog).getByRole('button', { name: 'Formiddag' })).toBeInTheDocument();
+    expect(within(reportDialog).getByRole('button', { name: 'Ettermiddag' })).toBeInTheDocument();
   });
 
   it('opens detailed weather and switches its tabs', async () => {

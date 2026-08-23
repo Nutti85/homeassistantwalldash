@@ -107,13 +107,13 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
   });
 
   app.get('/api/ai-report', async (_request: Request, response: Response) => {
-    if (aiReport) { response.json(aiReport); return; }
+    if (aiReport) { response.set('Cache-Control', 'no-store').json(aiReport); return; }
     if (aiReportSourceUrl) {
       try {
-        const upstream = await fetch(`${aiReportSourceUrl.replace(/\/$/, '')}/api/ai-report`);
+        const upstream = await fetch(`${aiReportSourceUrl.replace(/\/$/, '')}/api/ai-report`, { cache: 'no-store' });
         if (upstream.status === 204) { response.sendStatus(204); return; }
         if (!upstream.ok) { response.sendStatus(502); return; }
-        response.type('application/json').send(await upstream.text());
+        response.set('Cache-Control', 'no-store').type('application/json').send(await upstream.text());
       } catch { response.sendStatus(502); }
       return;
     }
@@ -123,7 +123,11 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
   app.post('/api/ai-report/refresh', async (request: Request, response: Response) => {
     if (!aiReportRefreshUrl) { response.status(503).json({ error: 'AI-oppdatering er ikke konfigurert.' }); return; }
     const body = isRecord(request.body) ? request.body : {};
-    const mode = body.mode === 'coming_home' ? 'coming_home' : body.mode === undefined || body.mode === 'on_demand' ? 'on_demand' : undefined;
+    const mode = body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'coming_home'
+      ? body.mode
+      : body.mode === undefined || body.mode === 'on_demand'
+        ? 'on_demand'
+        : undefined;
     if (!mode) { response.sendStatus(400); return; }
     const requestedAt = typeof body.requestedAt === 'string' && Number.isFinite(Date.parse(body.requestedAt))
       ? body.requestedAt
