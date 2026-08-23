@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp, type DashboardClient } from './app';
@@ -166,6 +169,21 @@ describe('dashboard API', () => {
       .send({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt }).expect(202);
     const result = await request(app).get('/api/ai-report').expect(200);
     expect(result.body).toEqual({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt });
+  });
+
+  it('restores the latest AI report after an app restart when persistence is configured', async () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'walldash-ai-report-'));
+    const storePath = path.join(directory, 'report.json');
+    try {
+      await request(createApp(createClient(), 'n8n-secret', '', '', storePath)).post('/api/ai-report')
+        .set('X-AI-Report-Secret', 'n8n-secret')
+        .send({ title: 'Kveldsrapport', report: 'Rapporten overlever omstart.', publishedAt: '2026-08-23T20:00:00.000Z' })
+        .expect(202);
+      const restored = await request(createApp(createClient(), 'n8n-secret', '', '', storePath)).get('/api/ai-report').expect(200);
+      expect(restored.body).toEqual({ title: 'Kveldsrapport', report: 'Rapporten overlever omstart.', publishedAt: '2026-08-23T20:00:00.000Z' });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('uses the configured report source when no local report has been published', async () => {

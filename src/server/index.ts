@@ -10,6 +10,7 @@ const haToken = process.env.HA_TOKEN;
 const aiReportSecret = process.env.AI_REPORT_SECRET?.trim() || '';
 const aiReportSourceUrl = process.env.AI_REPORT_SOURCE_URL?.trim() || '';
 const aiReportRefreshUrl = process.env.N8N_AI_REPORT_REFRESH_URL?.trim() || '';
+const aiReportStorePath = process.env.AI_REPORT_STORE_PATH?.trim() || '';
 
 if (!haUrl || !haToken) {
   throw new Error('HA_URL og HA_TOKEN må være satt');
@@ -55,7 +56,7 @@ const entities = {
   repairHealth: process.env.HA_REPAIR_HEALTH_ENTITY_ID?.trim() || '',
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
-const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId), aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl);
+const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId), aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath);
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

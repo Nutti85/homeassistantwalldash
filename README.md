@@ -46,7 +46,7 @@ Legg en HTTP Request-node på slutten av den nye n8n-workflowen:
 }
 ```
 
-Bruk strukturerte Markdown-overskrifter i `report`, for eksempel `## Kort oppsummert`, `## Vær`, `## Hjemmet` og `## Anbefalinger`. De vises som egne, lettleste seksjoner i Klara AI. `Personlig oversikt` og `Full rapport` trengs ikke som overskrifter. Bruk `POST`, URL `http://192.168.1.50:3100/api/ai-report`, header `X-AI-Report-Secret` med samme verdi som `AI_REPORT_SECRET`, og `Content-Type: application/json`. Rapporten lagres i minnet til dashboardet og vises når stjerneknappen nederst trykkes. Etter en container-omstart sender workflowen bare neste rapport på nytt.
+Bruk strukturerte Markdown-overskrifter i `report`, for eksempel `## Kort oppsummert`, `## Vær`, `## Hjemmet` og `## Anbefalinger`. De vises som egne, lettleste seksjoner i Klara AI. `Personlig oversikt` og `Full rapport` trengs ikke som overskrifter. Bruk `POST`, URL `http://192.168.1.50:3100/api/ai-report`, header `X-AI-Report-Secret` med samme verdi som `AI_REPORT_SECRET`, og `Content-Type: application/json`. Rapporten lagres på dashboardets persistente volum og vises når stjerneknappen nederst trykkes. Nye publiserte rapporter åpnes automatisk, også etter en dashboard-omstart.
 
 Sett `N8N_AI_REPORT_REFRESH_URL` til den aktive n8n-webhooken for briefing-workflowen. Klara AI viser knappene **Full rapport**, **Morgen**, **Formiddag** og **Ettermiddag** og viser fremdrift til den publiserte rapporten er oppdatert.
 

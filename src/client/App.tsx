@@ -990,6 +990,8 @@ function DetailedWeather({ states, close }: { states: Record<string, HomeAssista
 }
 
 const stateRefreshIntervalMs = 30_000;
+const aiReportSeenStorageKey = 'walldash.klara-ai.last-seen-published-at';
+const familyStateStorageKey = 'walldash.family.last-state';
 
 export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
@@ -1093,7 +1095,8 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   useEffect(() => {
     const checkForNewReport = () => { void (api.getAiReport ?? browserApi.getAiReport)().then((next) => {
       if (!next) return;
-      if (lastReportPublishedAt.current && lastReportPublishedAt.current !== next.publishedAt) {
+      const previousPublishedAt = lastReportPublishedAt.current ?? window.localStorage.getItem(aiReportSeenStorageKey) ?? undefined;
+      if (previousPublishedAt && previousPublishedAt !== next.publishedAt) {
         setAiReport(next);
         setKlaraAiOpen(true);
         setAiReportRefreshing(false);
@@ -1101,6 +1104,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
         setAiReportRefreshProgress('Ny rapport er klar.');
       }
       lastReportPublishedAt.current = next.publishedAt;
+      window.localStorage.setItem(aiReportSeenStorageKey, next.publishedAt);
     }).catch(() => undefined); };
     checkForNewReport();
     const timer = window.setInterval(checkForNewReport, stateRefreshIntervalMs);
@@ -1135,8 +1139,12 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   };
   useEffect(() => {
     const nextState = states.family?.state;
-    if (lastFamilyState.current && lastFamilyState.current !== 'home' && nextState === 'home') void refreshAiReport('coming_home');
-    lastFamilyState.current = nextState;
+    const previousState = lastFamilyState.current ?? window.localStorage.getItem(familyStateStorageKey) ?? undefined;
+    if (previousState && previousState !== 'home' && nextState === 'home') void refreshAiReport('coming_home');
+    if (nextState) {
+      lastFamilyState.current = nextState;
+      window.localStorage.setItem(familyStateStorageKey, nextState);
+    }
   }, [states.family?.state]);
 
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;

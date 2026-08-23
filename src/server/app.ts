@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import express, { type Express, type Request, type Response } from 'express';
 import type { HomeAssistantClient, VacuumAction } from './homeAssistant';
 import { lightControlKeys, type DashboardAction, type FanSpeed, type HeatPumpMode, type LightCommand, type LightControlKey } from '../shared/entities';
@@ -31,6 +33,29 @@ const updateError = { error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' };
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const loadAiReport = (storePath: string): AiReport | undefined => {
+  try {
+    const parsed = JSON.parse(readFileSync(storePath, 'utf8')) as unknown;
+    if (!isRecord(parsed) || typeof parsed.report !== 'string' || !parsed.report.trim() || typeof parsed.publishedAt !== 'string') return undefined;
+    return {
+      report: parsed.report,
+      ...(typeof parsed.title === 'string' && parsed.title.trim() ? { title: parsed.title } : {}),
+      publishedAt: parsed.publishedAt,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+const saveAiReport = (storePath: string, report: AiReport): void => {
+  try {
+    mkdirSync(path.dirname(storePath), { recursive: true });
+    writeFileSync(storePath, JSON.stringify(report), 'utf8');
+  } catch {
+    // The in-memory report remains available if persistence is temporarily unavailable.
+  }
+};
 
 const isHomeOption = (value: unknown): value is 'Hjemme' | 'Borte' => value === 'Hjemme' || value === 'Borte';
 const isHeatPumpMode = (value: unknown): value is HeatPumpMode => value === 'cool' || value === 'heat' || value === 'heat_cool' || value === 'fan_only';
@@ -87,10 +112,10 @@ const proxyCameraStream = async (
   }
 };
 
-export const createApp = (client: DashboardClient, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = ''): Express => {
+export const createApp = (client: DashboardClient, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = ''): Express => {
   const app = express();
   app.use(express.json({ limit: '256kb' }));
-  let aiReport: AiReport | undefined;
+  let aiReport: AiReport | undefined = aiReportStorePath ? loadAiReport(aiReportStorePath) : undefined;
 
   app.get('/health', (_request: Request, response: Response) => {
     response.json({ status: 'ok' });
@@ -103,6 +128,7 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
       || (body.title !== undefined && typeof body.title !== 'string')
       || (body.publishedAt !== undefined && (typeof body.publishedAt !== 'string' || !Number.isFinite(Date.parse(body.publishedAt))))) { response.sendStatus(400); return; }
     aiReport = { report: body.report.trim(), ...(typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim().slice(0, 160) } : {}), publishedAt: typeof body.publishedAt === 'string' ? body.publishedAt : new Date().toISOString() };
+    if (aiReportStorePath) saveAiReport(aiReportStorePath, aiReport);
     response.status(202).json({ publishedAt: aiReport.publishedAt });
   });
 

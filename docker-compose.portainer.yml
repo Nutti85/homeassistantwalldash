@@ -33,6 +33,7 @@ services:
       HA_COURTYARD_CAMERA_ENTITY_ID: ${HA_COURTYARD_CAMERA_ENTITY_ID:-camera.gaardsplass_fluent_lens_0}
       AI_REPORT_SECRET: ${AI_REPORT_SECRET:-}
       N8N_AI_REPORT_REFRESH_URL: ${N8N_AI_REPORT_REFRESH_URL:-}
+      AI_REPORT_STORE_PATH: ${AI_REPORT_STORE_PATH:-/workspace/app/.runtime/ai-report.json}
       GIT_SYNC_REPO: ${GIT_SYNC_REPO:-https://github.com/Nutti85/homeassistantwalldash.git}
       GIT_SYNC_BRANCH: ${GIT_SYNC_BRANCH:-main}
       PORT: "3000"

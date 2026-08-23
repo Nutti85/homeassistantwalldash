@@ -144,6 +144,9 @@ describe('redesigned dashboard', () => {
     vi.mocked(api.getStates)
       .mockResolvedValueOnce({ states: baseStates })
       .mockResolvedValueOnce({ states: { ...baseStates, weatherSummary: state('sensor.summary', 'Sol og varmt i morgen.') } });
+    vi.mocked(api.getAiReport!)
+      .mockResolvedValueOnce({ report: 'Første rapport', publishedAt: '2026-08-23T06:30:00.000Z' })
+      .mockResolvedValueOnce({ report: 'Ny rapport', publishedAt: '2026-08-23T07:00:00.000Z' });
     render(<App api={api} />);
     await act(async () => { await Promise.resolve(); });
     expect(api.getStates).toHaveBeenCalledTimes(1);
