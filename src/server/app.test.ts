@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import { createApp, type DashboardClient } from './app';
+import { createApp, waitForWritable, type DashboardClient } from './app';
 
 const confirmedGuestMode = {
   states: {
@@ -166,9 +167,11 @@ describe('dashboard API', () => {
 
     const publishedAt = '2026-08-22T08:00:00.000Z';
     await request(app).post('/api/ai-report').set('X-AI-Report-Secret', 'n8n-secret')
-      .send({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt }).expect(202);
+      .send({ title: 'Morgenbrief', mode: 'morning', report: 'Første linje\nAndre linje', publishedAt }).expect(202);
     const result = await request(app).get('/api/ai-report').expect(200);
-    expect(result.body).toEqual({ title: 'Morgenbrief', report: 'Første linje\nAndre linje', publishedAt });
+    expect(result.body).toEqual({ title: 'Morgenbrief', mode: 'morning', report: 'Første linje\nAndre linje', publishedAt });
+    await request(app).post('/api/ai-report').set('X-AI-Report-Secret', 'n8n-secret')
+      .send({ mode: 'bedtime', report: 'Ugyldig modus' }).expect(400);
   });
 
   it('restores the latest AI report after an app restart when persistence is configured', async () => {
@@ -194,6 +197,30 @@ describe('dashboard API', () => {
     fetchMock.mockRestore();
   });
 
+  it('caches a valid report loaded from the configured report source', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ report: '## Vær\nSol.', publishedAt: '2026-08-22T08:00:00.000Z' }), { status: 200 }));
+    const app = createApp(createClient(), '', 'http://192.168.1.50:3100');
+    await request(app).get('/api/ai-report').expect(200);
+    await request(app).get('/api/ai-report').expect(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockRestore();
+  });
+
+  it('revalidates a cached source report so a newly published report is discovered', async () => {
+    let now = 10_000;
+    const nowMock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ report: 'Gammel rapport', publishedAt: '2026-08-23T08:00:00.000Z' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ report: 'Ny rapport', publishedAt: '2026-08-23T08:05:00.000Z' }), { status: 200 }));
+    const app = createApp(createClient(), '', 'http://192.168.1.50:3100');
+    await request(app).get('/api/ai-report').expect(200, { report: 'Gammel rapport', publishedAt: '2026-08-23T08:00:00.000Z' });
+    now += 1_501;
+    await request(app).get('/api/ai-report').expect(200, { report: 'Ny rapport', publishedAt: '2026-08-23T08:05:00.000Z' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockRestore();
+    nowMock.mockRestore();
+  });
+
   it('starts an on-demand AI report through the configured n8n webhook', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
     await request(createApp(createClient(), '', '', 'http://n8n.test/webhook/refresh'))
@@ -216,6 +243,8 @@ describe('dashboard API', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toMatchObject({ mode: 'afternoon' });
     await request(app).post('/api/ai-report/refresh').send({ mode: 'midday' }).expect(202);
     expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toMatchObject({ mode: 'midday' });
+    await request(app).post('/api/ai-report/refresh').send({ mode: 'evening' }).expect(202);
+    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body))).toMatchObject({ mode: 'evening' });
     await request(app).post('/api/ai-report/refresh').send({ mode: 'bedtime' }).expect(400);
     fetchMock.mockRestore();
   });
@@ -245,5 +274,18 @@ describe('dashboard API', () => {
     expect(response.headers['cache-control']).toBe('no-store, no-transform');
     expect(response.headers['content-type']).toContain('application/octet-stream');
     expect(client.getCameraStream).toHaveBeenCalledOnce();
+  });
+
+  it('removes the unused camera backpressure listener after draining', async () => {
+    const response = new EventEmitter();
+    const writable = waitForWritable(response as never);
+    expect(response.listenerCount('drain')).toBe(1);
+    expect(response.listenerCount('close')).toBe(1);
+
+    response.emit('drain');
+    await writable;
+
+    expect(response.listenerCount('drain')).toBe(0);
+    expect(response.listenerCount('close')).toBe(0);
   });
 });

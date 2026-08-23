@@ -4,9 +4,12 @@ export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
 }
 
+export type AiReportMode = 'full' | 'morning' | 'midday' | 'afternoon' | 'evening' | 'coming_home';
+
 export interface AiReportResponse {
   report: string;
   title?: string;
+  mode?: AiReportMode;
   publishedAt: string;
 }
 
@@ -73,7 +76,12 @@ export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
     if (response.status === 204) return undefined;
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok || !isPlainObject(body) || typeof body.report !== 'string' || typeof body.publishedAt !== 'string') throw new Error(fallbackError);
-    return { report: body.report, ...(typeof body.title === 'string' ? { title: body.title } : {}), publishedAt: body.publishedAt };
+    return {
+      report: body.report,
+      ...(typeof body.title === 'string' ? { title: body.title } : {}),
+      ...(body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'evening' || body.mode === 'coming_home' ? { mode: body.mode } : {}),
+      publishedAt: body.publishedAt,
+    };
   } catch {
     throw new Error(fallbackError);
   } finally {
@@ -85,7 +93,7 @@ export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
  * Report intents sent to n8n. `on_demand` is retained so older n8n workflows
  * can continue to work while they are updated to use `full`.
  */
-export type AiReportRefreshMode = 'full' | 'morning' | 'midday' | 'afternoon' | 'on_demand' | 'coming_home';
+export type AiReportRefreshMode = AiReportMode | 'on_demand';
 
 export const requestAiReportRefresh = async (mode: AiReportRefreshMode = 'full'): Promise<void> => {
   const controller = new AbortController();

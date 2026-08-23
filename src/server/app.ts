@@ -23,12 +23,14 @@ export interface DashboardClient {
 export interface AiReport {
   report: string;
   title?: string;
+  mode?: 'full' | 'morning' | 'midday' | 'afternoon' | 'evening' | 'coming_home';
   publishedAt: string;
 }
 
 const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
 const vacuumActions = new Set<VacuumAction>(['start', 'pause', 'dock', 'locate', 'full', 'gang', 'kjokken', 'lounge', 'stue', 'morgen', 'natt', 'vacMop', 'kitchenRefill', 'cleaningMode', 'mopMode', 'mopIntensity', 'volume']);
 const updateError = { error: 'Kunne ikke oppdatere smarthuset. Prøv igjen.' };
+const aiReportSourceCacheMs = 1_500;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -41,6 +43,7 @@ const loadAiReport = (storePath: string): AiReport | undefined => {
     return {
       report: parsed.report,
       ...(typeof parsed.title === 'string' && parsed.title.trim() ? { title: parsed.title } : {}),
+      ...(parsed.mode === 'full' || parsed.mode === 'morning' || parsed.mode === 'midday' || parsed.mode === 'afternoon' || parsed.mode === 'evening' || parsed.mode === 'coming_home' ? { mode: parsed.mode } : {}),
       publishedAt: parsed.publishedAt,
     };
   } catch {
@@ -70,6 +73,16 @@ const sendClientError = (_error: unknown, response: Response): void => {
   response.status(502).json(updateError);
 };
 
+export const waitForWritable = (response: Response): Promise<void> => new Promise((resolve) => {
+  const resume = () => {
+    response.off('drain', resume);
+    response.off('close', resume);
+    resolve();
+  };
+  response.once('drain', resume);
+  response.once('close', resume);
+});
+
 const proxyCameraStream = async (
   request: Request,
   response: Response,
@@ -95,10 +108,7 @@ const proxyCameraStream = async (
       if (done) break;
       // Do not accumulate old frames when a client is temporarily slow.
       if (!response.write(value)) {
-        await new Promise<void>((resolve) => {
-          response.once('drain', resolve);
-          response.once('close', resolve);
-        });
+        await waitForWritable(response);
       }
     }
     if (!response.destroyed) response.end();
@@ -116,6 +126,7 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   let aiReport: AiReport | undefined = aiReportStorePath ? loadAiReport(aiReportStorePath) : undefined;
+  let aiReportSourceCheckedAt = 0;
 
   app.get('/health', (_request: Request, response: Response) => {
     response.json({ status: 'ok' });
@@ -126,21 +137,50 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
     const body = request.body as unknown;
     if (!isRecord(body) || typeof body.report !== 'string' || !body.report.trim() || body.report.length > 200_000
       || (body.title !== undefined && typeof body.title !== 'string')
+      || (body.mode !== undefined && body.mode !== 'full' && body.mode !== 'morning' && body.mode !== 'midday' && body.mode !== 'afternoon' && body.mode !== 'evening' && body.mode !== 'coming_home')
       || (body.publishedAt !== undefined && (typeof body.publishedAt !== 'string' || !Number.isFinite(Date.parse(body.publishedAt))))) { response.sendStatus(400); return; }
-    aiReport = { report: body.report.trim(), ...(typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim().slice(0, 160) } : {}), publishedAt: typeof body.publishedAt === 'string' ? body.publishedAt : new Date().toISOString() };
+    aiReport = { report: body.report.trim(), ...(typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim().slice(0, 160) } : {}), ...(typeof body.mode === 'string' ? { mode: body.mode as AiReport['mode'] } : {}), publishedAt: typeof body.publishedAt === 'string' ? body.publishedAt : new Date().toISOString() };
     if (aiReportStorePath) saveAiReport(aiReportStorePath, aiReport);
     response.status(202).json({ publishedAt: aiReport.publishedAt });
   });
 
   app.get('/api/ai-report', async (_request: Request, response: Response) => {
-    if (aiReport) { response.set('Cache-Control', 'no-store').json(aiReport); return; }
+    if (aiReport && (!aiReportSourceUrl || Date.now() - aiReportSourceCheckedAt < aiReportSourceCacheMs)) {
+      response.set('Cache-Control', 'no-store').json(aiReport);
+      return;
+    }
     if (aiReportSourceUrl) {
       try {
         const upstream = await fetch(`${aiReportSourceUrl.replace(/\/$/, '')}/api/ai-report`, { cache: 'no-store' });
-        if (upstream.status === 204) { response.sendStatus(204); return; }
-        if (!upstream.ok) { response.sendStatus(502); return; }
-        response.set('Cache-Control', 'no-store').type('application/json').send(await upstream.text());
-      } catch { response.sendStatus(502); }
+        aiReportSourceCheckedAt = Date.now();
+        if (upstream.status === 204) {
+          if (aiReport) response.set('Cache-Control', 'no-store').json(aiReport);
+          else response.sendStatus(204);
+          return;
+        }
+        if (!upstream.ok) {
+          if (aiReport) response.set('Cache-Control', 'no-store').json(aiReport);
+          else response.sendStatus(502);
+          return;
+        }
+        const candidate = JSON.parse(await upstream.text()) as unknown;
+        if (!isRecord(candidate) || typeof candidate.report !== 'string' || !candidate.report.trim() || typeof candidate.publishedAt !== 'string') {
+          if (aiReport) response.set('Cache-Control', 'no-store').json(aiReport);
+          else response.sendStatus(502);
+          return;
+        }
+        aiReport = {
+          report: candidate.report.trim(),
+          ...(typeof candidate.title === 'string' && candidate.title.trim() ? { title: candidate.title.trim().slice(0, 160) } : {}),
+          ...(candidate.mode === 'full' || candidate.mode === 'morning' || candidate.mode === 'midday' || candidate.mode === 'afternoon' || candidate.mode === 'evening' || candidate.mode === 'coming_home' ? { mode: candidate.mode } : {}),
+          publishedAt: candidate.publishedAt,
+        };
+        if (aiReportStorePath) saveAiReport(aiReportStorePath, aiReport);
+        response.set('Cache-Control', 'no-store').json(aiReport);
+      } catch {
+        if (aiReport) response.set('Cache-Control', 'no-store').json(aiReport);
+        else response.sendStatus(502);
+      }
       return;
     }
     response.sendStatus(204);
@@ -149,7 +189,7 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
   app.post('/api/ai-report/refresh', async (request: Request, response: Response) => {
     if (!aiReportRefreshUrl) { response.status(503).json({ error: 'AI-oppdatering er ikke konfigurert.' }); return; }
     const body = isRecord(request.body) ? request.body : {};
-    const mode = body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'coming_home'
+    const mode = body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'evening' || body.mode === 'coming_home'
       ? body.mode
       : body.mode === undefined || body.mode === 'on_demand'
         ? 'on_demand'

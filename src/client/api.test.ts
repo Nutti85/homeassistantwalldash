@@ -38,6 +38,15 @@ describe('browser dashboard API', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ mode: 'morning' });
   });
 
+  it('requests the focused evening report', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await requestAiReportRefresh('evening');
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ mode: 'evening' });
+  });
+
   it('bypasses the browser cache when polling for a published report', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ report: 'Ny rapport', publishedAt: '2026-08-23T08:00:00.000Z' }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);

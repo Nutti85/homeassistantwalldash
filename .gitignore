@@ -4,3 +4,4 @@ dist/
 coverage/
 .runtime/
 .env
+.local-dev.log

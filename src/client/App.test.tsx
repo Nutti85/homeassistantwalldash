@@ -15,27 +15,26 @@ const baseStates: Record<string, HomeAssistantState> = {
 const createApi = (overrides: Record<string, HomeAssistantState> = {}): DashboardApi => ({
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Kort oppsummert\n• Ta med paraply.\n## Anbefalinger\n• Kle deg varmt.\n## Senere i dag\n• Avtale kl. 17:30.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
-const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Modus' })); fireEvent.click(await screen.findByRole('tab', { name })); };
+const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' })); fireEvent.click(await screen.findByRole('tab', { name })); };
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
   it('starts in Full and never exposes guest Wi-Fi there', async () => {
     render(<App api={createApi()} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Modus' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' }));
     expect(await screen.findByRole('tab', { name: 'Full' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('Gjeste-WiFi')).not.toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 3 })).toEqual(expect.arrayContaining([]));
   });
 
-  it('reveals modes from the Modus button and closes the picker after a choice', async () => {
+  it('reveals modes from the settings popup and closes it after a choice', async () => {
     render(<App api={createApi()} />);
-    const toggle = await screen.findByRole('button', { name: 'Modus' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const settings = await screen.findByRole('button', { name: 'Innstillinger' });
     expect(screen.queryByRole('tab', { name: 'Gjest' })).not.toBeInTheDocument();
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(settings);
+    expect(screen.getByRole('dialog', { name: 'Dashboardmodus' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Gjest' }));
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('dialog', { name: 'Dashboardmodus' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Gjest' })).not.toBeInTheDocument();
   });
 
@@ -97,13 +96,13 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointermove', 600, 300));
 
     expect(frontDoor).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
-    expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '1 / span 4' });
-    expect(localStorage.getItem('smarthjem-layout-v11-regular')).toBeNull();
+    expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '5 / span 4' });
+    expect(localStorage.getItem('smarthjem-layout-v13-regular')).toBeNull();
 
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
-    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v11-regular') ?? '{}');
+    const saved = JSON.parse(localStorage.getItem('smarthjem-layout-v13-regular') ?? '{}');
     expect(saved.frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
-    expect(saved.calendar).toMatchObject({ column: 17, row: 1, columns: 8, rows: 4 });
+    expect(saved.calendar).toMatchObject({ column: 17, row: 5, columns: 8, rows: 4 });
   });
 
   it('uses a saved standard layout after a fresh app load', async () => {
@@ -120,22 +119,68 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointerup', 600, 300));
     fireEvent.click(screen.getByRole('button', { name: 'Lagre som standard' }));
 
-    expect(localStorage.getItem('smarthjem-layout-v11-regular')).toBeNull();
-    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v11-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
+    expect(localStorage.getItem('smarthjem-layout-v13-regular')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('smarthjem-default-layout-v13-regular') ?? '{}').frontDoor).toMatchObject({ column: 11, row: 4, columns: 4, rows: 1 });
 
     unmount();
     render(<App api={createApi()} />);
-    expect((await screen.findByRole('button', { name: 'Modus' })).closest('.dashboard')).not.toBeNull();
+    expect((await screen.findByRole('button', { name: 'Innstillinger' })).closest('.dashboard')).not.toBeNull();
     expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '11 / span 4', gridRow: '4 / span 1' });
   });
 
   it('uses the shipped default instead of a layout saved by the prior release', async () => {
     localStorage.setItem('smarthjem-layout-v10-regular', JSON.stringify({ frontDoor: { column: 11, row: 4, columns: 4, rows: 1 } }));
     render(<App api={createApi()} />);
-    expect((await screen.findByRole('button', { name: 'Modus' })).closest('.dashboard')).not.toBeNull();
+    expect((await screen.findByRole('button', { name: 'Innstillinger' })).closest('.dashboard')).not.toBeNull();
     expect(document.querySelector('[data-layout-id="frontDoor"]')).toHaveStyle({ gridColumn: '1 / span 4', gridRow: '1 / span 1' });
     expect(document.querySelector('[data-layout-id="energy"]')).toHaveStyle({ gridColumn: '9 / span 8', gridRow: '5 / span 4' });
     expect(document.querySelector('[data-layout-id="roomClimate"]')).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '5 / span 4' });
+  });
+
+  it('merges the bedrooms into one row and flips each reading in sequence after a three-second hold', async () => {
+    vi.useFakeTimers();
+    render(<App api={createApi({
+      roomLiving: state('sensor.stue_temperature', '23.2'),
+      roomLivingHumidity: state('sensor.stue_humidity', '47'),
+      roomLivingCo2: state('sensor.stue_co2', '848'),
+      roomBedroom: state('sensor.soverom_ha_temperature', '21.6'),
+      roomBedroomHumidity: state('sensor.soverom_ha_humidity', '50'),
+      roomBedroomCo2: state('sensor.soverom_ha_co2', '631'),
+      roomBathroom: state('sensor.soverom_barn_temperature', '22.4'),
+      roomBathroomHumidity: state('sensor.soverom_barn_humidity', '49'),
+      roomBathroomCo2: state('sensor.soverom_barn_co2', '675'),
+    })} />);
+    await act(async () => { await Promise.resolve(); });
+
+    const climate = document.querySelector('.room-climate-card') as HTMLElement;
+    expect(climate.querySelectorAll('.room-climate-row')).toHaveLength(2);
+    expect(within(climate).getByText('Soverom HA')).toBeInTheDocument();
+    expect(within(climate).getByText('21.6°')).toBeInTheDocument();
+    expect(within(climate).queryByText('Soverom barn')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_001); });
+    expect(climate.querySelector('[data-flip-slot="name"]')).toHaveClass('is-flipping');
+    expect(climate.querySelector('[data-flip-slot="temperature"]')).not.toHaveClass('is-flipping');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(279); });
+    expect(within(climate).getByText('Soverom barn')).toBeInTheDocument();
+    expect(within(climate).getByText('21.6°')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(180); });
+    expect(within(climate).getByText('22.4°')).toBeInTheDocument();
+    expect(within(climate).getByText('50 %')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(360); });
+    expect(within(climate).getByText('49 %')).toBeInTheDocument();
+    expect(within(climate).getByText('675 ppm')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_279); });
+    expect(within(climate).getByText('Soverom barn')).toBeInTheDocument();
+    expect(climate.querySelector('[data-flip-slot="name"]')).not.toHaveClass('is-flipping');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2); });
+    expect(climate.querySelector('[data-flip-slot="name"]')).toHaveClass('is-flipping');
+    vi.useRealTimers();
   });
 
   it('opens Klara AI when its text changes after the initial load', async () => {
@@ -150,9 +195,9 @@ describe('redesigned dashboard', () => {
     render(<App api={api} />);
     await act(async () => { await Promise.resolve(); });
     expect(api.getStates).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog', { name: 'Dagens oversikt' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Full briefing' })).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-    expect(screen.getByRole('dialog', { name: 'Dagens oversikt' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Full briefing' })).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -174,7 +219,7 @@ describe('redesigned dashboard', () => {
     fireEvent(grid, pointerEvent('pointermove', 300, 150));
 
     expect(frontDoor).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '1 / span 2' });
-    expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '1 / span 4' });
+    expect(calendar).toHaveStyle({ gridColumn: '17 / span 8', gridRow: '5 / span 4' });
     expect(bounds).toHaveBeenCalledTimes(1);
   });
 
@@ -221,12 +266,24 @@ describe('redesigned dashboard', () => {
 
   it.each([['Morgen','morning'],['Kveld','evening'],['Natt','night']] as const)('preserves %s scene intent', async (label, action) => {
     const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: {} }); render(<App api={api}/>);
-    fireEvent.click(await screen.findByRole('button', { name: label })); await waitFor(() => expect(api.runAction).toHaveBeenCalledWith(action, undefined));
+    fireEvent.click(await screen.findByRole('button', { name: label }));
+    expect(api.runAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Bekreft' })); await waitFor(() => expect(api.runAction).toHaveBeenCalledWith(action, undefined));
+  });
+
+  it('dismisses a scene confirmation when tapping outside it', async () => {
+    render(<App api={createApi()}/>);
+    const morning = await screen.findByRole('button', { name: 'Morgen' });
+    fireEvent.click(morning);
+    expect(morning).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.pointerDown(document.body);
+    expect(morning).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('confirms a sent scene command with a toast', async () => {
     const api = createApi(); vi.mocked(api.runAction).mockResolvedValue({ states: {} }); render(<App api={api}/>);
     fireEvent.click(await screen.findByRole('button', { name: 'Morgen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bekreft' }));
     expect(await screen.findByText('Morgen er sendt til Home Assistant')).toBeInTheDocument();
   });
 
@@ -234,7 +291,7 @@ describe('redesigned dashboard', () => {
     render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
     expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
     expect(screen.getByText('Klara AI', { selector: '.klara-ai-eyebrow' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Dagens oversikt' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Full briefing' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Oppsummert' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Oppsummert' }).compareDocumentPosition(screen.getByRole('heading', { name: 'Vær' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Vær' })).toBeInTheDocument();
@@ -248,6 +305,67 @@ describe('redesigned dashboard', () => {
     expect(within(reportDialog).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('button', { name: 'Formiddag' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('button', { name: 'Ettermiddag' })).toBeInTheDocument();
+    expect(within(reportDialog).getByRole('button', { name: 'Kveld' })).toBeInTheDocument();
+  });
+
+  it('structures the dedicated briefing summary into readable paragraphs', async () => {
+    const api = createApi();
+    vi.mocked(api.getAiReport!).mockResolvedValue({
+      mode: 'evening',
+      title: 'Kveldsrapport',
+      report: '## Kort oppsummert\nDet blir en tørr og rolig natt i Sandefjord, med delvis skyet vær og 12–14 grader opplevd temperatur. Mandag morgen blir også tørr og delvis skyet, før det blir varmere og sol gjennom dagen. Det er gult farevarsel for skogbrann.\nKalender: Fotballkamp Jacob (SBK - Hedrum) (man. 24.08. kl. 17:30)\nTemperatur 12,2–22,6 °C, vind 1–3,9 m/s, vindkast 1,6–8,1 m/s',
+      publishedAt: '2026-08-23T20:00:00.000Z',
+    });
+    render(<App api={api}/>);
+
+    const summary = await screen.findByText('Det blir en tørr og rolig natt i Sandefjord, med delvis skyet vær og 12–14 grader opplevd temperatur.');
+    const paragraphs = [...(summary.closest('.briefing-card-summary')?.querySelectorAll('p') ?? [])];
+    expect(paragraphs).toHaveLength(4);
+    expect(paragraphs[1]).toHaveTextContent('Mandag morgen blir også tørr og delvis skyet');
+    expect(paragraphs[2]).toHaveTextContent('Kalender: Fotballkamp Jacob');
+    expect(paragraphs[3]).toHaveTextContent('Temperatur 12,2–22,6 °C');
+  });
+
+  it('uses tomorrow as the calendar heading when the report only contains tomorrow events', async () => {
+    const api = createApi();
+    vi.mocked(api.getAiReport!).mockResolvedValue({
+      mode: 'evening',
+      title: 'Kveldsrapport',
+      report: '## Kort oppsummert\nRolig kveld.\n## Kalender\n### I morgen\n- Fotballkamp kl. 17:30.',
+      publishedAt: '2026-08-23T20:00:00.000Z',
+    });
+    render(<App api={api}/>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
+    expect(await screen.findByRole('heading', { name: 'Kveldsbriefing' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'I morgen' })).toHaveLength(1);
+    expect(screen.getByText('Fotballkamp kl. 17:30.')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Kveld' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('uses Senere with day subheadings when calendar events span today and tomorrow', async () => {
+    const api = createApi();
+    vi.mocked(api.getAiReport!).mockResolvedValue({
+      mode: 'full',
+      report: '## Kalender\n### I dag\n- Trening kl. 18:00.\n### I morgen\n- Kamp kl. 17:30.',
+      publishedAt: '2026-08-23T12:00:00.000Z',
+    });
+    render(<App api={api}/>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
+    const reportDialog = await screen.findByRole('dialog');
+    expect(within(reportDialog).getByRole('heading', { name: 'Senere' })).toBeInTheDocument();
+    expect(within(reportDialog).getByRole('heading', { name: 'I dag' })).toBeInTheDocument();
+    expect(within(reportDialog).getByRole('heading', { name: 'I morgen' })).toBeInTheDocument();
+  });
+
+  it('keeps the last successful background report when opening the panel fetch fails', async () => {
+    const api = createApi();
+    vi.mocked(api.getAiReport!)
+      .mockResolvedValueOnce({ report: 'Rapport fra bakgrunnssjekken', publishedAt: '2026-08-23T08:00:00.000Z' })
+      .mockRejectedValueOnce(new Error('temporary failure'));
+    render(<App api={api} />);
+    await waitFor(() => expect(api.getAiReport).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
+    expect(await within(screen.getByRole('dialog')).findByText('Rapport fra bakgrunnssjekken')).toBeInTheDocument();
   });
 
   it('opens detailed weather and switches its tabs', async () => {
@@ -287,7 +405,7 @@ describe('redesigned dashboard', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Åpne detaljert vær' }));
     expect(await screen.findByText('Live Blitzortung-posisjoner')).toBeInTheDocument();
     expect(screen.getByTitle('Kart over lyn i nærheten av Sandefjord')).toBeInTheDocument();
-    expect(screen.getByText('Voksende sigd')).toBeInTheDocument();
+    expect(within(document.querySelector('.sun-moon-card') as HTMLElement).getByTitle(/Voksende sigd/)).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /Sol 18,5° over horisonten, asimut 232,4°/ })).toBeInTheDocument();
     expect(screen.getByText('Soloppgang')).toBeInTheDocument();
     expect(screen.getByText('Solnedgang')).toBeInTheDocument();
@@ -408,6 +526,46 @@ describe('redesigned dashboard', () => {
     await vi.advanceTimersByTimeAsync(30_000);
     await vi.waitFor(() => expect(screen.getByText('Deaktivert')).toBeInTheDocument());
     expect(api.getStates).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('retries transient state failures without showing the global error', async () => {
+    vi.useFakeTimers();
+    const api = createApi();
+    vi.mocked(api.getStates)
+      .mockRejectedValueOnce(new Error('backend restarting'))
+      .mockRejectedValueOnce(new Error('backend still restarting'))
+      .mockResolvedValueOnce({ states: baseStates });
+
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.getStates).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(api.getStates).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('shows an accurate connection warning after repeated initial failures and clears it on recovery', async () => {
+    vi.useFakeTimers();
+    const api = createApi();
+    vi.mocked(api.getStates)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ states: baseStates });
+
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.getByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+    expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 });
