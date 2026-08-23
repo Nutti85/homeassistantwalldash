@@ -13,7 +13,7 @@ const baseStates: Record<string, HomeAssistantState> = {
   repairHealth: state('binary_sensor.health', 'ok'),
 };
 const createApi = (overrides: Record<string, HomeAssistantState> = {}): DashboardApi => ({
-  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Anbefalinger\n• Ta med paraply.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
+  getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Kort oppsummert\n• Ta med paraply.\n## Anbefalinger\n• Kle deg varmt.\n## Senere i dag\n• Avtale kl. 17:30.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Modus' })); fireEvent.click(await screen.findByRole('tab', { name })); };
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -147,9 +147,9 @@ describe('redesigned dashboard', () => {
     render(<App api={api} />);
     await act(async () => { await Promise.resolve(); });
     expect(api.getStates).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog', { name: 'Klara AI' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Dagens oversikt' })).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-    expect(screen.getByRole('dialog', { name: 'Klara AI' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Dagens oversikt' })).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -230,13 +230,17 @@ describe('redesigned dashboard', () => {
   it('shows the n8n AI report from the bottom control', async () => {
     render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
     expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Klara AI' })).toBeInTheDocument();
+    expect(screen.getByText('Klara AI', { selector: '.klara-ai-eyebrow' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dagens oversikt' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Oppsummert' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Oppsummert' }).compareDocumentPosition(screen.getByRole('heading', { name: 'Vær' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Vær' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Kveld · lør\. 22\.08\./ })).toBeInTheDocument();
     expect(screen.getByText('Regn i kveld.').tagName).toBe('LI');
-    expect(screen.getByRole('heading', { name: 'Anbefalinger' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Senere i dag' }).compareDocumentPosition(screen.getByRole('heading', { name: 'Råd' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Råd' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Personlig oversikt' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Full rapport' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Full rapport' })).toHaveAttribute('aria-pressed', 'true');
     const reportDialog = screen.getByRole('dialog');
     expect(within(reportDialog).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('button', { name: 'Formiddag' })).toBeInTheDocument();

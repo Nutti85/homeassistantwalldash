@@ -518,7 +518,13 @@ const reportSections = (report: string) => {
   });
   addSection();
 
-  return sections.length ? sections : [{ heading: 'Oppsummering', text: report.trim() }];
+  if (!sections.length) return [{ heading: 'Oppsummering', text: report.trim() }];
+
+  const summaryIndex = sections.findIndex((section) => section.heading?.trim().toLocaleLowerCase('nb-NO') === 'kort oppsummert');
+  if (summaryIndex < 0) return sections;
+
+  const summary = { ...sections[summaryIndex], heading: 'Oppsummert' };
+  return [summary, ...sections.slice(0, summaryIndex), ...sections.slice(summaryIndex + 1)];
 };
 
 const renderReportContent = (text: string): ReactElement[] => {
@@ -549,22 +555,45 @@ const renderReportContent = (text: string): ReactElement[] => {
 };
 
 const reportRequestLabels: Record<Exclude<AiReportRefreshMode, 'coming_home' | 'on_demand'>, { label: string; icon: string }> = {
-  full: { label: 'Full rapport', icon: 'summarize' },
+  full: { label: 'Full rapport', icon: 'description' },
   morning: { label: 'Morgen', icon: 'wb_twilight' },
   midday: { label: 'Formiddag', icon: 'light_mode' },
-  afternoon: { label: 'Ettermiddag', icon: 'directions_car' },
+  afternoon: { label: 'Ettermiddag', icon: 'wb_twilight' },
+};
+
+const reportSectionPresentation = (heading?: string) => {
+  const normalized = heading?.trim().toLocaleLowerCase('nb-NO') ?? '';
+  if (normalized === 'vær') return { label: 'Vær', icon: 'partly_cloudy_day' };
+  if (normalized === 'hjemmet' || normalized === 'hjemme') return { label: 'Hjemmet', icon: 'home' };
+  if (normalized === 'senere i dag' || normalized.includes('kalender')) return { label: 'Senere i dag', icon: 'calendar_month' };
+  if (normalized === 'anbefalinger' || normalized === 'anbefaling' || normalized === 'forberedelser' || normalized === 'råd') return { label: 'Råd', icon: 'lightbulb' };
+  if (normalized.includes('farevarsel')) return { label: heading ?? 'Farevarsel', icon: 'warning' };
+  return { label: heading ?? 'Oversikt', icon: 'notes' };
 };
 
 function KlaraAiModal({ report, loading, error, refreshing, refreshingMode, refreshProgress, refresh, close, closeButtonRef }: { report?: AiReportResponse; loading: boolean; error?: string; refreshing: boolean; refreshingMode?: AiReportRefreshMode; refreshProgress?: string; refresh: (mode: AiReportRefreshMode) => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
   const sections = report ? reportSections(report.report) : [];
   const reportPeriod = sections.find((section) => section.heading === 'Rapportperiode');
-  const visibleSections = sections.filter((section) => section.heading !== 'Rapportperiode');
+  const summary = sections.find((section) => section.heading?.toLocaleLowerCase('nb-NO') === 'oppsummert');
+  const reportBodySections = sections.filter((section) => section.heading !== 'Rapportperiode' && section !== summary);
+  const adviceSections = reportBodySections.filter((section) => reportSectionPresentation(section.heading).label === 'Råd');
+  const primarySections = reportBodySections.filter((section) => reportSectionPresentation(section.heading).label !== 'Råd');
+  const laterSectionIndex = primarySections.findIndex((section) => reportSectionPresentation(section.heading).label === 'Senere i dag');
+  const visibleSections = laterSectionIndex < 0
+    ? [...primarySections, ...adviceSections]
+    : [...primarySections.slice(0, laterSectionIndex + 1), ...adviceSections, ...primarySections.slice(laterSectionIndex + 1)];
+  const periodText = reportPeriod?.text.replace(/^[^:]+:\s*/, '');
+  const reportTitle = report?.title?.toLocaleLowerCase('nb-NO') ?? '';
+  const activeMode: keyof typeof reportRequestLabels = refreshingMode === 'morning' || refreshingMode === 'midday' || refreshingMode === 'afternoon' || refreshingMode === 'full'
+    ? refreshingMode
+    : reportTitle.includes('formiddag') ? 'midday' : reportTitle.includes('ettermiddag') ? 'afternoon' : reportTitle.includes('morgen') ? 'morning' : 'full';
+  const reportPeriodLabel = periodText ?? report?.title ?? 'Siste rapport';
   return <div className="klara-ai-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <section className="klara-ai-modal" role="dialog" aria-modal="true" aria-labelledby="klara-ai-title">
-      <button ref={closeButtonRef} className="klara-ai-close" type="button" aria-label="Lukk Klara AI" onClick={close}><Icon>close</Icon></button>
-      <header className="klara-ai-header"><div><h2 id="klara-ai-title">{report?.title ?? 'Klara AI'}</h2></div><Icon filled>auto_awesome</Icon></header>
-      <article className="klara-ai-report">{loading ? 'Henter rapport …' : error ? error : report ? <><div className="klara-ai-report-meta">{reportPeriod && <div><strong>Rapportperiode</strong><span>{reportPeriod.text}</span></div>}<time dateTime={report.publishedAt}>Oppdatert {new Date(report.publishedAt).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })}</time></div><div className="klara-ai-sections">{visibleSections.map((section, index) => <section key={`${section.heading ?? 'rapport'}-${index}`}>{section.heading && <h3>{section.heading}</h3>}<div className="klara-ai-section-content">{renderReportContent(section.text)}</div></section>)}</div></> : 'Ingen AI-rapport er publisert ennå.'}</article>
-      <footer className="klara-ai-actions"><div role="group" aria-label="Bestill rapport">{(Object.entries(reportRequestLabels) as Array<[keyof typeof reportRequestLabels, typeof reportRequestLabels.full]>).map(([mode, meta]) => { const isRefreshing = refreshing && refreshingMode === mode; return <button key={mode} type="button" onClick={() => refresh(mode)} disabled={refreshing}><Icon className={isRefreshing ? 'report-refresh-spinner' : undefined}>{isRefreshing ? 'progress_activity' : meta.icon}</Icon>{meta.label}</button>; })}</div>{refreshProgress && <p role="status">{refreshProgress}</p>}</footer>
+      <header className="klara-ai-header"><div className="klara-ai-brand"><span className="klara-ai-orb"><Icon filled>auto_awesome</Icon></span><div><span className="klara-ai-eyebrow">Klara AI</span><h2 id="klara-ai-title">Dagens oversikt</h2></div></div><button ref={closeButtonRef} className="klara-ai-close" type="button" aria-label="Lukk Klara AI" onClick={close}><Icon>close</Icon></button></header>
+      {report && <div className="klara-ai-meta"><span><i/>{reportPeriodLabel}</span><time dateTime={report.publishedAt}>{new Date(report.publishedAt).toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })}</time></div>}
+      <article className="klara-ai-report">{loading ? <div className="klara-ai-loading"><span className="report-refresh-spinner"/><span>Henter rapport …</span></div> : refreshing ? <div className="klara-ai-loading"><span className="report-refresh-spinner"/><span>{refreshProgress ?? 'Klara setter sammen rapporten …'}</span></div> : error ? <p className="klara-ai-error" role="alert">{error}</p> : report ? <>{summary && <div className="klara-ai-summary"><h3 className="sr-only">Oppsummert</h3>{renderReportContent(summary.text)}</div>}<div className="klara-ai-sections">{visibleSections.map((section, index) => { const presentation = reportSectionPresentation(section.heading); return <section key={`${section.heading ?? 'rapport'}-${index}`}><Icon>{presentation.icon}</Icon><h3>{presentation.label}</h3><div className="klara-ai-section-content">{renderReportContent(section.text)}</div></section>; })}</div></> : 'Ingen AI-rapport er publisert ennå.'}</article>
+      <footer className="klara-ai-actions"><div role="group" aria-label="Bestill rapport">{(Object.entries(reportRequestLabels) as Array<[keyof typeof reportRequestLabels, typeof reportRequestLabels.full]>).map(([mode, meta]) => { const isRefreshing = refreshing && refreshingMode === mode; return <button key={mode} type="button" aria-pressed={activeMode === mode} onClick={() => refresh(mode)} disabled={refreshing}><Icon className={isRefreshing ? 'report-refresh-spinner' : undefined}>{isRefreshing ? 'progress_activity' : meta.icon}</Icon>{meta.label}</button>; })}</div>{report && <time className="klara-ai-updated" dateTime={report.publishedAt}>Oppdatert kl. {new Date(report.publishedAt).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</time>}</footer>
     </section>
   </div>;
 }
@@ -1064,7 +1093,13 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   useEffect(() => {
     const checkForNewReport = () => { void (api.getAiReport ?? browserApi.getAiReport)().then((next) => {
       if (!next) return;
-      if (lastReportPublishedAt.current && lastReportPublishedAt.current !== next.publishedAt) { setAiReport(next); setKlaraAiOpen(true); }
+      if (lastReportPublishedAt.current && lastReportPublishedAt.current !== next.publishedAt) {
+        setAiReport(next);
+        setKlaraAiOpen(true);
+        setAiReportRefreshing(false);
+        setAiReportRefreshingMode(undefined);
+        setAiReportRefreshProgress('Ny rapport er klar.');
+      }
       lastReportPublishedAt.current = next.publishedAt;
     }).catch(() => undefined); };
     checkForNewReport();
