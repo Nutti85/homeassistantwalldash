@@ -62,11 +62,11 @@ Technical table and column names use `snake_case` English. All human-readable va
 | Table | Purpose | Key fields |
 |---|---|---|
 | `households` | Household ownership boundary | `household_id`, `name`, `created_at` |
-| `people` | Household members | `person_id`, `household_id`, `display_name`, `created_at` |
+| `people` | Household members | `person_id`, `household_id`, `external_key`, `display_name`, `created_at` |
 | `source_emails` | Minimal email traceability | `source_email_id`, `household_id`, `provider`, `provider_message_id`, `provider_thread_id`, `subject`, `received_at` |
 | `stored_files` | Metadata for a privately stored original file | `stored_file_id`, `household_id`, `storage_key`, `file_name`, `mime_type`, `byte_size`, `sha256`, `created_at` |
 
-`source_emails` has a unique constraint on `(provider, provider_message_id)`. `stored_files` has a unique checksum constraint scoped to the household. These provide the first duplicate safeguards.
+`people` has a unique constraint on `(household_id, external_key)`; Phase 1 uses the stable key `jacob`. `source_emails` has a unique constraint on `(provider, provider_message_id)`. `stored_files` has a unique checksum constraint scoped to the household. These provide the first duplicate safeguards.
 
 ### Weekly-plan records
 
