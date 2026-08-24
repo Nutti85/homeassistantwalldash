@@ -1113,6 +1113,7 @@ function DetailedWeather({ states, close }: { states: Record<string, HomeAssista
 }
 
 const stateRefreshIntervalMs = 30_000;
+const recentAiReportWindowMs = 12 * 60 * 60 * 1_000;
 const aiReportSeenStorageKey = 'walldash.klara-ai.last-seen-published-at';
 const familyStateStorageKey = 'walldash.family.last-state';
 
@@ -1257,22 +1258,48 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const lastReportPublishedAt = useRef<string>();
   const lastFamilyState = useRef<string>();
   useEffect(() => {
-    const checkForNewReport = () => { void (api.getAiReport ?? browserApi.getAiReport)().then((next) => {
-      if (!next) return;
-      const previousPublishedAt = lastReportPublishedAt.current ?? window.localStorage.getItem(aiReportSeenStorageKey) ?? undefined;
-      setAiReport(next);
-      if (previousPublishedAt && previousPublishedAt !== next.publishedAt) {
-        setKlaraAiOpen(true);
-        setAiReportRefreshing(false);
-        setAiReportRefreshingMode(undefined);
-        setAiReportRefreshProgress('Ny rapport er klar.');
+    let active = true;
+    let requestInFlight = false;
+    const checkForNewReport = async () => {
+      if (!active || requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const next = await (api.getAiReport ?? browserApi.getAiReport)();
+        if (!active || !next) return;
+        const previousPublishedAt = lastReportPublishedAt.current ?? window.localStorage.getItem(aiReportSeenStorageKey) ?? undefined;
+        const publishedAtMs = Date.parse(next.publishedAt);
+        const isRecentFirstReport = !previousPublishedAt && Number.isFinite(publishedAtMs)
+          && Date.now() - publishedAtMs >= -5 * 60 * 1_000
+          && Date.now() - publishedAtMs <= recentAiReportWindowMs;
+        setAiReport(next);
+        if (isRecentFirstReport || (previousPublishedAt && previousPublishedAt !== next.publishedAt)) {
+          setKlaraAiOpen(true);
+          setAiReportRefreshing(false);
+          setAiReportRefreshingMode(undefined);
+          setAiReportRefreshProgress('Ny rapport er klar.');
+        }
+        lastReportPublishedAt.current = next.publishedAt;
+        window.localStorage.setItem(aiReportSeenStorageKey, next.publishedAt);
+      } catch {
+        // The next scheduled poll or wake event will retry the report check.
+      } finally {
+        requestInFlight = false;
       }
-      lastReportPublishedAt.current = next.publishedAt;
-      window.localStorage.setItem(aiReportSeenStorageKey, next.publishedAt);
-    }).catch(() => undefined); };
-    checkForNewReport();
-    const timer = window.setInterval(checkForNewReport, stateRefreshIntervalMs);
-    return () => window.clearInterval(timer);
+    };
+    void checkForNewReport();
+    const timer = window.setInterval(() => { void checkForNewReport(); }, stateRefreshIntervalMs);
+    const checkWhenVisible = () => { if (document.visibilityState === 'visible') void checkForNewReport(); };
+    const checkWhenActive = () => { void checkForNewReport(); };
+    document.addEventListener('visibilitychange', checkWhenVisible);
+    window.addEventListener('focus', checkWhenActive);
+    window.addEventListener('online', checkWhenActive);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', checkWhenVisible);
+      window.removeEventListener('focus', checkWhenActive);
+      window.removeEventListener('online', checkWhenActive);
+    };
   }, [api]);
   const refreshAiReport = async (mode: AiReportRefreshMode = 'full') => {
     if (aiReportRefreshing) return;

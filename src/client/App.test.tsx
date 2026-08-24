@@ -529,6 +529,35 @@ describe('redesigned dashboard', () => {
     vi.useRealTimers();
   });
 
+  it('opens a recent scheduled report on the first check and only shows it once', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-24T17:01:00.000Z'));
+    const api = createApi();
+    vi.mocked(api.getAiReport!).mockResolvedValue({ report: 'Ny kveldsrapport', mode: 'evening', publishedAt: '2026-08-24T17:00:50.000Z' });
+    const firstRender = render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole('dialog', { name: 'Kveldsbriefing' })).toBeInTheDocument();
+
+    firstRender.unmount();
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('dialog', { name: 'Kveldsbriefing' })).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('checks for a scheduled report immediately when the display regains focus', async () => {
+    vi.useFakeTimers();
+    const api = createApi();
+    vi.mocked(api.getAiReport!)
+      .mockResolvedValueOnce({ report: 'Første rapport', publishedAt: '2026-08-23T06:30:00.000Z' })
+      .mockResolvedValueOnce({ report: 'Ny rapport', mode: 'morning', publishedAt: '2026-08-24T06:30:00.000Z' });
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { window.dispatchEvent(new Event('focus')); await Promise.resolve(); });
+    expect(screen.getByRole('dialog', { name: 'Morgenbriefing' })).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('retries transient state failures without showing the global error', async () => {
     vi.useFakeTimers();
     const api = createApi();
