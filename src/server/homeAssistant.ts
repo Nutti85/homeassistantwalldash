@@ -227,7 +227,7 @@ export class HomeAssistantClient {
   }
 
   private async getRoomTrends(): Promise<Record<string, number[]>> {
-    const entityIds = [this.entities.roomLiving, this.entities.roomBedroom, this.entities.roomBathroom, this.entities.roomLivingHumidity, this.entities.roomLivingCo2, this.entities.roomBedroomHumidity, this.entities.roomBedroomCo2, this.entities.roomBathroomHumidity, this.entities.roomBathroomCo2].filter(Boolean);
+    const entityIds = [this.entities.roomLiving, this.entities.roomBedroom, this.entities.roomBathroom, this.entities.roomFirstFloorBathroom, this.entities.roomLivingHumidity, this.entities.roomLivingCo2, this.entities.roomBedroomHumidity, this.entities.roomBedroomCo2, this.entities.roomBathroomHumidity, this.entities.roomBathroomCo2, this.entities.roomFirstFloorBathroomHumidity].filter(Boolean);
     const endMs = Date.now();
     const startMs = endMs - roomTrendWindowMs;
     const start = new Date(startMs);

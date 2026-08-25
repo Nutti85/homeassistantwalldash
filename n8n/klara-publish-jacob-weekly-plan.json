@@ -1,0 +1,73 @@
+{
+  "name": "Klara – Publish Jacob weekly plan to Home Assistant",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-jacob-plan",
+      "name": "Manual trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-720, 40]
+    },
+    {
+      "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}},
+      "id": "schedule-jacob-plan",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-720, 220]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH latest AS (\n  SELECT wp.*\n  FROM weekly_plans wp\n  JOIN people p ON p.person_id = wp.person_id\n  WHERE p.external_key = 'jacob' AND wp.processing_status = 'processed'\n  ORDER BY wp.plan_week_start DESC NULLS LAST, wp.created_at DESC\n  LIMIT 1\n)\nSELECT json_build_object(\n  'plan', (SELECT row_to_json(latest) FROM latest),\n  'homework', COALESCE((SELECT json_agg(row_to_json(h) ORDER BY h.due_date NULLS LAST, h.homework_id) FROM weekly_plan_homework h JOIN latest p ON p.weekly_plan_id = h.weekly_plan_id), '[]'::json),\n  'events', COALESCE((SELECT json_agg(row_to_json(e) ORDER BY e.event_date NULLS LAST, e.start_time NULLS LAST, e.event_id) FROM weekly_plan_events e JOIN latest p ON p.weekly_plan_id = e.weekly_plan_id), '[]'::json),\n  'reminders', COALESCE((SELECT json_agg(row_to_json(r) ORDER BY r.reminder_date NULLS LAST, r.reminder_id) FROM weekly_plan_reminders r JOIN latest p ON p.weekly_plan_id = r.weekly_plan_id), '[]'::json),\n  'topics', COALESCE((SELECT json_agg(row_to_json(t) ORDER BY t.topic_id) FROM weekly_plan_topics t JOIN latest p ON p.weekly_plan_id = t.weekly_plan_id), '[]'::json),\n  'messages', COALESCE((SELECT json_agg(row_to_json(m) ORDER BY m.message_id) FROM weekly_plan_messages m JOIN latest p ON p.weekly_plan_id = m.weekly_plan_id), '[]'::json),\n  'schedule', COALESCE((SELECT json_agg(row_to_json(s) ORDER BY s.weekday, s.start_time, s.schedule_id) FROM weekly_plan_schedule s JOIN latest p ON p.weekly_plan_id = s.weekly_plan_id), '[]'::json)\n) AS data;",
+        "options": {}
+      },
+      "id": "postgres-jacob-plan",
+      "name": "Load latest Jacob plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-440, 130],
+      "credentials": {"postgres": {"id": "KLARA_POSTGRES_READ_CREDENTIAL_ID", "name": "Klara PostgreSQL read"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.data ?? $json;\nconst text = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;\nconst date = (value) => { const valueText = text(value); return valueText && /^\\d{4}-\\d{2}-\\d{2}$/.test(valueText) ? valueText : undefined; };\nconst item = (row, title, dateValue, weekday, details, subject, itemTime) => { const safeTitle = text(title); if (!safeTitle) return undefined; return { ...(date(dateValue) ? { date: date(dateValue) } : {}), ...(text(weekday) ? { weekday: text(weekday) } : {}), ...(text(itemTime) ? { time: text(itemTime) } : {}), title: safeTitle, ...(text(details) ? { details: text(details) } : {}), ...(text(subject) ? { subject: text(subject) } : {}) }; };\nconst sortRows = (a, b) => `${a.date ?? '9999-99-99'}T${a.time ?? '99:99'}`.localeCompare(`${b.date ?? '9999-99-99'}T${b.time ?? '99:99'}`);\nconst events = (input.events ?? []).flatMap(row => { const value = item(row, row.title, row.event_date, row.date_text, row.details, undefined, row.start_time); return value ? [value] : []; }).sort(sortRows);\nconst reminders = (input.reminders ?? []).flatMap(row => { const value = item(row, row.reminder, row.reminder_date, row.date_text, row.evidence_text); return value ? [value] : []; }).sort(sortRows);\nconst homework = (input.homework ?? []).flatMap(row => { const value = item(row, row.task, row.due_date, row.due_date_text, row.evidence_text, row.subject); return value ? [value] : []; }).sort(sortRows);\nconst school_schedule = (input.schedule ?? []).flatMap(row => { const start = text(row.start_time); const end = text(row.end_time); const value = item(row, 'Skole', undefined, row.weekday, undefined, undefined, start && end ? `${start}–${end}` : start); return value ? [value] : []; });\nconst topics = (input.topics ?? []).flatMap(row => { const subject = text(row.subject); const topic = text(row.topic); return subject && topic ? [`${subject}: ${topic}`] : [topic ?? subject].filter(Boolean); });\nconst messages = (input.messages ?? []).flatMap(row => { const value = text(row.message); return value ? [value] : []; });\nconst parts = [events.length ? `${events.length} ${events.length === 1 ? 'avtale' : 'avtaler'}` : '', homework.length ? `${homework.length} ${homework.length === 1 ? 'lekse' : 'lekser'}` : '', reminders.length ? `${reminders.length} ${reminders.length === 1 ? 'påminnelse' : 'påminnelser'}` : ''].filter(Boolean);\nconst attributes = { summary: parts.length ? `${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} og ${parts.at(-1)}` : parts[0]} denne uken.` : '', ...(date(input.plan?.plan_week_start) ? { week_start: date(input.plan.plan_week_start) } : {}), ...(text(input.plan?.plan_week_end) ? { week_end: text(input.plan.plan_week_end) } : {}), ...(text(input.plan?.created_at) ? { source_updated_at: text(input.plan.created_at) } : {}), ...(typeof input.plan?.weekly_plan_id === 'string' || typeof input.plan?.weekly_plan_id === 'number' ? { plan_id: input.plan.weekly_plan_id } : {}), events, reminders, homework, school_schedule, topics, messages };\nreturn [{ json: { state: text(input.plan?.title) ?? 'Ukjent', attributes } }];"
+      },
+      "id": "format-jacob-plan",
+      "name": "Format Jacob plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-120, 130]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HA_URL}}/api/states/sensor.jacob_weekly_plan",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "publish-jacob-plan",
+      "name": "Publish to Home Assistant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [200, 130],
+      "credentials": {"httpBearerAuth": {"id": "HOME_ASSISTANT_CREDENTIAL_ID", "name": "Home Assistant API"}}
+    }
+  ],
+  "connections": {
+    "Manual trigger": {"main": [[{"node": "Load latest Jacob plan", "type": "main", "index": 0}]]},
+    "Every 15 minutes": {"main": [[{"node": "Load latest Jacob plan", "type": "main", "index": 0}]]},
+    "Load latest Jacob plan": {"main": [[{"node": "Format Jacob plan", "type": "main", "index": 0}]]},
+    "Format Jacob plan": {"main": [[{"node": "Publish to Home Assistant", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "versionId": "jacob-weekly-plan-publish-v1",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

@@ -45,6 +45,9 @@ const entities = {
   roomBedroomCo2: process.env.HA_ROOM_BEDROOM_CO2_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBedroomCo2,
   roomBathroomHumidity: process.env.HA_ROOM_BATHROOM_HUMIDITY_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBathroomHumidity,
   roomBathroomCo2: process.env.HA_ROOM_BATHROOM_CO2_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomBathroomCo2,
+  roomFirstFloorBathroom: process.env.HA_ROOM_FIRST_FLOOR_BATHROOM_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomFirstFloorBathroom,
+  roomFirstFloorBathroomHumidity: process.env.HA_ROOM_FIRST_FLOOR_BATHROOM_HUMIDITY_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomFirstFloorBathroomHumidity,
+  roomClimateAdvice: process.env.HA_ROOM_CLIMATE_ADVICE_ENTITY_ID?.trim() || defaultDashboardEntityIds.roomClimateAdvice,
   waste: process.env.HA_WASTE_ENTITY_ID?.trim() || 'sensor.next_garbage_collection',
   carAndreasRange: process.env.HA_CAR_ANDREAS_RANGE_ENTITY_ID?.trim() || defaultDashboardEntityIds.carAndreasRange,
   carAndreasBattery: process.env.HA_CAR_ANDREAS_BATTERY_ENTITY_ID?.trim() || defaultDashboardEntityIds.carAndreasBattery,
@@ -53,6 +56,7 @@ const entities = {
   andreasTravelTime: process.env.HA_ANDREAS_TRAVEL_TIME_ENTITY_ID?.trim() || defaultDashboardEntityIds.andreasTravelTime,
   hegeTravelTime: process.env.HA_HEGE_TRAVEL_TIME_ENTITY_ID?.trim() || '',
   calendar: process.env.HA_CALENDAR_ENTITY_ID?.trim() || defaultDashboardEntityIds.calendar,
+  jacobWeeklyPlan: process.env.HA_JACOB_WEEKLY_PLAN_ENTITY_ID?.trim() || defaultDashboardEntityIds.jacobWeeklyPlan,
   repairHealth: process.env.HA_REPAIR_HEALTH_ENTITY_ID?.trim() || '',
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();

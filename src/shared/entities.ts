@@ -20,14 +20,37 @@ export const dashboardStateKeys = [
   'netatmoPressure', 'netatmoWindAngle', 'netatmoWindDirection', 'netatmoWindSpeed', 'netatmoWindGust', 'netatmoRain', 'netatmoRainToday', 'netatmoRainLastHour',
   'pollenForecast', 'pollenAlder', 'pollenBirch', 'pollenGrass', 'pollenHazel', 'pollenMugwort', 'pollenWillow',
   'energyToday', 'energyYesterday', 'energyHourlyConsumption', 'energyPower', 'energyPrice', 'roomLiving',
-  'roomBedroom', 'roomBathroom', 'roomLivingHumidity', 'roomLivingCo2', 'roomBedroomHumidity', 'roomBedroomCo2', 'roomBathroomHumidity', 'roomBathroomCo2', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
-  'andreasTravelTime', 'hegeTravelTime', 'calendar', 'repairHealth',
+  'roomBedroom', 'roomBathroom', 'roomLivingHumidity', 'roomLivingCo2', 'roomBedroomHumidity', 'roomBedroomCo2', 'roomBathroomHumidity', 'roomBathroomCo2', 'roomFirstFloorBathroom', 'roomFirstFloorBathroomHumidity', 'roomClimateAdvice', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
+  'andreasTravelTime', 'hegeTravelTime', 'calendar', 'jacobWeeklyPlan', 'repairHealth',
   'vacuum', 'vacuumBattery', 'vacuumStatus', 'vacuumProgress', 'vacuumArea', 'vacuumTime', 'vacuumRoom', 'vacuumCharging', 'vacuumCleaning', 'vacuumMopAttached', 'vacuumWaterBoxAttached', 'vacuumWaterShortage', 'vacuumMopDrying', 'vacuumCleaningMode', 'vacuumMopMode', 'vacuumMopIntensity', 'vacuumVolume', 'vacuumMap',
   ...lightControlKeys,
 ] as const;
 
 export type DashboardStateKey = (typeof dashboardStateKeys)[number];
 export type DashboardEntityIds = Record<DashboardStateKey, string>;
+
+export interface JacobPlanItem {
+  date?: string;
+  weekday?: string;
+  time?: string;
+  title: string;
+  details?: string;
+  subject?: string;
+}
+
+export interface JacobWeeklyPlanSnapshot {
+  summary: string;
+  week_start?: string;
+  week_end?: string;
+  source_updated_at?: string;
+  plan_id?: string | number;
+  events: JacobPlanItem[];
+  reminders: JacobPlanItem[];
+  homework: JacobPlanItem[];
+  school_schedule: JacobPlanItem[];
+  topics: string[];
+  messages: string[];
+}
 
 export const homeStateKey = 'home';
 export const homeModeStateKey = 'homeMode';
@@ -47,7 +70,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   homeMode: 'input_select.home_mode',
   guestMode: 'input_boolean.gjest',
   guestVoucher: 'sensor.67647a4bca314858fac0f8fc_voucher',
-  family: 'group.family',
+  family: 'group.familie',
   morning: 'automation.modus_god_morgen',
   evening: 'script.1572988362234',
   night: 'script.1569099501074',
@@ -96,6 +119,9 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   roomBedroomCo2: 'sensor.indoor_soverom_ha_carbon_dioxide',
   roomBathroomHumidity: 'sensor.indoor_soverom_j_humidity',
   roomBathroomCo2: 'sensor.indoor_soverom_j_carbon_dioxide',
+  roomFirstFloorBathroom: 'sensor.temp_bad',
+  roomFirstFloorBathroomHumidity: 'sensor.fukt_bad',
+  roomClimateAdvice: 'sensor.romklima_tiltak',
   waste: 'sensor.next_garbage_collection',
   carAndreasRange: 'sensor.ee14199_range_electric',
   carAndreasBattery: 'sensor.ee14199_state_of_charge',
@@ -104,6 +130,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   andreasTravelTime: 'sensor.waze_travel_time',
   hegeTravelTime: '',
   calendar: 'calendar.outlook_andreas_felles',
+  jacobWeeklyPlan: 'sensor.jacob_weekly_plan',
   repairHealth: '',
   vacuum: 'vacuum.roborock_s8',
   vacuumBattery: 'sensor.sucky_v2_battery',

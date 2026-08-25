@@ -70,6 +70,10 @@ describe('HomeAssistantClient', () => {
       .toEqual(['home', 'homeMode', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'climate', 'outdoor']);
   });
 
+  it('includes Jacob weekly plan in the default dashboard state contract', () => {
+    expect(defaultDashboardEntityIds.jacobWeeklyPlan).toBe('sensor.jacob_weekly_plan');
+  });
+
   it('sets an allowlisted light group brightness and returns its confirmed state', async () => {
     const fetcher = vi.fn().mockResolvedValue(stateResponse('light.cove', 'on', { brightness: 112 }));
     const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, defaultDashboardEntityIds);

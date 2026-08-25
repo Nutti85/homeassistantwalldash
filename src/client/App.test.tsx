@@ -16,9 +16,86 @@ const createApi = (overrides: Record<string, HomeAssistantState> = {}): Dashboar
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Kort oppsummert\n• Ta med paraply.\n## Anbefalinger\n• Kle deg varmt.\n## Senere i dag\n• Avtale kl. 17:30.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' })); fireEvent.click(await screen.findByRole('tab', { name })); };
-afterEach(() => { cleanup(); localStorage.clear(); });
+afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
+  it('shows Calendar first, switches to Jacob plan manually, and rotates after 30 seconds', async () => {
+    vi.useFakeTimers();
+    render(<App api={createApi({ calendar: state('calendar.family', 'on', { events: [] }), jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Prøve på tirsdag.', week_start: '2026-08-24', events: [{ date: '2026-08-25', title: 'Matteprøve' }], reminders: [{ weekday: 'fredag', title: 'Ta med gymtøy' }, { title: 'Bestill skolemelk' }] }) })} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText('Kalender')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vis kalender' })).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' }));
+    expect(screen.getByText('Prøve på tirsdag.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Jacobs skoleplan – uke 35' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Hendelser' })).toBeInTheDocument();
+    expect(screen.getByText('Matteprøve')).toBeInTheDocument();
+    expect(screen.getByText('tirsdag')).toBeInTheDocument();
+    expect(screen.queryByText('2026-08-25')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tidspunkt ikke angitt')).not.toBeInTheDocument();
+    expect(screen.getByText('Ta med gymtøy')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' })).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Vis kalender' }));
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' })).toHaveAttribute('aria-current', 'true');
+    vi.useRealTimers();
+  });
+
+  it('keeps the school-plan slide safe when the Home Assistant entity is unavailable', async () => {
+    render(<App api={createApi({ jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'unavailable') })} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Vis Jacobs skoleplan' }));
+    expect(screen.getByText('Ingen skoleplan er tilgjengelig ennå.')).toBeInTheDocument();
+  });
+
+  it('opens every Jacob plan attribute in a detail view and closes it again', async () => {
+    render(<App api={createApi({
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Melding til hjemmet', {
+        summary: '5 avtaler, 3 lekser og 4 påminnelser denne uken.', week_start: '2026-08-24', source_updated_at: '2026-08-25T20:16:51.950106+02:00',
+        events: [{ weekday: 'fredag', title: 'Turdag' }, { weekday: 'mandag', title: 'Utviklingssamtaler' }, { weekday: 'torsdag', title: 'Svømming – oppstart', details: 'Husk badetøy, håndkle og svømmebriller.' }],
+        reminders: [{ title: 'Bestill skolemelk', details: 'Fyll ut bestillingen før fredag.' }],
+        homework: [{ weekday: 'fredag', subject: 'Norsk', title: 'Les kapittel 2', details: 'Skriv tre setninger om teksten.' }],
+        school_schedule: [{ title: 'Skole', time: '08:20:00–13:40:00' }, { title: 'Skole', time: '08:20:00–14:25:00' }, { title: 'Skole', time: '08:20:00–13:40:00' }, { title: 'Skole', time: '08:20:00–14:25:00' }, { title: 'Skole', time: '08:20:00–13:40:00' }],
+        topics: ['Vennskap og klassemiljø'], messages: ['Velkommen til et nytt skoleår!'],
+      }),
+    })} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Vis Jacobs skoleplan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Åpne Jacobs skoleplan i detalj' }));
+    const detail = screen.getByRole('dialog', { name: 'Jacobs skoleplan – uke 35' });
+    expect(within(detail).getByText('Hendelser')).toBeInTheDocument();
+    const schoolDays = within(detail).getByRole('heading', { name: 'Skoledager' });
+    const events = within(detail).getByRole('heading', { name: 'Hendelser' });
+    const reminders = within(detail).getByRole('heading', { name: 'Påminnelser' });
+    expect(within(detail).getByRole('heading', { name: 'Lekser' }).closest('section')).toHaveClass('weekly-plan-detail-wide-section');
+    expect(schoolDays.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(schoolDays.compareDocumentPosition(reminders) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const eventTitles = Array.from(events.closest('section')?.querySelectorAll('.weekly-plan-detail-item-heading strong') ?? []).map((item) => item.textContent);
+    expect(eventTitles).toEqual(['Utviklingssamtaler', 'Svømming – oppstart', 'Turdag']);
+    expect(within(detail).getByText('Husk badetøy, håndkle og svømmebriller.')).toBeInTheDocument();
+    expect(within(detail).getByText('Fyll ut bestillingen før fredag.')).toBeInTheDocument();
+    expect(within(detail).getByText('Skriv tre setninger om teksten.')).toBeInTheDocument();
+    expect(within(detail).getAllByText('08:20–14:25')).toHaveLength(2);
+    expect(within(detail).getByText('Vennskap og klassemiljø')).toBeInTheDocument();
+    expect(within(detail).getByText('Velkommen til et nytt skoleår!')).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole('button', { name: 'Lukk Jacobs skoleplan' }));
+    expect(screen.queryByRole('dialog', { name: 'Jacobs skoleplan – uke 35' })).not.toBeInTheDocument();
+  });
+
+  it('pauses rotation while the document is hidden and resumes when visible', async () => {
+    vi.useFakeTimers();
+    render(<App api={createApi({ jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Plan' }) })} />);
+    await act(async () => { await Promise.resolve(); });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    fireEvent(document, new Event('visibilitychange'));
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(screen.getByRole('button', { name: 'Vis kalender' })).toHaveAttribute('aria-current', 'true');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    fireEvent(document, new Event('visibilitychange'));
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' })).toHaveAttribute('aria-current', 'true');
+    vi.useRealTimers();
+  });
+
   it('starts in Full and never exposes guest Wi-Fi there', async () => {
     render(<App api={createApi()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' }));
@@ -137,50 +214,35 @@ describe('redesigned dashboard', () => {
     expect(document.querySelector('[data-layout-id="roomClimate"]')).toHaveStyle({ gridColumn: '1 / span 8', gridRow: '5 / span 4' });
   });
 
-  it('merges the bedrooms into one row and flips each reading in sequence after a three-second hold', async () => {
-    vi.useFakeTimers();
+  it('renders four fixed room-climate cards, including Bad without a CO₂ metric and a Tiltak from Home Assistant', async () => {
     render(<App api={createApi({
-      roomLiving: state('sensor.stue_temperature', '23.2'),
-      roomLivingHumidity: state('sensor.stue_humidity', '47'),
-      roomLivingCo2: state('sensor.stue_co2', '848'),
-      roomBedroom: state('sensor.soverom_ha_temperature', '21.6'),
-      roomBedroomHumidity: state('sensor.soverom_ha_humidity', '50'),
-      roomBedroomCo2: state('sensor.soverom_ha_co2', '631'),
-      roomBathroom: state('sensor.soverom_barn_temperature', '22.4'),
-      roomBathroomHumidity: state('sensor.soverom_barn_humidity', '49'),
-      roomBathroomCo2: state('sensor.soverom_barn_co2', '675'),
+      roomLiving: state('sensor.stue_temperature', '23.2', { trend: [20, 21, 22, 23.2] }),
+      roomLivingHumidity: state('sensor.stue_humidity', '47', { trend: [43, 45, 47] }),
+      roomLivingCo2: state('sensor.stue_co2', '848', { trend: [720, 780, 848] }),
+      roomBedroom: state('sensor.soverom_ha_temperature', '21.6', { trend: [20, 21, 21.6] }),
+      roomBedroomHumidity: state('sensor.soverom_ha_humidity', '50', { trend: [46, 48, 50] }),
+      roomBedroomCo2: state('sensor.soverom_ha_co2', '631', { trend: [600, 610, 631] }),
+      roomBathroom: state('sensor.soverom_barn_temperature', '22.4', { trend: [21, 22, 22.4] }),
+      roomBathroomHumidity: state('sensor.soverom_barn_humidity', '49', { trend: [47, 48, 49] }),
+      roomBathroomCo2: state('sensor.soverom_barn_co2', '675', { trend: [640, 660, 675] }),
+      roomFirstFloorBathroom: state('sensor.temp_bad', '23', { trend: [22, 22.5, 23] }),
+      roomFirstFloorBathroomHumidity: state('sensor.fukt_bad', '67', { trend: [54, 61, 67] }),
+      roomClimateAdvice: state('sensor.romklima_tiltak', 'ok', { rooms: { bathroom: { tiltak: 'Øk ventilasjonen' } } }),
     })} />);
-    await act(async () => { await Promise.resolve(); });
 
-    const climate = document.querySelector('.room-climate-card') as HTMLElement;
-    expect(climate.querySelectorAll('.room-climate-row')).toHaveLength(2);
+    const climate = await screen.findByLabelText('Romklima');
+    expect(climate.querySelectorAll('.room-climate-room')).toHaveLength(4);
+    expect(within(climate).getByText('Stue')).toBeInTheDocument();
     expect(within(climate).getByText('Soverom HA')).toBeInTheDocument();
-    expect(within(climate).getByText('21.6°')).toBeInTheDocument();
-    expect(within(climate).queryByText('Soverom barn')).not.toBeInTheDocument();
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_001); });
-    expect(climate.querySelector('[data-flip-slot="name"]')).toHaveClass('is-flipping');
-    expect(climate.querySelector('[data-flip-slot="temperature"]')).not.toHaveClass('is-flipping');
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(279); });
     expect(within(climate).getByText('Soverom barn')).toBeInTheDocument();
-    expect(within(climate).getByText('21.6°')).toBeInTheDocument();
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(180); });
-    expect(within(climate).getByText('22.4°')).toBeInTheDocument();
-    expect(within(climate).getByText('50 %')).toBeInTheDocument();
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(360); });
-    expect(within(climate).getByText('49 %')).toBeInTheDocument();
-    expect(within(climate).getByText('675 ppm')).toBeInTheDocument();
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_279); });
-    expect(within(climate).getByText('Soverom barn')).toBeInTheDocument();
-    expect(climate.querySelector('[data-flip-slot="name"]')).not.toHaveClass('is-flipping');
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(2); });
-    expect(climate.querySelector('[data-flip-slot="name"]')).toHaveClass('is-flipping');
-    vi.useRealTimers();
+    const bathroom = within(climate).getByLabelText('Rom: Bad');
+    expect(within(bathroom).getByText('1. etasje')).toBeInTheDocument();
+    expect(within(bathroom).getByText('23°')).toBeInTheDocument();
+    expect(within(bathroom).getByText('67 %')).toBeInTheDocument();
+    expect(within(bathroom).queryByText('Luftkvalitet')).not.toBeInTheDocument();
+    expect(within(bathroom).getByText('Tiltak')).toBeInTheDocument();
+    expect(within(bathroom).getByText('Øk ventilasjonen')).toBeInTheDocument();
+    expect(climate.querySelectorAll('.room-trend-fill')).toHaveLength(0);
   });
 
   it('opens Klara AI when its text changes after the initial load', async () => {

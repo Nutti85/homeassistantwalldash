@@ -1,10 +1,49 @@
-import type { HomeAssistantState } from '../shared/entities';
+import type { HomeAssistantState, JacobPlanItem, JacobWeeklyPlanSnapshot } from '../shared/entities';
 
 export const unavailableLabel = 'Ikke tilgjengelig';
 const unavailableStates = new Set(['unknown', 'unavailable', 'none', '']);
 
 export const stateValue = (state: HomeAssistantState | undefined): string | undefined =>
   state && !unavailableStates.has(state.state.toLowerCase()) ? state.state : undefined;
+
+const planText = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+const planScalar = (value: unknown): string | number | undefined => typeof value === 'string' && value.trim() ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+const planItems = (value: unknown): JacobPlanItem[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const title = planText(row.title ?? row.name ?? row.summary ?? row.message ?? row.description);
+    if (!title) return [];
+    return [{
+      ...(planText(row.date) ? { date: planText(row.date) } : {}),
+      ...(planText(row.weekday) ? { weekday: planText(row.weekday) } : {}),
+      ...(planText(row.time) ? { time: planText(row.time) } : {}),
+      title,
+      ...(planText(row.details ?? row.description) ? { details: planText(row.details ?? row.description) } : {}),
+      ...(planText(row.subject) ? { subject: planText(row.subject) } : {}),
+    }];
+  });
+};
+const planStrings = (value: unknown): string[] => Array.isArray(value) ? value.flatMap((item) => { const text = planText(item); return text ? [text] : []; }) : [];
+
+export const jacobWeeklyPlan = (state: HomeAssistantState | undefined): JacobWeeklyPlanSnapshot | undefined => {
+  if (!stateValue(state)) return undefined;
+  const attributes = state?.attributes ?? {};
+  return {
+    summary: planText(attributes.summary) ?? '',
+    ...(planText(attributes.week_start) ? { week_start: planText(attributes.week_start) } : {}),
+    ...(planText(attributes.week_end) ? { week_end: planText(attributes.week_end) } : {}),
+    ...(planText(attributes.source_updated_at) ? { source_updated_at: planText(attributes.source_updated_at) } : {}),
+    ...(planScalar(attributes.plan_id) !== undefined ? { plan_id: planScalar(attributes.plan_id) } : {}),
+    events: planItems(attributes.events),
+    reminders: planItems(attributes.reminders),
+    homework: planItems(attributes.homework),
+    school_schedule: planItems(attributes.school_schedule),
+    topics: planStrings(attributes.topics),
+    messages: planStrings(attributes.messages),
+  };
+};
 
 const validDate = (value: unknown): string | undefined => typeof value === 'string' && value && !Number.isNaN(Date.parse(value)) ? value : undefined;
 const calendarTimestamp = (value: unknown): string | undefined => {

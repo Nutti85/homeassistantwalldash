@@ -52,6 +52,7 @@ Hvis kommandoen over fortsatt ikke gir `200`, er årsaken forbindelse eller aute
    - `HA_GUEST_VOUCHER_CREATE_BUTTON_ID` = knappen som oppretter voucher. Standard er `button.67647a4bca314858fac0f8fc_create`.
    - `HA_DOORBELL_CAMERA_ENTITY_ID` = kameraet i ringeklokke-kortet. Standard er `camera.ringeklokke_fluent`.
    - `HA_COURTYARD_CAMERA_ENTITY_ID` = kameraet i Gårdsplassen-kortet. Standard er `camera.gaardsplass_fluent_lens_0`.
+   - `HA_ROOM_CLIMATE_ADVICE_ENTITY_ID` = n8n-sensoren for korte romklima-tiltak. Standard er `sensor.romklima_tiltak`.
    - `AI_REPORT_SECRET` = en ny, tilfeldig delt hemmelighet for n8n. Når den er satt, kan n8n sende den fullstendige AI-rapporten til `POST http://192.168.1.50:3100/api/ai-report` med headeren `X-AI-Report-Secret`.
    - `GIT_SYNC_REPO` = `https://github.com/Nutti85/homeassistantwalldash.git`
    - `GIT_SYNC_BRANCH` = `main`
@@ -76,7 +77,7 @@ Bruk strukturerte Markdown-overskrifter i `report`, for eksempel `## Kort oppsum
 
 Sett `N8N_AI_REPORT_REFRESH_URL` til den aktive n8n-webhooken for briefing-workflowen. Klara AI viser knappene **Full rapport**, **Morgen**, **Formiddag**, **Ettermiddag** og **Kveld** og viser fremdrift til den publiserte rapporten er oppdatert.
 
-Webhooken mottar `{ "mode": "full", "requestedAt": "..." }`, `{ "mode": "morning", "requestedAt": "..." }`, `{ "mode": "midday", "requestedAt": "..." }`, `{ "mode": "afternoon", "requestedAt": "..." }` eller `{ "mode": "evening", "requestedAt": "..." }`. `on_demand` støttes fortsatt av hensyn til eldre kall og behandles som `full`; `{ "mode": "coming_home", "requestedAt": "..." }` brukes når `group.family` går fra borte til `home`.
+Webhooken mottar `{ "mode": "full", "requestedAt": "..." }`, `{ "mode": "morning", "requestedAt": "..." }`, `{ "mode": "midday", "requestedAt": "..." }`, `{ "mode": "afternoon", "requestedAt": "..." }` eller `{ "mode": "evening", "requestedAt": "..." }`. `on_demand` støttes fortsatt av hensyn til eldre kall og behandles som `full`; `{ "mode": "coming_home", "requestedAt": "..." }` brukes når `group.familie` går fra borte til `home`.
 
 Rapportperiodene i n8n og outputen er: `Natt` 23:00–06:00, `Morgen` 06:00–09:00, `Formiddag` 09:00–15:00, `Ettermiddag` 16:00–19:00 og `Kveld` 19:00–23:00. Mellomrommet 15:00–16:00 har bevisst ingen navngitt periode. Morgenrapporten prioriterer morgen og reise til jobb, skole og barnehage 07:30–09:30 på arbeidsdager. Ettermiddagsrapporten prioriterer 16:00–19:00, aktiviteter og kalenderhendelser. Kveldsrapporten prioriterer resten av kvelden, natten og morgendagens første avtaler. Full rapport er den detaljerte oversikten. Planlagte kjøringer (06:30 og 22:00) beholdes uendret; den interne `bedtime`-modusen for 22:00 publiseres som den kanoniske modusen `evening`, slik at dashboardet viser **Kveldsbriefing**.
 

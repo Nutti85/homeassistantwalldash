@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
 import QRCode from 'qrcode';
-import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
+import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, JacobWeeklyPlanSnapshot, LightCommand, LightControlKey } from '../shared/entities';
 import * as browserApi from './api';
 import type { AiReportMode, AiReportRefreshMode, AiReportResponse } from './api';
 import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, type SkyPosition } from './astronomy';
+import { classifyClimateValue, climateStatusColor, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import './roomCards.css';
 import {
-  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, wasteDaysUntil,
-  securityPresentation, stateValue, temperatureNumber, type ForecastPoint,
+  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, jacobWeeklyPlan, stateValue, wasteDaysUntil,
+  securityPresentation, temperatureNumber, type ForecastPoint,
 } from './dashboardModel';
 
 export interface DashboardApi {
@@ -32,6 +33,33 @@ const actionError = 'Handlingen ble ikke bekreftet av Home Assistant. Prøv igje
 const legacyUpdateError = 'Kunne ikke oppdatere smarthuset. Prøv igjen.';
 const Icon = ({ children, filled = false, className }: { children: string; filled?: boolean; className?: string }) => <span className={`material-symbols-outlined ${className ?? ''}`} style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const fmt = (value: number | undefined, unit = '') => value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`;
+type ChartPoint = { x: number; y: number };
+
+// Cubic Bézier interpolation keeps every chart readable at a glance without
+// changing the underlying measurements or joining gaps in missing data.
+const smoothPath = (points: Array<ChartPoint | undefined>) => {
+  const segments: ChartPoint[][] = [];
+  let segment: ChartPoint[] = [];
+  for (const point of points) {
+    if (point) segment.push(point);
+    else if (segment.length) { segments.push(segment); segment = []; }
+  }
+  if (segment.length) segments.push(segment);
+  return segments.map((current) => {
+    if (current.length === 1) return `M${current[0].x.toFixed(1)} ${current[0].y.toFixed(1)}`;
+    let path = `M${current[0].x.toFixed(1)} ${current[0].y.toFixed(1)}`;
+    for (let index = 0; index < current.length - 1; index += 1) {
+      const previous = current[index - 1] ?? current[index];
+      const start = current[index];
+      const end = current[index + 1];
+      const following = current[index + 2] ?? end;
+      const control1 = { x: start.x + (end.x - previous.x) / 6, y: start.y + (end.y - previous.y) / 6 };
+      const control2 = { x: end.x - (following.x - start.x) / 6, y: end.y - (following.y - start.y) / 6 };
+      path += ` C${control1.x.toFixed(1)} ${control1.y.toFixed(1)} ${control2.x.toFixed(1)} ${control2.y.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+    }
+    return path;
+  }).join(' ');
+};
 
 const WeatherGlyph = ({ condition, large = false }: { condition?: string; large?: boolean }) => (
   <Icon filled={conditionIcon(condition) === 'sunny'}>{conditionIcon(condition)}</Icon>
@@ -221,12 +249,12 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
     : { left: 175, right: 175, top: 31, bottom: 25 };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
-  const pathFor = (values: Array<number | undefined>, rangeMin: number, rangeMax: number) => values.map((value, index) => {
-    if (value === undefined) return '';
+  const pathFor = (values: Array<number | undefined>, rangeMin: number, rangeMax: number) => smoothPath(values.map((value, index) => {
+    if (value === undefined) return undefined;
     const x = plot.left + (values.length < 2 ? 0 : index * plotWidth / (values.length - 1));
     const y = plot.top + plotHeight - ((value - rangeMin) / Math.max(rangeMax - rangeMin, 1)) * plotHeight;
-    return `${index === 0 || values[index - 1] === undefined ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(' ');
+    return { x, y };
+  }));
   const tempPath = pathFor(temperatures, min, max);
   const windPath = pathFor(winds, 0, windMax);
   const gustPath = pathFor(gusts, 0, windMax);
@@ -284,7 +312,7 @@ function WeatherMetricSvg({ points, metric, compact = false }: { points: Forecas
   const range: [number, number] = metric === 'temperature' ? tempRange : metric === 'wind' ? windRange : metric === 'cloud' ? [0, 100] : rainRange;
   const pointX = (index: number) => plot.left + (data.length < 2 ? 0 : index * plotWidth / (data.length - 1));
   const pointY = (value: number, valueRange: [number, number]) => plot.top + plotHeight - ((value - valueRange[0]) / Math.max(valueRange[1] - valueRange[0], 1)) * plotHeight;
-  const pathFor = (values: Array<number | undefined>, valueRange: [number, number]) => values.map((value, index) => value === undefined ? '' : `${index === 0 || values[index - 1] === undefined ? 'M' : 'L'}${pointX(index).toFixed(1)} ${pointY(value, valueRange).toFixed(1)}`).join(' ');
+  const pathFor = (values: Array<number | undefined>, valueRange: [number, number]) => smoothPath(values.map((value, index) => value === undefined ? undefined : { x: pointX(index), y: pointY(value, valueRange) }));
   const primaryPath = pathFor(primary, range);
   const secondaryRange: [number, number] = metric === 'precipitation' ? [0, 100] : range;
   const secondaryPath = pathFor(secondary, secondaryRange);
@@ -729,86 +757,69 @@ function VehicleModal({ states, close, closeButtonRef }: { states: Record<string
   ];
   return <div className="vehicles-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="vehicles-modal card" role="dialog" aria-modal="true" aria-labelledby="vehicles-title"><header><div><h2 id="vehicles-title"><Icon>directions_car</Icon>Biler og reisetid</h2><p>Live-data fra Mercedes me og Stellantis</p></div><button ref={closeButtonRef} type="button" aria-label="Lukk biler og reisetid" onClick={close}><Icon>close</Icon></button></header><div className="vehicle-list">{vehicles.map((vehicle) => <article key={vehicle.name} className="vehicle-summary"><div className="vehicle-icon"><Icon>electric_car</Icon></div><div><strong>{vehicle.name}</strong><small>{vehicle.model}</small></div><dl><div><dt>Rekkevidde</dt><dd>{reading(vehicle.range, ' km')}</dd></div><div><dt>Batteri</dt><dd>{reading(vehicle.battery, ' %')}</dd></div></dl></article>)}</div><section className="travel-time"><Icon>route</Icon><div><strong>Reisetid</strong><small>Waze Travel Time</small></div><output>{reading(states.andreasTravelTime, ' min')}</output></section></section></div>;
 }
-const roomDefinitions = [
-  ['roomLiving', 'roomLivingHumidity', 'roomLivingCo2', 'Stue', 'weekend'],
-  ['roomBedroom', 'roomBedroomHumidity', 'roomBedroomCo2', 'Soverom HA', 'bed'],
-  ['roomBathroom', 'roomBathroomHumidity', 'roomBathroomCo2', 'Soverom barn', 'child_care'],
-] as const;
-type RoomClimateFlipSlot = 'name' | 'temperature' | 'humidity' | 'co2';
-const roomClimateFlipSequence: Array<[RoomClimateFlipSlot, number]> = [
-  ['name', 0],
-  ['temperature', 180],
-  ['humidity', 360],
-  ['co2', 540],
+type RoomClimateDefinition = { id: string; name: string; subtitle?: string; icon: string; type: ClimateRoomType; temperature: string; humidity: string; co2?: string };
+const roomDefinitions: RoomClimateDefinition[] = [
+  { id: 'living', name: 'Stue', icon: 'weekend', type: 'living_room', temperature: 'roomLiving', humidity: 'roomLivingHumidity', co2: 'roomLivingCo2' },
+  { id: 'bathroom', name: 'Bad', subtitle: '1. etasje', icon: 'bathroom', type: 'bathroom', temperature: 'roomFirstFloorBathroom', humidity: 'roomFirstFloorBathroomHumidity' },
+  { id: 'child-bedroom', name: 'Soverom barn', icon: 'child_care', type: 'bedroom', temperature: 'roomBathroom', humidity: 'roomBathroomHumidity', co2: 'roomBathroomCo2' },
+  { id: 'bedroom', name: 'Soverom HA', icon: 'bed', type: 'bedroom', temperature: 'roomBedroom', humidity: 'roomBedroomHumidity', co2: 'roomBedroomCo2' },
 ];
-const roomClimateFlipDurationMs = 560;
-const roomClimateFlipMidpointMs = roomClimateFlipDurationMs / 2;
-const roomClimateHoldMs = 3_000;
+
+type RoomClimateAdvice = { tiltak?: string };
+const asRecord = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+const roomAdvice = (state: HomeAssistantState | undefined, roomId: string): RoomClimateAdvice | undefined => {
+  const fromAttributes = asRecord(state?.attributes.rooms) ?? asRecord(state?.attributes);
+  const fromState = (() => { try { return asRecord(state?.state ? JSON.parse(state.state) : undefined); } catch { return undefined; } })();
+  const value = asRecord(fromAttributes?.[roomId]) ?? asRecord(fromState?.[roomId]);
+  return typeof value?.tiltak === 'string' && value.tiltak.trim() ? { tiltak: value.tiltak.trim() } : undefined;
+};
+const climateNumber = (state: HomeAssistantState | undefined) => {
+  const number = Number(state?.state);
+  return Number.isFinite(number) ? number : undefined;
+};
+
 function RoomCard({ name, icon, temperature, humidity, co2 }: { name: string; icon: string; temperature?: HomeAssistantState; humidity?: HomeAssistantState; co2?: HomeAssistantState }) {
   return <section className="card room-card" aria-label={`Rom: ${name}`}>
     <header><h3>{name}</h3><Icon>{icon}</Icon></header>
     <strong className="room-temperature">{reading(temperature, '°')}</strong>
-    <div className="room-readings">
-      <span className="room-reading humidity"><b>{reading(humidity)}</b><small>%</small></span>
-      <span className="room-reading co2"><b>{reading(co2)}</b><small>ppm</small></span>
-    </div>
-    <footer aria-hidden="true"><Icon>air</Icon><Icon filled>lightbulb</Icon></footer>
+    <div className="room-readings"><span className="room-reading humidity"><b>{reading(humidity)}</b><small>%</small></span>{co2 && <span className="room-reading co2"><b>{reading(co2)}</b><small>ppm</small></span>}</div>
   </section>;
+}
+
+function RoomClimateMetric({ label, metric, roomType, state, id }: { label: string; metric: ClimateMetric; roomType: ClimateRoomType; state: HomeAssistantState | undefined; id: string }) {
+  const value = climateNumber(state);
+  const status = classifyClimateValue(value, metric, roomType);
+  const trend = Array.isArray(state?.attributes.trend) ? state.attributes.trend.filter((point): point is number => typeof point === 'number' && Number.isFinite(point)) : [];
+  const min = Math.min(...trend); const max = Math.max(...trend); const range = Math.max(max - min, .001);
+  const trendPoints = trend.length > 1 ? trend.map((point, index) => ({ x: index * 100 / (trend.length - 1), y: 18 - (point - min) / range * 14 })) : [];
+  const trendPath = smoothPath(trendPoints);
+  const gradientId = `room-trend-${id}`;
+  const unit = metric === 'temperature' ? '°' : metric === 'humidity' ? ' %' : ' ppm';
+  return <div className={`room-climate-metric room-climate-metric--${metric}`} style={{ '--metric-color': climateStatusColor[status] } as CSSProperties}>
+    <b>{value === undefined ? '—' : `${value.toLocaleString('nb-NO', { maximumFractionDigits: 1 })}${unit}`}</b>
+    {trendPath ? <svg className="room-trend" viewBox="0 0 100 20" preserveAspectRatio="none" aria-label={`${label}: trend siste 30 minutter`}><defs><linearGradient id={gradientId} x1="0" x2="1" y1="0" y2="0">{trend.map((point, index) => <stop key={index} offset={`${index * 100 / (trend.length - 1)}%`} stopColor={climateStatusColor[classifyClimateValue(point, metric, roomType)]}/>)}</linearGradient></defs><path className="room-trend-line" d={trendPath} stroke={`url(#${gradientId})`}/></svg> : <i className="room-trend-empty" aria-label={`${label}: trenddata ikke tilgjengelig`}>—</i>}
+  </div>;
 }
 
 function RoomClimateCard({ states }: { states: Record<string, HomeAssistantState> }) {
-  const livingRoom = roomDefinitions[0];
-  const alternatingRooms = roomDefinitions.slice(1);
-  const [visibleRoomBySlot, setVisibleRoomBySlot] = useState<Record<RoomClimateFlipSlot, number>>({ name: 0, temperature: 0, humidity: 0, co2: 0 });
-  const [flippingSlots, setFlippingSlots] = useState<Record<RoomClimateFlipSlot, boolean>>({ name: false, temperature: false, humidity: false, co2: false });
-  useEffect(() => {
-    if (alternatingRooms.length < 2) return;
-    let nextRoom = 1;
-    let cancelled = false;
-    const timers: number[] = [];
-    const schedule = (callback: () => void, delay: number) => {
-      const timer = window.setTimeout(() => { if (!cancelled) callback(); }, delay);
-      timers.push(timer);
-    };
-    const runFlip = () => {
-      const targetRoom = nextRoom;
-      nextRoom = (nextRoom + 1) % alternatingRooms.length;
-      roomClimateFlipSequence.forEach(([slot, delay]) => {
-        schedule(() => setFlippingSlots((current) => ({ ...current, [slot]: true })), delay);
-        schedule(() => setVisibleRoomBySlot((current) => ({ ...current, [slot]: targetRoom })), delay + roomClimateFlipMidpointMs);
-        schedule(() => setFlippingSlots((current) => ({ ...current, [slot]: false })), delay + roomClimateFlipDurationMs);
-      });
-      const finalDelay = roomClimateFlipSequence.at(-1)?.[1] ?? 0;
-      schedule(runFlip, finalDelay + roomClimateFlipDurationMs + roomClimateHoldMs);
-    };
-    schedule(runFlip, roomClimateHoldMs);
-    return () => { cancelled = true; timers.forEach((timer) => window.clearTimeout(timer)); };
-  }, [alternatingRooms.length]);
-
-  const roomForSlot = (slot: RoomClimateFlipSlot) => alternatingRooms[visibleRoomBySlot[slot]] ?? alternatingRooms[0];
-  const nameRoom = roomForSlot('name');
-  const temperatureRoom = roomForSlot('temperature');
-  const humidityRoom = roomForSlot('humidity');
-  const co2Room = roomForSlot('co2');
-  return <section className="card room-climate-card" aria-labelledby="room-climate-title">
-    <header><h2 id="room-climate-title">Romklima</h2><span className="room-count">{roomDefinitions.length} rom</span></header>
-    <div className="room-climate-rows">
-      <div className="room-climate-row"><strong>{livingRoom[3]}</strong><RoomClimateMetric label="Temperatur" value={reading(states[livingRoom[0]], '°')} trend={states[livingRoom[0]]?.attributes.trend}/><RoomClimateMetric label="Fuktighet" value={reading(states[livingRoom[1]], ' %')} trend={states[livingRoom[1]]?.attributes.trend}/><RoomClimateMetric label="CO₂" value={reading(states[livingRoom[2]], ' ppm')} trend={states[livingRoom[2]]?.attributes.trend} air/></div>
-      <div className="room-climate-row room-climate-bedroom-row" aria-label={`Rom: ${nameRoom[3]}`}>
-        <strong className={`room-climate-flipper${flippingSlots.name ? ' is-flipping' : ''}`} data-flip-slot="name">{nameRoom[3]}</strong>
-        <RoomClimateMetric label="Temperatur" value={reading(states[temperatureRoom[0]], '°')} trend={states[temperatureRoom[0]]?.attributes.trend} flipSlot="temperature" flipping={flippingSlots.temperature}/>
-        <RoomClimateMetric label="Fuktighet" value={reading(states[humidityRoom[1]], ' %')} trend={states[humidityRoom[1]]?.attributes.trend} flipSlot="humidity" flipping={flippingSlots.humidity}/>
-        <RoomClimateMetric label="CO₂" value={reading(states[co2Room[2]], ' ppm')} trend={states[co2Room[2]]?.attributes.trend} air flipSlot="co2" flipping={flippingSlots.co2}/>
-      </div>
+  return <section className="room-climate-card" aria-label="Romklima">
+    <div className="room-climate-grid">
+      {roomDefinitions.map((room) => {
+        const advice = roomAdvice(states.roomClimateAdvice, room.id);
+        return <article className="room-climate-room" aria-label={`Rom: ${room.name}`} key={room.id}>
+          <header><div><h3>{room.name}</h3>{room.subtitle && <small>{room.subtitle}</small>}</div><Icon>{room.icon}</Icon></header>
+          <div className={`room-climate-metrics${room.co2 ? '' : ' room-climate-metrics--two'}`}>
+            <RoomClimateMetric id={`${room.id}-temperature`} label="Temperatur" metric="temperature" roomType={room.type} state={states[room.temperature]}/>
+            <RoomClimateMetric id={`${room.id}-humidity`} label="Luftfuktighet" metric="humidity" roomType={room.type} state={states[room.humidity]}/>
+            {room.co2 && <RoomClimateMetric id={`${room.id}-co2`} label="Luftkvalitet" metric="co2" roomType={room.type} state={states[room.co2]}/>}
+          </div>
+          <p className={`room-climate-advice${advice?.tiltak ? '' : ' room-climate-advice--empty'}`} aria-hidden={!advice?.tiltak}>
+            {advice?.tiltak && <><span>Tiltak</span><strong>{advice.tiltak}</strong></>}
+          </p>
+        </article>;
+      })}
     </div>
   </section>;
-}
-
-function RoomClimateMetric({ label, value, trend, air = false, flipSlot, flipping = false }: { label: string; value: string; trend: unknown; air?: boolean; flipSlot?: RoomClimateFlipSlot; flipping?: boolean }) {
-  const values = Array.isArray(trend) ? trend.filter((point): point is number => typeof point === 'number' && Number.isFinite(point)) : [];
-  const min = Math.min(...values); const max = Math.max(...values); const range = Math.max(max - min, .001);
-  const points = values.length > 1 ? values.map((point, index) => `${index * 100 / (values.length - 1)},${18 - (point - min) / range * 14}`).join(' ') : '';
-  return <span className={`${air ? 'air ' : ''}${flipSlot ? 'room-climate-flipper' : ''}${flipping ? ' is-flipping' : ''}`.trim()} data-flip-slot={flipSlot}><small>{label}</small><b>{value}</b>{points ? <svg className="room-trend" viewBox="0 0 100 20" preserveAspectRatio="none" aria-label={`${label}: trend siste 30 minutter`}><polyline points={points}/></svg> : <i className="room-trend-empty" aria-label={`${label}: trenddata ikke tilgjengelig`}>—</i>}</span>;
 }
 
 const numericState = (state: HomeAssistantState | undefined) => {
@@ -858,7 +869,7 @@ function EnergyPriceChart({ price, consumption }: { price?: HomeAssistantState; 
   const x = (index: number) => left + (index / 23) * (width - left - right);
   const y = (value: number) => top + (1 - value / max) * (height - top - bottom);
   const consumptionY = (value: number) => top + (1 - value / consumptionMax) * (height - top - bottom);
-  const path = (values: number[]) => values.length ? values.map((value, index) => `${index ? 'L' : 'M'}${x(index)} ${y(value)}`).join(' ') : '';
+  const path = (values: number[]) => smoothPath(values.map((value, index) => ({ x: x(index), y: y(value) })));
   const currentHour = new Date().getHours();
   const barWidth = (width - left - right) / 24 * .7;
   return <div className="energy-chart-wrap">
@@ -892,7 +903,7 @@ function Metrics({ states }: { states: Record<string, HomeAssistantState> }) {
   const events = Array.isArray(states.calendar?.attributes.events) ? states.calendar.attributes.events.slice(0, 2) as Array<Record<string, unknown>> : [];
   return <div className="metric-row">
     <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section>
-    {roomDefinitions.map(([id, humidityId, co2Id, name, icon]) => <RoomCard key={id} name={name} icon={icon} temperature={states[id]} humidity={states[humidityId]} co2={states[co2Id]}/>)}
+    {roomDefinitions.slice(0, 3).map((room) => <RoomCard key={room.id} name={room.name} icon={room.icon} temperature={states[room.temperature]} humidity={states[room.humidity]} co2={room.co2 ? states[room.co2] : undefined}/>) }
     <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{reading(states.waste)}</strong></div><p>{typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : 'Ikke tilgjengelig'}</p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section>
@@ -909,7 +920,7 @@ function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState>
   const wasteTypes = typeof states.waste?.attributes.types === 'string' ? states.waste.attributes.types : typeof states.waste?.attributes.collection_type === 'string' ? states.waste.attributes.collection_type : stateValue(states.waste)?.replace(/^\s*\d+\s*,\s*/, '') || 'Ikke tilgjengelig';
   return <div className="metric-row">
     <section className="card metric energy"><h3>Energi i dag</h3><strong>{reading(states.energyToday, ` ${typeof states.energyToday?.attributes.unit_of_measurement === 'string' ? states.energyToday.attributes.unit_of_measurement : 'kWh'}`)}</strong><div className="energy-bars" aria-hidden="true">{[38,72,46,82,32,68].map((h, i) => <i key={i} style={{height:`${h}%`}}/>)}</div></section>
-    {roomDefinitions.map(([id, humidityId, co2Id, name, icon]) => <RoomCard key={id} name={name} icon={icon} temperature={states[id]} humidity={states[humidityId]} co2={states[co2Id]}/>)}
+    {roomDefinitions.slice(0, 3).map((room) => <RoomCard key={room.id} name={room.name} icon={room.icon} temperature={states[room.temperature]} humidity={states[room.humidity]} co2={room.co2 ? states[room.co2] : undefined}/>) }
     <section className="card metric waste"><h3>Søppeltømming</h3><div><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong></div><p>{wasteTypes}</p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Andreas</h3><p>Rekkevidde <strong>{reading(states.carAndreasRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carAndreasBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.andreasTravelTime, ' min')}</strong></p></section>
     <section className="card metric car"><h3><Icon>directions_car</Icon>Hege</h3><p>Rekkevidde <strong>{reading(states.carHegeRange, ' km')}</strong></p><p>Batteri <strong>{reading(states.carHegeBattery, ' %')}</strong></p><p>Til jobb <strong>{reading(states.hegeTravelTime, ' min')}</strong></p></section>
@@ -930,6 +941,130 @@ function BriefingCard({ report }: { report?: AiReportResponse }) {
   </section>;
 }
 
+const weekdayNames = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
+const planWeekNumber = (value: string | undefined): number | undefined => {
+  if (!value || Number.isNaN(Date.parse(value))) return undefined;
+  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+};
+const planItemWhen = (item: JacobWeeklyPlanSnapshot['events'][number]): string => {
+  const weekday = item.weekday?.toLocaleLowerCase('nb-NO').match(/søndag|mandag|tirsdag|onsdag|torsdag|fredag|lørdag/)?.[0];
+  if (weekday) return weekday;
+  if (!item.date || Number.isNaN(Date.parse(item.date))) return '';
+  return weekdayNames[new Date(`${item.date}T12:00:00`).getDay()];
+};
+const weekdayOrder = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag'];
+const chronologicalPlanItems = <T extends JacobWeeklyPlanSnapshot['events'][number]>(items: T[]): T[] => [...items].sort((left, right) => {
+  const leftOrder = weekdayOrder.indexOf(planItemWhen(left));
+  const rightOrder = weekdayOrder.indexOf(planItemWhen(right));
+  return (leftOrder === -1 ? weekdayOrder.length : leftOrder) - (rightOrder === -1 ? weekdayOrder.length : rightOrder);
+});
+const planTitle = (plan: JacobWeeklyPlanSnapshot | undefined): string => {
+  const firstDatedItem = plan && [...plan.events, ...plan.reminders, ...plan.homework].find((item) => item.date)?.date;
+  const week = planWeekNumber(plan?.week_start ?? firstDatedItem);
+  return week === undefined ? 'Jacobs skoleplan' : `Jacobs skoleplan – uke ${week}`;
+};
+
+function ScrollingPlanText({ children }: { children: string }) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => {
+    const node = textRef.current;
+    if (!node) return;
+    const update = () => setOverflows(node.scrollWidth > node.clientWidth);
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [children]);
+  return <span ref={textRef} className={`weekly-plan-marquee${overflows ? ' is-overflowing' : ''}`}>{overflows ? <span className="weekly-plan-marquee-track"><span>{children}</span><span aria-hidden="true">{children}</span></span> : <span>{children}</span>}</span>;
+}
+
+function JacobWeeklyPlanCard({ plan }: { plan?: JacobWeeklyPlanSnapshot }) {
+  if (!plan) return <div className="weekly-plan-empty">Ingen skoleplan er tilgjengelig ennå.</div>;
+  return <div className="weekly-plan-content">
+    {plan.summary && <p className="weekly-plan-summary">{plan.summary}</p>}
+    <div className="weekly-plan-sections">
+      <section aria-labelledby="weekly-plan-events-title"><h4 id="weekly-plan-events-title"><Icon>event</Icon>Hendelser</h4>{plan.events.length ? <ul>{plan.events.slice(0, 3).map((event, index) => <li key={`${event.date ?? 'event'}-${event.title}-${index}`}><b><ScrollingPlanText>{event.title}</ScrollingPlanText></b>{planItemWhen(event) && <span>{planItemWhen(event)}</span>}</li>)}</ul> : <p>Ingen hendelser</p>}</section>
+      <section aria-labelledby="weekly-plan-reminders-title"><h4 id="weekly-plan-reminders-title"><Icon>notifications</Icon>Påminnelser</h4>{plan.reminders.length ? <ul>{plan.reminders.slice(0, 3).map((reminder, index) => <li key={`${reminder.date ?? 'reminder'}-${reminder.title}-${index}`}><b><ScrollingPlanText>{reminder.title}</ScrollingPlanText></b>{planItemWhen(reminder) && <span>{planItemWhen(reminder)}</span>}</li>)}</ul> : <p>Ingen påminnelser</p>}</section>
+    </div>
+  </div>;
+}
+
+const schoolWeekdayShort = ['Man', 'Tir', 'Ons', 'Tor', 'Fre'];
+const schoolDayTime = (item: JacobWeeklyPlanSnapshot['school_schedule'][number]): string => (item.time ?? item.title).replace(/(?<=\d{2}:\d{2}):\d{2}/g, '');
+const planUpdatedAt = (value: string | undefined): string | undefined => {
+  if (!value || Number.isNaN(Date.parse(value))) return undefined;
+  return new Intl.DateTimeFormat('nb-NO', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+};
+
+function JacobWeeklyPlanDetail({ plan, onClose }: { plan: JacobWeeklyPlanSnapshot; onClose: () => void }) {
+  const title = planTitle(plan);
+  const updatedAt = planUpdatedAt(plan.source_updated_at);
+  const renderPlanItems = (items: JacobWeeklyPlanSnapshot['events']) => items.length ? <ul className="weekly-plan-detail-list">{chronologicalPlanItems(items).map((item, index) => <li key={`${item.date ?? item.weekday ?? 'item'}-${item.title}-${index}`}>
+    <div className="weekly-plan-detail-item-heading"><span className={item.subject ? 'weekly-plan-detail-subject' : undefined}>{item.subject ?? planItemWhen(item)}{item.subject && planItemWhen(item) && <small>{planItemWhen(item)}</small>}</span><strong>{item.title}</strong></div>
+    {item.details && <p>{item.details}</p>}
+  </li>)}</ul> : <p className="weekly-plan-detail-empty">Ingen oppføringer.</p>;
+  return <div className="weekly-plan-detail-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="weekly-plan-detail-modal" role="dialog" aria-modal="true" aria-labelledby="weekly-plan-detail-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }} tabIndex={-1}>
+      <header className="weekly-plan-detail-header"><div><h2 id="weekly-plan-detail-title">{title}</h2>{plan.summary && <p>{plan.summary}</p>}{updatedAt && <small>Oppdatert {updatedAt}</small>}</div><button type="button" aria-label="Lukk Jacobs skoleplan" onClick={onClose}><Icon>close</Icon></button></header>
+      <div className="weekly-plan-detail-body">
+        <section className="weekly-plan-detail-section weekly-plan-detail-schedule-section"><h3>Skoledager</h3>{plan.school_schedule.length ? <ul className="weekly-plan-schedule">{plan.school_schedule.map((item, index) => <li key={`${item.title}-${index}`}><strong>{schoolWeekdayShort[index] ?? `Dag ${index + 1}`}</strong><span>{schoolDayTime(item)}</span>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="weekly-plan-detail-empty">Ingen timeplan.</p>}</section>
+        <section className="weekly-plan-detail-section"><h3>Hendelser</h3>{renderPlanItems(plan.events)}</section>
+        <section className="weekly-plan-detail-section"><h3>Påminnelser</h3>{renderPlanItems(plan.reminders)}</section>
+        <section className="weekly-plan-detail-section weekly-plan-detail-homework-section weekly-plan-detail-wide-section"><h3>Lekser</h3>{renderPlanItems(plan.homework)}</section>
+        <section className="weekly-plan-detail-section"><h3>Temaer</h3>{plan.topics.length ? <ul className="weekly-plan-detail-notes">{plan.topics.map((topic, index) => <li key={`${topic}-${index}`}>{topic}</li>)}</ul> : <p className="weekly-plan-detail-empty">Ingen temaer.</p>}</section>
+        <section className="weekly-plan-detail-section"><h3>Meldinger til hjemmet</h3>{plan.messages.length ? <ul className="weekly-plan-detail-notes">{plan.messages.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul> : <p className="weekly-plan-detail-empty">Ingen meldinger.</p>}</section>
+      </div>
+    </section>
+  </div>;
+}
+
+function CalendarPlanCarousel({ states, events, days, wasteDays, wasteTypes }: { states: Record<string, HomeAssistantState>; events: ReturnType<typeof calendarEvents>; days: Array<{ label: string; key: string }>; wasteDays?: number; wasteTypes: string }) {
+  const [slide, setSlide] = useState<0 | 1>(0);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const pointerStart = useRef<{ x: number; y: number }>();
+  const timer = useRef<number>();
+  const plan = jacobWeeklyPlan(states.jacobWeeklyPlan);
+
+  const resetTimer = useMemo(() => () => {
+    if (timer.current !== undefined) window.clearInterval(timer.current);
+    if (document.visibilityState === 'hidden') return;
+    timer.current = window.setInterval(() => setSlide((current) => current === 0 ? 1 : 0), 30_000);
+  }, []);
+  useEffect(() => {
+    resetTimer();
+    const onVisibilityChange = () => resetTimer();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => { if (timer.current !== undefined) window.clearInterval(timer.current); document.removeEventListener('visibilitychange', onVisibilityChange); };
+  }, [resetTimer]);
+  const selectSlide = (next: 0 | 1) => { setSlide(next); resetTimer(); };
+  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => { pointerStart.current = { x: event.clientX, y: event.clientY }; };
+  const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const start = pointerStart.current;
+    pointerStart.current = undefined;
+    if (!start) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 44 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    selectSlide(deltaX < 0 ? 1 : 0);
+  };
+  return <section className="card metric calendar-plan-carousel" aria-label="Kalender og Jacobs skoleplan" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { pointerStart.current = undefined; }}>
+    <header className="calendar-plan-header"><h3>{slide === 0 ? 'Kalender' : planTitle(plan)}</h3><div className="calendar-plan-dots" aria-label="Velg kort">
+      <button type="button" aria-label="Vis kalender" aria-current={slide === 0 ? 'true' : undefined} className={slide === 0 ? 'active' : ''} onClick={() => selectSlide(0)}><span aria-hidden="true"/></button>
+      <button type="button" aria-label="Vis Jacobs skoleplan" aria-current={slide === 1 ? 'true' : undefined} className={slide === 1 ? 'active' : ''} onClick={() => selectSlide(1)}><span aria-hidden="true"/></button>
+    </div></header>
+    <div className="calendar-plan-viewport">
+      {slide === 0 ? <div className="calendar-plan-slide calendar-slide">{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}<div className="calendar-waste-section"><h3>Søppeltømming</h3><div className="calendar-waste"><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong><span>-</span><span>{wasteTypes}</span></div></div></div> : <div className="calendar-plan-slide weekly-plan-slide">{plan ? <div className="weekly-plan-open" role="button" tabIndex={0} aria-label="Åpne Jacobs skoleplan i detalj" onClick={() => setDetailOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDetailOpen(true); } }}><JacobWeeklyPlanCard plan={plan}/></div> : <JacobWeeklyPlanCard plan={plan}/>}</div>}
+    </div>
+    {detailOpen && plan && <JacobWeeklyPlanDetail plan={plan} onClose={() => setDetailOpen(false)}/>} 
+  </section>;
+}
+
 function metricCards(states: Record<string, HomeAssistantState>, report?: AiReportResponse): LayoutChild[] {
   const events = calendarEvents(states.calendar);
   const today = new Date();
@@ -941,7 +1076,7 @@ function metricCards(states: Record<string, HomeAssistantState>, report?: AiRepo
     { id: 'energy', label: 'Energi', content: <EnergyCard states={states}/> },
     { id: 'roomClimate', label: 'Romklima', content: <RoomClimateCard states={states}/> },
     { id: 'briefing', label: 'Klara AI', content: <BriefingCard report={report}/> },
-    { id: 'calendar', label: 'Kalender', content: <section className="card metric calendar"><h3>Kalender</h3>{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}<div className="calendar-waste-section"><h3>Søppeltømming</h3><div className="calendar-waste"><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong><span>-</span><span>{wasteTypes}</span></div></div></section> },
+    { id: 'calendar', label: 'Kalender', content: <CalendarPlanCarousel states={states} events={events} days={days} wasteDays={wasteDays} wasteTypes={wasteTypes}/> },
   ];
 }
 
