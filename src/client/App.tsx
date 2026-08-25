@@ -1034,7 +1034,7 @@ function CalendarPlanCarousel({ states, events, days, wasteDays, wasteTypes }: {
   const resetTimer = useMemo(() => () => {
     if (timer.current !== undefined) window.clearInterval(timer.current);
     if (document.visibilityState === 'hidden') return;
-    timer.current = window.setInterval(() => setSlide((current) => current === 0 ? 1 : 0), 30_000);
+    timer.current = window.setInterval(() => setSlide((current) => current === 0 ? 1 : 0), 3_000);
   }, []);
   useEffect(() => {
     resetTimer();

@@ -19,7 +19,7 @@ const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(
 afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
-  it('shows Calendar first, switches to Jacob plan manually, and rotates after 30 seconds', async () => {
+  it('shows Calendar first, switches to Jacob plan manually, and rotates after 3 seconds', async () => {
     vi.useFakeTimers();
     render(<App api={createApi({ calendar: state('calendar.family', 'on', { events: [] }), jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Prøve på tirsdag.', week_start: '2026-08-24', events: [{ date: '2026-08-25', title: 'Matteprøve' }], reminders: [{ weekday: 'fredag', title: 'Ta med gymtøy' }, { title: 'Bestill skolemelk' }] }) })} />);
     await act(async () => { await Promise.resolve(); });
@@ -36,7 +36,7 @@ describe('redesigned dashboard', () => {
     expect(screen.getByText('Ta med gymtøy')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' })).toHaveAttribute('aria-current', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Vis kalender' }));
-    await act(async () => { vi.advanceTimersByTime(30_000); });
+    await act(async () => { vi.advanceTimersByTime(3_000); });
     expect(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' })).toHaveAttribute('aria-current', 'true');
     vi.useRealTimers();
   });
@@ -87,11 +87,11 @@ describe('redesigned dashboard', () => {
     await act(async () => { await Promise.resolve(); });
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     fireEvent(document, new Event('visibilitychange'));
-    await act(async () => { vi.advanceTimersByTime(30_000); });
+    await act(async () => { vi.advanceTimersByTime(3_000); });
     expect(screen.getByRole('button', { name: 'Vis kalender' })).toHaveAttribute('aria-current', 'true');
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     fireEvent(document, new Event('visibilitychange'));
-    await act(async () => { vi.advanceTimersByTime(30_000); });
+    await act(async () => { vi.advanceTimersByTime(3_000); });
     expect(screen.getByRole('button', { name: 'Vis Jacobs skoleplan' })).toHaveAttribute('aria-current', 'true');
     vi.useRealTimers();
   });
