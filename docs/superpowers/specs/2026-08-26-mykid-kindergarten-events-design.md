@@ -29,7 +29,7 @@ The test profile and test script were deleted immediately after the test. No MyK
 In scope:
 
 - upcoming events from the MyKid parent portal only;
-- one browser worker in the existing n8n Portainer stack;
+- one dedicated private Browserless service in the existing n8n Portainer stack;
 - a dedicated, minimum PostgreSQL event model;
 - two n8n workflows: ingest and publish;
 - a Home Assistant sensor and a small WallDash presentation extension.
@@ -48,8 +48,8 @@ MyKid parent portal
        |
        | authenticated persistent browser profile
        v
-mykid-browser-worker (inside existing n8n Portainer stack)
-       | private Docker network, token-authenticated /events request
+mykid-browserless (inside existing n8n Portainer stack)
+       | private Docker network, token-authenticated /function request
        v
 n8n workflow 1: import events
        |
@@ -63,27 +63,27 @@ n8n workflow 2: publish sensor
 Home Assistant sensor -> WallDash
 ```
 
-The worker belongs in the n8n stack, not the dashboard stack. n8n is its only caller; WallDash receives no MyKid credential, browser session, or direct worker access.
+The Browserless service belongs in the n8n stack, not the dashboard stack. n8n is its only caller; WallDash receives no MyKid credential, browser session, or direct browser access.
 
-## Browser worker
+## Dedicated Browserless service
 
-The worker is a small, custom container image containing a pinned Playwright/Chromium version and a narrow HTTP service.
+The service uses a pinned `ghcr.io/browserless/chromium` image rather than a custom worker image. Browserless exposes an authenticated `/function` endpoint that executes the compact, version-controlled MyKid extraction function and returns JSON directly to n8n.
 
-- It runs as a fixed non-root container user.
-- It owns one named Docker volume, `mykid-browser-profile`, which stores the browser profile. No other service mounts this volume.
-- Its only production endpoint is `POST /events`. It requires a long random bearer token held in Portainer/n8n secrets.
-- `GET /health` reports worker readiness only and never contacts MyKid.
-- It uses Playwright's persistent browser context, opens `https://mykid.no/foreldre`, verifies the authenticated parent navigation, and reads only the `Kommende hendelser` section.
+- It owns one named Docker volume, `mykid-browser-profile`, mounted at Browserless `DATA_DIR`. No other service mounts this volume.
+- It has no production host port. It is reachable only as `http://mykid-browserless:3000` from the n8n stack's default Docker network.
+- Its Browserless token is a long random Portainer/n8n secret; n8n keeps it in an HTTP credential rather than workflow JSON.
+- Browserless health checks report service readiness only and do not contact MyKid.
+- The extraction function opens `https://mykid.no/foreldre`, verifies the authenticated parent navigation, and reads only the `Kommende hendelser` section.
 - It returns a bounded JSON response: `fetched_at` and event `title`, ISO `date`, optional `start_time`/`end_time`, and optional short `details`. It neither returns raw HTML nor includes unrelated page content.
-- A per-process lock rejects overlapping collection calls.
+- The service is configured for one concurrent session and no queued sessions, preventing overlapping collection calls.
 
-If the worker is redirected to login, cannot find the event section, or receives an unexpected page, it returns a machine-readable failure such as `session_expired` or `source_changed`. It does not fabricate an empty success response.
+If the function is redirected to login, cannot find the event section, or receives an unexpected page, it returns a machine-readable failure such as `session_expired` or `source_changed`. It does not fabricate an empty success response.
 
 ### Initial login and session recovery
 
-The profile must be created inside the worker's own persistent volume; a desktop profile is never copied into Portainer.
+The profile must be created inside Browserless's own persistent volume; a desktop profile is never copied into Portainer.
 
-For initial login or recovery, temporarily enable a LAN-restricted interactive bootstrap view for this worker only. The user enters the MyKid credentials directly in that view. After authentication is verified, disable the bootstrap exposure and restart the worker in headless production mode. The temporary interactive view must never be exposed to the internet.
+For initial login or recovery, temporarily expose the dedicated Browserless debugger on the LAN only. The user enters the MyKid credentials directly in that view. After authentication is verified, remove the port and restart Browserless in private headless production mode. The temporary interactive view must never be exposed to the internet.
 
 MyKid session expiry is expected. The recovery path is manual re-login; the solution must not bypass multi-factor challenges, CAPTCHAs, rate limits, or access controls.
 
@@ -115,8 +115,8 @@ No raw MyKid page, browser screenshot, session material, or login identity is in
 
 Manual trigger plus a twice-daily schedule.
 
-1. Call the worker's private `POST /events` endpoint.
-2. Fail clearly on a worker error, without changing confirmed rows; send a private Home Assistant notification for `session_expired`.
+1. Call Browserless's private `POST /function` endpoint with the version-controlled extraction function.
+2. Fail clearly on a Browserless error, without changing confirmed rows; send a private Home Assistant notification for `session_expired`.
 3. Validate types, date/time formats, maximum response size, and that every event has a title/date.
 4. Create a stable `source_key` only when the worker cannot provide one.
 5. Upsert normalized event rows with the restricted Klara PostgreSQL ingestion credential.
@@ -142,21 +142,21 @@ The UI must render missing or unavailable data without exposing error details or
 
 ## Security and operations
 
-- Preserve all existing n8n Portainer environment variables when adding the worker service.
-- Use a private Docker network; do not publish the worker API port.
-- Store the worker bearer token and Home Assistant/PostgreSQL credentials as Portainer/n8n secrets, never in Compose, workflow JSON, source, logs, or chat.
+- Preserve all existing n8n Portainer environment variables when adding the Browserless service.
+- Use the n8n stack's private Docker network; do not publish the Browserless production port.
+- Store the Browserless token and Home Assistant/PostgreSQL credentials as Portainer/n8n secrets, never in Compose, workflow JSON, source, logs, or chat.
 - Treat `mykid-browser-profile` as credential material: do not share, export, or cloud-back it up.
-- Pin browser-image versions and retain the same worker user to reduce profile-encryption and cookie compatibility surprises.
+- Pin the Browserless image version and retain the same data directory to reduce profile-encryption and cookie compatibility surprises.
 - Poll at most twice daily and record only the least data needed for events.
 - Apply a bounded execution-data retention policy in n8n, and run its security audit after deployment.
 
 ## Verification
 
 1. Unit-test event parsing against saved synthetic HTML fixtures; no real MyKid content is committed.
-2. In a temporary profile, verify interactive bootstrap login, clean worker restart, and headless `/events` success.
-3. Verify that a worker login expiry returns `session_expired`, preserves prior PostgreSQL events, and produces the private notification.
+2. In a temporary profile, verify interactive Browserless bootstrap login, clean service restart, and headless `/function` success.
+3. Verify that a Browserless login expiry returns `session_expired`, preserves prior PostgreSQL events, and produces the private notification.
 4. Run the import twice against the same synthetic response and verify no duplicate rows.
 5. Remove an event from a synthetic response and verify it is withheld only after the grace-period rule.
 6. Run the publisher and verify `sensor.<child>_kindergarten_events` has the expected compact attributes.
 7. Verify WallDash displays normal, empty, and unavailable states.
-8. Confirm the worker has no published production port, n8n cannot mount the profile volume, and the dashboard stack has no worker access.
+8. Confirm Browserless has no published production port, n8n cannot mount the profile volume, and the dashboard stack has no Browserless access.
