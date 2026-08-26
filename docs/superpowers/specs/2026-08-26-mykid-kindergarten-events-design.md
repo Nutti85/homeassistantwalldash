@@ -30,18 +30,18 @@ The source snapshot includes these requested parent sections:
 
 The import is strictly read-only. It never registers attendance, replies, downloads media, changes portal data, or bypasses login challenges.
 
-## Minimum-retention rules
+## Source-fidelity rules
 
-This concerns young children, including other families’ children. The database stores only compact, normalized information that can appear on a household dashboard:
+The requested MyKid sections are imported as they are visible to the authenticated parent. The system must not censor, anonymise, or selectively omit their content:
 
-| Category | Stored fields | Explicitly excluded |
-| --- | --- | --- |
-| Noticeboard, weekly plan, newsletter | title, published/date, bounded plain-text summary, source key | HTML, attachments, photos, recipient lists |
-| Upcoming event | title, date, optional time, bounded details | raw event page, attendance controls |
-| Birthday | date and an unnamed label/count only | other children’s names, ages, photos |
-| Today | date, bounded activity summary | arrival/departure times, absence, care/health or behavioural notes |
+| Category | Stored and published information |
+| --- | --- |
+| Noticeboard, weekly plan, newsletter | title, date, and full visible text |
+| Upcoming event | title, date, time, details, and other visible event metadata |
+| Birthday | names, date, and other visible birthday information |
+| Today | the complete visible “Dagen min” text and activity information |
 
-All extracted strings are length-limited and stripped to text. A parser seeing an unrecognised category must fail safely rather than saving raw content. No AI processing is needed.
+Extraction converts visible page content to normalized plain text and structured fields; it does not retain browser cookies, passwords, session storage, raw HTML, screenshots, attachments, or media. Technical validation may reject an unexpectedly malformed or unbounded source response, but it must not silently truncate or redact valid portal content. No AI processing is needed.
 
 ## Reused architecture
 
@@ -68,7 +68,7 @@ Reuse `people` and `households`, but do not place arbitrary portal content in Ja
 Add two MyKid-specific tables linked to `people.person_id`:
 
 1. `kindergarten_events` for date/time events, with `UNIQUE (person_id, source_key)`.
-2. `kindergarten_updates` for noticeboard, weekly-plan, newsletter, birthday, and today items. It has a constrained `kind` value, source key, effective/published date, title, bounded text, `last_seen_at`, and audit timestamps; again `UNIQUE (person_id, kind, source_key)`.
+2. `kindergarten_updates` for noticeboard, weekly-plan, newsletter, birthday, and today items. It has a constrained `kind` value, source key, effective/published date, title, full normalized text, `last_seen_at`, and audit timestamps; again `UNIQUE (person_id, kind, source_key)`.
 
 The import uses a successful-snapshot grace period before marking source items stale. A scrape failure never erases confirmed data.
 
@@ -79,7 +79,7 @@ The import uses a successful-snapshot grace period before marking source items s
 Manual trigger plus two inactive initial schedules (08:00 and 18:00, Europe/Oslo):
 
 1. Call Browserless’s authenticated `/chromium/function` endpoint once.
-2. Navigate only to the required visible parent routes, validate authenticated navigation, and return a bounded JSON snapshot—not HTML.
+2. Navigate only to the required visible parent routes, validate authenticated navigation, and return the complete visible requested content as structured JSON—not HTML.
 3. Validate category, size, dates, times, and text limits; return `session_expired` or `source_changed` on unexpected source state.
 4. Upsert events and updates using the existing restricted Klara ingestion credential.
 5. Keep successful execution data out of n8n history and retain failed diagnostic metadata briefly.

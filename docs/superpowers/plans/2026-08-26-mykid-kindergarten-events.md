@@ -11,7 +11,7 @@
 - Reuse n8n, Klara PostgreSQL, Home Assistant, and WallDash. Do not add cloud services or a custom worker.
 - Keep the existing shared Browserless stack unchanged. Use `mykid-browserless` and its profile volume only for MyKid.
 - The temporary debugger port exists only for manual sign-in, then is removed.
-- Never save credentials, cookies, raw HTML, screenshots, media, health/attendance information, or other children’s names.
+- Preserve the complete visible content of all six requested MyKid sections. Never save credentials, cookies, raw HTML, screenshots, attachments, or media.
 - Use synthetic test fixtures exclusively.
 - Keep successful n8n execution data out of history.
 
@@ -37,7 +37,7 @@
 1. Inspect the actual Klara roles, extensions, timestamp trigger, and `people` key before writing a migration.
 2. TDD: write a failing isolated-database assertion for two new tables.
 3. Create `kindergarten_events` for dated events with a child-scoped unique source key, event-date index, audit timestamps, and restricted grants.
-4. Create `kindergarten_updates` with `kind` limited to `noticeboard`, `weekly_plan`, `newsletter`, `birthday`, and `today`; child-scoped idempotency; bounded `title`/`body`; effective date; last-seen and audit timestamps.
+4. Create `kindergarten_updates` with `kind` limited to `noticeboard`, `weekly_plan`, `newsletter`, `birthday`, and `today`; child-scoped idempotency; title and full normalized visible text; effective date; last-seen and audit timestamps.
 5. Add stale handling that only follows a successful complete snapshot. Failed source reads preserve rows.
 6. Test duplicate upserts, invalid kinds, and child isolation.
 
@@ -53,9 +53,9 @@
 
 1. Add manual trigger and initially inactive 08:00/18:00 Europe/Oslo schedules.
 2. Call the private `/chromium/function` endpoint once per run.
-3. Implement a small extractor that visits only the required MyKid parent routes and returns a bounded JSON snapshot with source keys, dates, and text—not page HTML.
+3. Implement a small extractor that visits only the required MyKid parent routes and returns a complete structured snapshot of the requested visible content—not page HTML.
 4. Return explicit `session_expired`, `source_changed`, or `invalid_snapshot` statuses. Do not turn an error into an empty successful import.
-5. Validate record count, fields, Norwegian dates/times, allowed kinds, and maximum text lengths in n8n before database access.
+5. Validate record count, fields, Norwegian dates/times, and allowed kinds in n8n before database access. Reject malformed source data rather than silently censoring or truncating valid content.
 6. Derive deterministic fallback keys only when MyKid exposes no usable key; upsert through the restricted ingestion credential.
 7. Set execution-history pruning and create a private re-login notification path for session expiry.
 
@@ -70,8 +70,8 @@
 
 1. Add manual trigger and inactive 15-minute schedule.
 2. Read current/future normalized items for the configured child from PostgreSQL.
-3. Construct one concise Norwegian payload for `sensor.<child>_mykid`: state/health, source timestamp, events, notices, plan items, newsletters, anonymous birthdays, and today summary.
-4. Keep attributes bounded; omit absent categories cleanly.
+3. Construct one Norwegian payload for `sensor.<child>_mykid`: state/health, source timestamp, events, notices, plan items, newsletters, birthdays, and today information.
+4. Preserve full visible source text and omit only categories that are genuinely absent.
 5. Publish through the existing Home Assistant credential and test empty, normal, stale, and unavailable outcomes.
 
 **Acceptance:** the sensor contains no login or raw portal material and can be rendered without special MyKid browser access.
