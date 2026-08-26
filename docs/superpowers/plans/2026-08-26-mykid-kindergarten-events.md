@@ -1,299 +1,108 @@
-# MyKid Kindergarten Events Implementation Plan
+# MyKid kindergarten feed implementation plan
 
-> For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
+**Goal:** Import the second child’s selected MyKid parent information into Klara PostgreSQL, publish one Home Assistant sensor, and show it on WallDash—using exactly two n8n workflows.
 
-**Goal:** Import upcoming MyKid events through a private persistent Browserless profile, store them in Klara PostgreSQL, then publish Home Assistant sensor data to WallDash.
+**Architecture:** A dedicated Browserless profile performs read-only portal extraction. The importer normalizes the snapshot into purpose-built PostgreSQL tables. The publisher reads those tables and updates one Home Assistant sensor. WallDash reads that sensor only.
 
-**Architecture:** A dedicated Browserless service runs in the n8n Portainer stack with its own persistent data volume and no public port. Import workflow: Browserless to PostgreSQL. Publisher workflow: PostgreSQL to Home Assistant. WallDash reads only the Home Assistant sensor.
+**Spec:** `docs/superpowers/specs/2026-08-26-mykid-kindergarten-events-design.md`
 
-**Tech Stack:** Portainer Compose, Browserless Chromium, Puppeteer function API, n8n, PostgreSQL, Home Assistant, React, TypeScript, Vitest.
+## Constraints
 
-**Spec:** docs/superpowers/specs/2026-08-26-mykid-kindergarten-events-design.md
+- Reuse n8n, Klara PostgreSQL, Home Assistant, and WallDash. Do not add cloud services or a custom worker.
+- Keep the existing shared Browserless stack unchanged. Use `mykid-browserless` and its profile volume only for MyKid.
+- The temporary debugger port exists only for manual sign-in, then is removed.
+- Never save credentials, cookies, raw HTML, screenshots, media, health/attendance information, or other children’s names.
+- Use synthetic test fixtures exclusively.
+- Keep successful n8n execution data out of history.
 
-## Global Constraints
+## Task 1 — Complete Browserless bootstrap
 
-- Poll twice daily at most and read only parent-page upcoming events.
-- Do not retain raw HTML, screenshots, messages, media, attendance, contacts, health data, credentials, or browser identity.
-- Keep the existing shared Browserless stack unchanged. Use a dedicated private service in n8n stack.
-- Browserless profile volume is mounted only by Browserless; its production port is not published.
-- Preserve existing n8n environment variables and network attachments.
-- Keep all tokens and credentials in Portainer/n8n, not code, exports, logs, or chat.
-- User manually reauthenticates when MyKid session expires.
+**Status:** service deployed; user login pending.
 
-## File Structure
+1. Open the dedicated Browserless debugger from a normal browser on the home network and authenticate to MyKid manually.
+2. Run a one-page, read-only `/foreldre` session using the persistent data directory.
+3. Restart Browserless and repeat that authentication check.
+4. Remove the LAN port and debugger enablement; retain only the n8n network connection.
+5. Add the Browserless token to an n8n HTTP credential, not workflow JSON.
 
-| File | Responsibility |
-| --- | --- |
-| database/migrations/002_kindergarten_events.sql | Event storage and restricted grants |
-| n8n/mykid-import-kindergarten-events.json | Import workflow |
-| n8n/mykid-publish-kindergarten-events.json | Publisher workflow |
-| docs/n8n-mykid-kindergarten-events.md | Setup and recovery runbook |
-| src/shared/entities.ts and src/server/index.ts | State key and entity configuration |
-| src/client/dashboardModel.ts and src/client/App.tsx | Sensor parsing and carousel slide |
-| relevant test files | Unit and interaction coverage |
+**Acceptance:** a post-restart Browserless function reaches authenticated MyKid without credentials in code or n8n.
 
-### Task 1: Create event storage
+## Task 2 — Add normalized PostgreSQL storage
 
 **Files:**
-- Create: database/migrations/002_kindergarten_events.sql
-- Create: docs/n8n-mykid-kindergarten-events.md
 
-**Interfaces:**
-- Consumes: people person_id and external_key.
-- Produces: kindergarten_events for both workflows.
+- `database/migrations/002_kindergarten_events.sql`
+- `docs/n8n-mykid-kindergarten-events.md`
 
-- [ ] **Step 1: Write the failing migration assertion**
+1. Inspect the actual Klara roles, extensions, timestamp trigger, and `people` key before writing a migration.
+2. TDD: write a failing isolated-database assertion for two new tables.
+3. Create `kindergarten_events` for dated events with a child-scoped unique source key, event-date index, audit timestamps, and restricted grants.
+4. Create `kindergarten_updates` with `kind` limited to `noticeboard`, `weekly_plan`, `newsletter`, `birthday`, and `today`; child-scoped idempotency; bounded `title`/`body`; effective date; last-seen and audit timestamps.
+5. Add stale handling that only follows a successful complete snapshot. Failed source reads preserve rows.
+6. Test duplicate upserts, invalid kinds, and child isolation.
 
-    DO $$ BEGIN
-      IF to_regclass('public.kindergarten_events') IS NULL THEN
-        RAISE EXCEPTION 'kindergarten_events was not created';
-      END IF;
-    END $$;
+**Acceptance:** all six MyKid categories have a minimal, child-owned persistence path without overloading Jacob’s email/PDF weekly-plan schema.
 
-Run it in isolated test database. Expected: failure.
-
-- [ ] **Step 2: Implement table, deduplication, index, and grants**
-
-    CREATE TABLE kindergarten_events (
-      kindergarten_event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      person_id uuid NOT NULL REFERENCES people(person_id) ON DELETE CASCADE,
-      source_key text NOT NULL,
-      title text NOT NULL CHECK (length(btrim(title)) > 0),
-      event_date date NOT NULL,
-      start_time time,
-      end_time time,
-      details text,
-      last_seen_at timestamptz NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      UNIQUE (person_id, source_key),
-      CHECK (end_time IS NULL OR start_time IS NULL OR end_time >= start_time)
-    );
-    CREATE INDEX kindergarten_events_publish_idx
-      ON kindergarten_events (person_id, event_date, last_seen_at DESC);
-    GRANT SELECT, INSERT, UPDATE ON kindergarten_events TO klara_ingestion_api;
-    GRANT SELECT ON kindergarten_events TO klara_read_api;
-
-Add BEFORE UPDATE trigger setting updated_at to now. Use actual existing restricted-role names if different.
-
-- [ ] **Step 3: Verify and commit**
-
-Insert duplicate person/source_key in isolated DB. Expected: second insert fails.
-
-    git add database/migrations/002_kindergarten_events.sql docs/n8n-mykid-kindergarten-events.md
-    git commit -m "feat: add kindergarten event storage"
-
-### Task 2: Deploy dedicated Browserless
+## Task 3 — Build the MyKid import workflow
 
 **Files:**
-- Modify: docs/n8n-mykid-kindergarten-events.md
-- Modify: live Portainer n8n stack after rediscovery
 
-**Interfaces:**
-- Consumes: n8n internal Docker network and a fresh Browserless token.
-- Produces: private Browserless function endpoint and persistent profile.
+- `n8n/mykid-import.json`
+- `docs/n8n-mykid-kindergarten-events.md`
+- synthetic extraction fixtures/tests as appropriate
 
-- [ ] **Step 1: Rediscover Portainer state**
+1. Add manual trigger and initially inactive 08:00/18:00 Europe/Oslo schedules.
+2. Call the private `/chromium/function` endpoint once per run.
+3. Implement a small extractor that visits only the required MyKid parent routes and returns a bounded JSON snapshot with source keys, dates, and text—not page HTML.
+4. Return explicit `session_expired`, `source_changed`, or `invalid_snapshot` statuses. Do not turn an error into an empty successful import.
+5. Validate record count, fields, Norwegian dates/times, allowed kinds, and maximum text lengths in n8n before database access.
+6. Derive deterministic fallback keys only when MyKid exposes no usable key; upsert through the restricted ingestion credential.
+7. Set execution-history pruning and create a private re-login notification path for session expiry.
 
-Read the stack named n8n, its environment ID, compose source, environment variable names, and networks. Preserve all existing values when updating; record no secrets.
+**Acceptance:** repeated synthetic snapshots remain idempotent; failed snapshots change no confirmed rows.
 
-- [ ] **Step 2: Add Browserless service**
-
-    mykid-browserless:
-      image: ghcr.io/browserless/chromium@sha256:verified-image-digest
-      environment:
-        TOKEN: MYKID_BROWSERLESS_TOKEN
-        DATA_DIR: /data
-        CONCURRENT: "1"
-        QUEUED: "0"
-        TIMEOUT: "60000"
-        HEALTH: "true"
-        ENABLE_DEBUGGER: "false"
-      volumes:
-        - mykid-browser-profile:/data
-      shm_size: "1gb"
-      restart: unless-stopped
-
-Add stack volume mykid-browser-profile. Do not add ports. Do not mount the volume into n8n or dashboard.
-
-- [ ] **Step 3: Add deployment configuration**
-
-    MYKID_BROWSERLESS_TOKEN=fresh-random-secret
-    MYKID_PERSON_EXTERNAL_KEY=selected-child-stable-key
-    MYKID_HA_ENTITY_ID=sensor.selected_child_kindergarten_events
-
-- [ ] **Step 4: Bootstrap and verify persistence**
-
-Before login, invoke internal Browserless function to open parent page. Expected: session_expired.
-
-Temporarily expose authenticated debugger only on LAN. User signs in. Remove debugger port, redeploy headlessly, invoke same function after restart. Expected: authenticated status and no external port.
-
-- [ ] **Step 5: Commit runbook**
-
-    git add docs/n8n-mykid-kindergarten-events.md
-    git commit -m "docs: add MyKid Browserless operations"
-
-### Task 3: Create Browserless import workflow
+## Task 4 — Build the MyKid publisher workflow
 
 **Files:**
-- Create: n8n/mykid-import-kindergarten-events.json
-- Modify: docs/n8n-mykid-kindergarten-events.md
 
-**Interfaces:**
-- Consumes: Browserless function, child external key, PostgreSQL ingestion credential.
-- Produces: idempotent validated kindergarten_events rows.
+- `n8n/mykid-publish.json`
+- `docs/n8n-mykid-kindergarten-events.md`
 
-- [ ] **Step 1: Add Manual Trigger and inactive schedules**
+1. Add manual trigger and inactive 15-minute schedule.
+2. Read current/future normalized items for the configured child from PostgreSQL.
+3. Construct one concise Norwegian payload for `sensor.<child>_mykid`: state/health, source timestamp, events, notices, plan items, newsletters, anonymous birthdays, and today summary.
+4. Keep attributes bounded; omit absent categories cleanly.
+5. Publish through the existing Home Assistant credential and test empty, normal, stale, and unavailable outcomes.
 
-Add 08:00 and 18:00 schedules in local timezone, both routed through one validation pipeline.
+**Acceptance:** the sensor contains no login or raw portal material and can be rendered without special MyKid browser access.
 
-- [ ] **Step 2: Write and run failing validation input**
-
-    {"status":"ok","events":[{"source_key":"fixture-1","title":"Foreldremøte","date":"2026-09-09","start_time":"17:30","end_time":"19:00","details":"Kort tekst"}]}
-
-Reject non-ok status, over 50 records, missing source_key/title/date, invalid date, and invalid time. Expected initially: failing workflow, no database output.
-
-- [ ] **Step 3: Add Browserless function request**
-
-POST application/javascript to private Browserless function endpoint using n8n credential token. Function behavior:
-1. Navigate MyKid parent page with 45-second timeout.
-2. Return session_expired when authenticated navigation absent.
-3. Locate exact upcoming-events heading and table.
-4. Return source_changed when either is absent.
-5. Return only source key, title, Norwegian date/time text, optional details, and fetched timestamp.
-
-Use live semantic selectors confirmed during bootstrap. Do not return page HTML or commit actual event content.
-
-- [ ] **Step 4: Add parameterized upsert**
-
-    WITH target_person AS (
-      SELECT person_id FROM people WHERE external_key = $1
-    )
-    INSERT INTO kindergarten_events
-      (person_id, source_key, title, event_date, start_time, end_time, details, last_seen_at)
-    SELECT person_id, $2, $3, $4::date, NULLIF($5, '')::time,
-      NULLIF($6, '')::time, NULLIF($7, ''), now()
-    FROM target_person
-    ON CONFLICT (person_id, source_key) DO UPDATE SET
-      title = EXCLUDED.title, event_date = EXCLUDED.event_date,
-      start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time,
-      details = EXCLUDED.details, last_seen_at = EXCLUDED.last_seen_at;
-
-Fail if child key has no person. Retain no successful execution data and failed executions for fourteen days.
-
-- [ ] **Step 5: Verify idempotency, activate, and commit**
-
-Run same successful data twice. Expected: one row per source key.
-
-    git add n8n/mykid-import-kindergarten-events.json docs/n8n-mykid-kindergarten-events.md
-    git commit -m "feat: import MyKid kindergarten events"
-
-### Task 4: Create publisher workflow
+## Task 5 — Extend WallDash safely
 
 **Files:**
-- Create: n8n/mykid-publish-kindergarten-events.json
-- Modify: docs/n8n-mykid-kindergarten-events.md
 
-**Interfaces:**
-- Consumes: kindergarten_events and Home Assistant credential.
-- Produces: sensor state with summary, source_updated_at, events.
+- `src/shared/entities.ts`
+- `src/server/index.ts`
+- `src/server/homeAssistant.test.ts`
+- `src/client/dashboardModel.ts`
+- `src/client/weeklyPlan.test.ts`
+- `src/client/App.tsx`
+- `src/client/App.test.tsx`
 
-- [ ] **Step 1: Add manual and inactive 15-minute triggers**
+1. Write failing parser and UI tests for a normal MyKid payload, empty payload, stale source, and unavailable entity.
+2. Add a configured Home Assistant entity ID and typed defensive snapshot parser.
+3. Add one compact MyKid carousel/detail view using existing calendar/Jacob presentation helpers where possible.
+4. Preserve the user’s existing dirty dashboard changes and avoid putting private raw content in the UI.
+5. Run focused tests, full test suite, and production build.
 
-Use restricted PostgreSQL read credential.
+**Acceptance:** calendar and Jacob views remain unchanged; MyKid is readable, empty-safe, and error-safe.
 
-- [ ] **Step 2: Add publisher query**
+## Task 6 — Deploy and verify end to end
 
-    SELECT json_build_object(
-      'events', COALESCE(json_agg(json_build_object(
-        'date', event_date, 'title', title, 'details', details
-      ) ORDER BY event_date, start_time NULLS LAST, title), '[]'::json),
-      'source_updated_at', max(last_seen_at)
-    ) AS data
-    FROM kindergarten_events e JOIN people p ON p.person_id = e.person_id
-    WHERE p.external_key = $1 AND e.event_date >= current_date
-      AND e.last_seen_at >= now() - interval '3 days';
+1. Apply the migration through the established Klara database deployment path.
+2. Import a synthetic snapshot, then one live manual run after login; inspect only record counts and schema, not family content.
+3. Publish to Home Assistant and inspect the sensor schema/redaction.
+4. Deploy WallDash only after explicit user authorization, preserving its existing Portainer environment variables.
+5. Remove the Browserless LAN debugger endpoint; document session-expiry reauthentication.
+6. Run `npm.cmd test`, `npm.cmd run build`, n8n workflow validation, and a final secret/profile check.
 
-- [ ] **Step 3: Format and publish**
-
-Formatter returns Norwegian empty or count summary, optional source_updated_at, and events. POST it with existing Home Assistant bearer credential to configured sensor endpoint. Test empty and one-event output, then activate.
-
-- [ ] **Step 4: Commit**
-
-    git add n8n/mykid-publish-kindergarten-events.json docs/n8n-mykid-kindergarten-events.md
-    git commit -m "feat: publish kindergarten events to Home Assistant"
-
-### Task 5: Add WallDash contract and slide
-
-**Files:**
-- Modify: src/shared/entities.ts
-- Modify: src/server/index.ts
-- Modify: src/server/homeAssistant.test.ts
-- Modify: src/client/dashboardModel.ts
-- Modify: src/client/weeklyPlan.test.ts
-- Modify: src/client/App.tsx
-- Modify: src/client/App.test.tsx
-
-**Interfaces:**
-- Consumes: sensor summary, source_updated_at, events.
-- Produces: kindergartenEvents dashboard state and third accessible carousel slide.
-
-- [ ] **Step 1: Write failing tests**
-
-Test parser with one event and unavailable state. Test carousel button labelled Vis barnehagehendelser, empty state, and unavailable state.
-
-    npm.cmd test -- src/client/weeklyPlan.test.ts src/server/homeAssistant.test.ts src/client/App.test.tsx
-
-Expected: failure because state key, parser, and slide do not exist.
-
-- [ ] **Step 2: Implement state contract and parser**
-
-Add kindergartenEvents to dashboardStateKeys and default entity IDs. Add snapshot type with summary, optional source_updated_at, and JacobPlanItem events. Resolve HA_KINDERGARTEN_EVENTS_ENTITY_ID in server index. Add defensive parser using current stateValue, planText, and planItems helpers.
-
-- [ ] **Step 3: Implement carousel extension**
-
-Add third slide with preview maximum three sorted events and detail dialog heading Barnehagehendelser. Close label is Lukk barnehagehendelser. Reuse existing event date/time and chronological render helpers instead of copying Jacob renderer.
-
-- [ ] **Step 4: Verify and commit**
-
-    npm.cmd test
-    npm.cmd run build
-
-Expected: pass, with calendar and Jacob behavior unchanged.
-
-    git add src/shared/entities.ts src/server/index.ts src/server/homeAssistant.test.ts src/client/dashboardModel.ts src/client/weeklyPlan.test.ts src/client/App.tsx src/client/App.test.tsx
-    git commit -m "feat: show kindergarten events in dashboard"
-
-### Task 6: Verify recovery and privacy
-
-**Files:**
-- Modify: docs/n8n-mykid-kindergarten-events.md
-
-- [ ] **Step 1: Test session expiry**
-
-Use non-authenticated test profile. Expected: import writes no data, publisher preserves recent confirmed events, and private recovery notification appears.
-
-- [ ] **Step 2: Test stale data and data minimization**
-
-Run duplicate source input, then a successful response without one item. Expected: no duplicates; publisher hides missing items after three-day grace. Inspect Browserless, n8n, database, and Home Assistant: only approved event fields remain.
-
-- [ ] **Step 3: Final verification and recovery documentation**
-
-    npm.cmd test
-    npm.cmd run build
-    git status --short
-
-Expected: pass and no profile/secret tracked. Document recovery:
-session_expired -> LAN-only debugger -> manual login -> remove debugger port -> manual import -> reactivate schedule.
-
-- [ ] **Step 4: Commit operations documentation**
-
-    git add docs/n8n-mykid-kindergarten-events.md
-    git commit -m "docs: document MyKid event recovery"
-
-## Plan self-review
-
-- Tasks one and two cover storage and private Browserless; tasks three and four are the two workflows; task five is Home Assistant and WallDash; task six covers recovery and privacy.
-- Image digest, IDs, child key, and credentials are deployment configuration never committed.
-- Contract consistency: Browserless normalized events -> kindergarten_events -> Home Assistant summary/source_updated_at/events -> dashboard snapshot.
-
+**Acceptance:** the production path is MyKid -> PostgreSQL -> Home Assistant -> WallDash, with no unneeded service, port, credential, or personal data retention.

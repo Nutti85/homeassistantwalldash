@@ -1,162 +1,108 @@
-# MyKid kindergarten events: design
+# MyKid kindergarten feed: design
 
-**Status:** Proposed for review  
+**Status:** In progress — dedicated browser service deployed; awaiting the user’s one-time browser login
 **Date:** 2026-08-26
 
 ## Goal
 
-Read upcoming kindergarten events from the user's authenticated MyKid parent portal, retain only the normalized event data in the private Klara PostgreSQL database, and publish those events to Home Assistant for WallDash.
-
-The solution must reuse the established Jacob pattern:
+Bring the second child’s useful MyKid parent information into the established household path:
 
 ```text
-source ingestion -> PostgreSQL -> Home Assistant sensor -> WallDash
+MyKid -> n8n ingestion -> Klara PostgreSQL -> n8n publisher -> Home Assistant -> WallDash
 ```
+
+The two workflows are deliberately the same shape as Jacob’s existing weekly-plan flow. MyKid authentication, browser state, and raw portal pages never reach Home Assistant or WallDash.
 
 ## Confirmed feasibility
 
-A throwaway local Playwright test established that:
+A disposable local test proved that a manually authenticated MyKid parent session reaches `/foreldre`, exposes the requested parent information, and remains authenticated after a headless browser restart when its profile is persisted. The test profile and script were destroyed. No MyKid credentials or real portal data were retained.
 
-- an interactive MyKid parent login reaches `/foreldre`;
-- the authenticated parent page has a `Kommende hendelser` section;
-- a fresh tab reuses the authenticated session; and
-- an actual headless browser restart can reuse the saved persistent browser profile and reach `/foreldre` without a new login.
+## In-scope information
 
-The test profile and test script were deleted immediately after the test. No MyKid credentials or child data were retained.
+The source snapshot includes these requested parent sections:
 
-## Scope
+- Oppslagstavla (noticeboard)
+- Ukeplaner (weekly plans)
+- Nyhetsbrev (newsletters)
+- Kommende hendelser (upcoming events)
+- Kommende bursdager (upcoming birthdays)
+- Dagen min (the child’s day)
 
-In scope:
+The import is strictly read-only. It never registers attendance, replies, downloads media, changes portal data, or bypasses login challenges.
 
-- upcoming events from the MyKid parent portal only;
-- one dedicated private Browserless service in the existing n8n Portainer stack;
-- a dedicated, minimum PostgreSQL event model;
-- two n8n workflows: ingest and publish;
-- a Home Assistant sensor and a small WallDash presentation extension.
+## Minimum-retention rules
 
-Out of scope:
+This concerns young children, including other families’ children. The database stores only compact, normalized information that can appear on a household dashboard:
 
-- messages, newsletters, media, attendance, absence, contacts, birthdays, health information, or child photos;
-- automatic interaction with MyKid (registration, attendance, replies, or changes);
-- a public browser-worker endpoint;
-- n8n Cloud, external data stores, or AI processing of MyKid content.
+| Category | Stored fields | Explicitly excluded |
+| --- | --- | --- |
+| Noticeboard, weekly plan, newsletter | title, published/date, bounded plain-text summary, source key | HTML, attachments, photos, recipient lists |
+| Upcoming event | title, date, optional time, bounded details | raw event page, attendance controls |
+| Birthday | date and an unnamed label/count only | other children’s names, ages, photos |
+| Today | date, bounded activity summary | arrival/departure times, absence, care/health or behavioural notes |
 
-## Architecture
+All extracted strings are length-limited and stripped to text. A parser seeing an unrecognised category must fail safely rather than saving raw content. No AI processing is needed.
 
-```text
-MyKid parent portal
-       |
-       | authenticated persistent browser profile
-       v
-mykid-browserless (inside existing n8n Portainer stack)
-       | private Docker network, token-authenticated /function request
-       v
-n8n workflow 1: import events
-       |
-       v
-Klara PostgreSQL
-       |
-       v
-n8n workflow 2: publish sensor
-       |
-       v
-Home Assistant sensor -> WallDash
-```
+## Reused architecture
 
-The Browserless service belongs in the n8n stack, not the dashboard stack. n8n is its only caller; WallDash receives no MyKid credential, browser session, or direct browser access.
-
-## Dedicated Browserless service
-
-The service uses a pinned `ghcr.io/browserless/chromium` image rather than a custom worker image. Browserless exposes an authenticated `/function` endpoint that executes the compact, version-controlled MyKid extraction function and returns JSON directly to n8n.
-
-- It owns one named Docker volume, `mykid-browser-profile`, mounted at Browserless `DATA_DIR`. No other service mounts this volume.
-- It has no production host port. It is reachable only as `http://mykid-browserless:3000` from the n8n stack's default Docker network.
-- Its Browserless token is a long random Portainer/n8n secret; n8n keeps it in an HTTP credential rather than workflow JSON.
-- Browserless health checks report service readiness only and do not contact MyKid.
-- The extraction function opens `https://mykid.no/foreldre`, verifies the authenticated parent navigation, and reads only the `Kommende hendelser` section.
-- It returns a bounded JSON response: `fetched_at` and event `title`, ISO `date`, optional `start_time`/`end_time`, and optional short `details`. It neither returns raw HTML nor includes unrelated page content.
-- The service is configured for one concurrent session and no queued sessions, preventing overlapping collection calls.
-
-If the function is redirected to login, cannot find the event section, or receives an unexpected page, it returns a machine-readable failure such as `session_expired` or `source_changed`. It does not fabricate an empty success response.
-
-### Initial login and session recovery
-
-The profile must be created inside Browserless's own persistent volume; a desktop profile is never copied into Portainer.
-
-For initial login or recovery, temporarily expose the dedicated Browserless debugger on the LAN only. The user enters the MyKid credentials directly in that view. After authentication is verified, remove the port and restart Browserless in private headless production mode. The temporary interactive view must never be exposed to the internet.
-
-MyKid session expiry is expected. The recovery path is manual re-login; the solution must not bypass multi-factor challenges, CAPTCHAs, rate limits, or access controls.
-
-## PostgreSQL model
-
-Do not force MyKid data into `weekly_plans`: that schema represents a school PDF, Gmail traceability, homework, and class schedules.
-
-Add a purpose-built `kindergarten_events` table linked to the correct `people.person_id`:
-
-| Column | Purpose |
+| Existing service | Reuse |
 | --- | --- |
-| `kindergarten_event_id` | UUID primary key |
-| `person_id` | Child ownership boundary |
-| `source_key` | Stable MyKid event identifier/URL when available, otherwise canonical content hash |
-| `title` | Event title |
-| `event_date` | Date-only event date |
-| `start_time`, `end_time` | Optional local times |
-| `details` | Optional minimal event description |
-| `last_seen_at` | Timestamp of the successful fetch that contained the event |
-| `created_at`, `updated_at` | Audit timestamps |
+| n8n | exactly two workflows: one import and one publisher |
+| Klara PostgreSQL | existing household/person ownership and PostgreSQL credentials |
+| Home Assistant | existing state API and bearer credential pattern |
+| WallDash | existing dashboard state contract and carousel/detail components |
+| Browserless | the same maintained self-hosted technology, but a dedicated MyKid instance/profile |
 
-Use `UNIQUE (person_id, source_key)` for idempotent upserts and an index suitable for `person_id`, `event_date`, and `last_seen_at` publication queries. The migration also seeds or verifies the selected child's stable `people.external_key`; the actual key and display label are configuration values, never hard-coded browser data.
+The current shared Browserless instance is not reused: it is shared and LAN-exposed. A dedicated `mykid-browserless` Portainer stack is attached only to `n8n_default`; this avoids changing n8n’s existing compose/env configuration and ensures that only n8n can call the production endpoint.
 
-No raw MyKid page, browser screenshot, session material, or login identity is inserted into PostgreSQL.
+## Browserless and authentication
 
-## n8n workflows
+The dedicated service uses a pinned Chromium image, `DATA_DIR=/data`, a named `mykid_browser_profile` volume, one concurrent session, no queue, and a unique access token stored only in Portainer/n8n credentials.
 
-### 1. Import kindergarten events
+For one-time authentication it has a temporary LAN-only debugger port. The user signs in directly on that remote browser; no password is supplied to n8n, source code, or this task. Once the session is verified after a service restart, the port is removed and the service remains private to n8n. Session expiry leads to the same manual re-login path; CAPTCHA, MFA, and other access controls are never automated or bypassed.
 
-Manual trigger plus a twice-daily schedule.
+## Data model
 
-1. Call Browserless's private `POST /function` endpoint with the version-controlled extraction function.
-2. Fail clearly on a Browserless error, without changing confirmed rows; send a private Home Assistant notification for `session_expired`.
-3. Validate types, date/time formats, maximum response size, and that every event has a title/date.
-4. Create a stable `source_key` only when the worker cannot provide one.
-5. Upsert normalized event rows with the restricted Klara PostgreSQL ingestion credential.
-6. Mark events not seen in a successful run as stale only after a short grace period. This avoids showing cancelled events while protecting existing data from transient scrape failures.
+Reuse `people` and `households`, but do not place arbitrary portal content in Jacob’s PDF/email-oriented `weekly_plans` schema.
 
-The workflow retains no successful raw response in n8n execution history.
+Add two MyKid-specific tables linked to `people.person_id`:
 
-### 2. Publish kindergarten events
+1. `kindergarten_events` for date/time events, with `UNIQUE (person_id, source_key)`.
+2. `kindergarten_updates` for noticeboard, weekly-plan, newsletter, birthday, and today items. It has a constrained `kind` value, source key, effective/published date, title, bounded text, `last_seen_at`, and audit timestamps; again `UNIQUE (person_id, kind, source_key)`.
 
-Manual trigger plus the established 15-minute schedule.
+The import uses a successful-snapshot grace period before marking source items stale. A scrape failure never erases confirmed data.
 
-1. Query only future, non-stale events for the selected child through the restricted PostgreSQL read credential.
-2. Produce a compact Norwegian `summary`, `source_updated_at`, and sorted `events` collection.
-3. Publish `POST /api/states/sensor.<child>_kindergarten_events` through the existing restricted Home Assistant credential.
+## Two n8n workflows
 
-The state value is a short source/health label; all event values are sensor attributes. A failed publish never alters PostgreSQL data.
+### 1. MyKid import
+
+Manual trigger plus two inactive initial schedules (08:00 and 18:00, Europe/Oslo):
+
+1. Call Browserless’s authenticated `/chromium/function` endpoint once.
+2. Navigate only to the required visible parent routes, validate authenticated navigation, and return a bounded JSON snapshot—not HTML.
+3. Validate category, size, dates, times, and text limits; return `session_expired` or `source_changed` on unexpected source state.
+4. Upsert events and updates using the existing restricted Klara ingestion credential.
+5. Keep successful execution data out of n8n history and retain failed diagnostic metadata briefly.
+
+### 2. MyKid publish
+
+Manual trigger plus the existing 15-minute publishing cadence:
+
+1. Read future events, current-week plan material, recent noticeboard/newsletter items, birthday count/date, and today’s activity from PostgreSQL.
+2. Build one compact Norwegian sensor payload, `sensor.<child>_mykid`, containing health/summary text, `source_updated_at`, `events`, and the category collections.
+3. Publish through the existing Home Assistant credential.
+
+One sensor keeps the Home Assistant and WallDash changes small, while PostgreSQL remains the complete normalized source of truth.
 
 ## WallDash contract
 
-The server adds the new Home Assistant sensor entity ID to its existing dashboard-state contract. The client adds a compact kindergarten-events view to the existing calendar/Jacob-plan carousel, reusing the existing typed event presentation and accessible detail pattern.
-
-The UI must render missing or unavailable data without exposing error details or MyKid-specific authentication state.
-
-## Security and operations
-
-- Preserve all existing n8n Portainer environment variables when adding the Browserless service.
-- Use the n8n stack's private Docker network; do not publish the Browserless production port.
-- Store the Browserless token and Home Assistant/PostgreSQL credentials as Portainer/n8n secrets, never in Compose, workflow JSON, source, logs, or chat.
-- Treat `mykid-browser-profile` as credential material: do not share, export, or cloud-back it up.
-- Pin the Browserless image version and retain the same data directory to reduce profile-encryption and cookie compatibility surprises.
-- Poll at most twice daily and record only the least data needed for events.
-- Apply a bounded execution-data retention policy in n8n, and run its security audit after deployment.
+WallDash receives only the MyKid sensor attributes. It adds one compact MyKid view beside the existing calendar and Jacob weekly-plan views, with normal, empty, stale, and unavailable states. The user can read current information but cannot act on it from the dashboard.
 
 ## Verification
 
-1. Unit-test event parsing against saved synthetic HTML fixtures; no real MyKid content is committed.
-2. In a temporary profile, verify interactive Browserless bootstrap login, clean service restart, and headless `/function` success.
-3. Verify that a Browserless login expiry returns `session_expired`, preserves prior PostgreSQL events, and produces the private notification.
-4. Run the import twice against the same synthetic response and verify no duplicate rows.
-5. Remove an event from a synthetic response and verify it is withheld only after the grace-period rule.
-6. Run the publisher and verify `sensor.<child>_kindergarten_events` has the expected compact attributes.
-7. Verify WallDash displays normal, empty, and unavailable states.
-8. Confirm Browserless has no published production port, n8n cannot mount the profile volume, and the dashboard stack has no Browserless access.
+1. Synthetic fixtures cover every category, malformed data, and extraction size limits; no real MyKid content is committed.
+2. User signs in through the dedicated Browserless debugger; restart Browserless and verify `/foreldre` still authenticates.
+3. Import the same fixture twice and prove there are no duplicates; remove an item and prove the grace rule prevents premature deletion.
+4. Verify session expiry preserves confirmed PostgreSQL rows and produces a private re-login notification.
+5. Verify the publisher’s sensor contract and WallDash’s normal, empty, stale, and unavailable rendering.
+6. Remove the LAN debugger port after bootstrap and confirm only n8n can call Browserless.
