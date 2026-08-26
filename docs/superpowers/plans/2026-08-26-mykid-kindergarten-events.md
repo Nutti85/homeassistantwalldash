@@ -9,7 +9,7 @@
 ## Constraints
 
 - Reuse n8n, Klara PostgreSQL, Home Assistant, and WallDash. Do not add cloud services or a custom worker.
-- Keep the existing shared Browserless stack unchanged. Use `mykid-browserless` and its profile volume only for MyKid.
+- Keep the existing shared Browserless stack unchanged. Use `mykid-browserless` and its profile volume only for MyKid; every browser call includes the stable `--user-data-dir=/data/mykid-profile` launch argument.
 - The temporary debugger port exists only for manual sign-in, then is removed.
 - Preserve the complete visible content of all six requested MyKid sections. Never save credentials, cookies, raw HTML, screenshots, attachments, or media.
 - Use synthetic test fixtures exclusively.
@@ -52,7 +52,7 @@
 - synthetic extraction fixtures/tests as appropriate
 
 1. Add manual trigger and initially inactive 08:00/18:00 Europe/Oslo schedules.
-2. Call the private `/chromium/function` endpoint once per run.
+2. Call the private `/chromium/function` endpoint once per run with the stable MyKid user-data-dir launch argument, so it reuses the authenticated profile rather than Browserless’s temporary session directory.
 3. Implement a small extractor that visits only the required MyKid parent routes and returns a complete structured snapshot of the requested visible content—not page HTML.
 4. Return explicit `session_expired`, `source_changed`, or `invalid_snapshot` statuses. Do not turn an error into an empty successful import.
 5. Validate record count, fields, Norwegian dates/times, and allowed kinds in n8n before database access. Reject malformed source data rather than silently censoring or truncating valid content.

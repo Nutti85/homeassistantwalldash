@@ -57,7 +57,7 @@ The current shared Browserless instance is not reused: it is shared and LAN-expo
 
 ## Browserless and authentication
 
-The dedicated service uses a pinned Chromium image, `DATA_DIR=/data`, a named `mykid_browser_profile` volume, one concurrent session, no queue, and a unique access token stored only in Portainer/n8n credentials.
+The dedicated service uses a pinned Chromium image, `DATA_DIR=/data`, a named `mykid_browser_profile` volume, one concurrent session, no queue, and a unique access token stored only in Portainer/n8n credentials. Browserless v2 creates temporary data directories below `DATA_DIR` by default, so every MyKid call must explicitly include `--user-data-dir=/data/mykid-profile`; this stable directory is the authenticated profile and is never mounted by n8n.
 
 For one-time authentication it has a temporary LAN-only debugger port. The user signs in directly on that remote browser; no password is supplied to n8n, source code, or this task. Once the session is verified after a service restart, the port is removed and the service remains private to n8n. Session expiry leads to the same manual re-login path; CAPTCHA, MFA, and other access controls are never automated or bypassed.
 
@@ -78,7 +78,7 @@ The import uses a successful-snapshot grace period before marking source items s
 
 Manual trigger plus two inactive initial schedules (08:00 and 18:00, Europe/Oslo):
 
-1. Call Browserless’s authenticated `/chromium/function` endpoint once.
+1. Call Browserless’s authenticated `/chromium/function` endpoint once, including the configured stable `--user-data-dir` launch argument.
 2. Navigate only to the required visible parent routes, validate authenticated navigation, and return the complete visible requested content as structured JSON—not HTML.
 3. Validate category, size, dates, times, and text limits; return `session_expired` or `source_changed` on unexpected source state.
 4. Upsert events and updates using the existing restricted Klara ingestion credential.
