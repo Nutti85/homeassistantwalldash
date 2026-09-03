@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
 import QRCode from 'qrcode';
-import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, JacobWeeklyPlanSnapshot, LightCommand, LightControlKey } from '../shared/entities';
+import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, JacobWeeklyPlanSnapshot, LightCommand, LightControlKey, MyKidKindergartenSnapshot } from '../shared/entities';
 import * as browserApi from './api';
 import type { AiReportMode, AiReportRefreshMode, AiReportResponse } from './api';
 import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, type SkyPosition } from './astronomy';
 import { classifyClimateValue, climateStatusColor, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import './roomCards.css';
 import {
-  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, jacobWeeklyPlan, stateValue, wasteDaysUntil,
+  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, jacobWeeklyPlan, mykidKindergarten, stateValue, wasteDaysUntil,
   securityPresentation, temperatureNumber, type ForecastPoint,
 } from './dashboardModel';
 
@@ -205,7 +205,7 @@ function EditableDashboard({ mode, editing, layout, updateLayout: commitLayout, 
   return <div ref={gridRef} className={`${mode}-layout editable-dashboard ${editing ? 'is-editing' : ''}`} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>{children.map(({ id, label, content }) => { const placement = draft[id] ?? layout[id]; const style = { gridArea: 'auto', gridColumn: `${placement.column} / span ${placement.columns}`, gridRow: `${placement.row} / span ${placement.rows}` } as CSSProperties; return <div className="layout-item" data-layout-id={id} key={id} style={style}>{content}{editing && <><button type="button" className="drag-handle" aria-label={`Flytt ${label}`} title={`Flytt ${label}`} onPointerDown={(event) => start(event, id, 'move')}><Icon>drag_indicator</Icon><span>{label}</span></button><button type="button" className="resize-handle" aria-label={`Endre størrelse på ${label}`} title={`Endre størrelse på ${label}`} onPointerDown={(event) => start(event, id, 'resize')}><Icon>open_in_full</Icon></button></>}</div>; })}</div>;
 }
 
-function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; detailed?: boolean }) {
+function WeatherChart({ points, detailed = false, labelByDay = false }: { points: ForecastPoint[]; detailed?: boolean; labelByDay?: boolean }) {
   const width = 900;
   // Keep the dashboard preview deliberately short so its axis labels can be
   // assessed at the card's compact size. The detailed weather view retains a
@@ -274,7 +274,7 @@ function WeatherChart({ points, detailed = false }: { points: ForecastPoint[]; d
       {probabilityPath && <path className="probability-line" d={probabilityPath}/>} 
       {windPath && <path className="wind-line" d={windPath} />}
       {gustPath && <path className="gust-line" d={gustPath}/>} 
-      {timeIndexes.map((index) => { const point = data[index]; const x = plot.left + (data.length < 2 ? 0 : index * plotWidth / (data.length - 1)); return <text className="time-label" key={point.datetime} x={x} y={height + 19}>{new Date(point.datetime).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</text>; })}
+      {timeIndexes.map((index) => { const point = data[index]; const x = plot.left + (data.length < 2 ? 0 : index * plotWidth / (data.length - 1)); const date = new Date(point.datetime); return <text className="time-label" key={point.datetime} x={x} y={height + 19}>{labelByDay ? date.toLocaleDateString('nb-NO', { weekday: 'short' }) : date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</text>; })}
     </svg> : <div className="chart-empty">— <span>Værgraf ikke tilgjengelig</span></div>}
     <table className="sr-only"><caption>Værdata</caption><thead><tr><th>Tid</th><th>Temperatur</th><th>Nedbør</th><th>Sannsynlighet</th><th>Vind</th><th>Vindkast</th><th>Skydekke</th></tr></thead><tbody>{data.map((point) => <tr key={point.datetime}><td>{point.datetime}</td><td>{fmt(point.temperature, ' °C')}</td><td>{fmt(point.precipitation, ' mm')}</td><td>{fmt(point.precipitationProbability, ' %')}</td><td>{fmt(point.windSpeed, ' m/s')}</td><td>{fmt(point.windGustSpeed, ' m/s')}</td><td>{fmt(point.cloudCoverage, ' %')}</td></tr>)}</tbody></table>
   </div>;
@@ -1024,17 +1024,76 @@ function JacobWeeklyPlanDetail({ plan, onClose }: { plan: JacobWeeklyPlanSnapsho
   </div>;
 }
 
+const mykidTitle = 'MyKid · Bjørnehiet';
+type MyKidItem = MyKidKindergartenSnapshot['events'][number];
+const localDayKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const mykidItemWhen = (item: MyKidItem): string => {
+  if (!item.date || Number.isNaN(Date.parse(item.date))) return item.time ?? '';
+  return weekdayNames[new Date(`${item.date.slice(0, 10)}T12:00:00`).getDay()];
+};
+const uniqueMyKidItems = (items: MyKidItem[]): MyKidItem[] => items.filter((item, index) => items.findIndex((candidate) => `${candidate.date ?? ''}-${candidate.title}` === `${item.date ?? ''}-${item.title}`) === index);
+const mykidSections = (plan: MyKidKindergartenSnapshot) => {
+  const today = localDayKey(new Date());
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = localDayKey(tomorrow);
+  const dated = (date: string) => plan.events.filter((item) => item.date?.slice(0, 10) === date);
+  const newsletters = [...plan.newsletters].sort((left, right) => Date.parse(right.published_at ?? right.date ?? '') - Date.parse(left.published_at ?? left.date ?? ''));
+  return { today: uniqueMyKidItems([...plan.today, ...dated(today)]), tomorrow: dated(tomorrowKey), upcoming: plan.events.filter((item) => item.date?.slice(0, 10) !== today && item.date?.slice(0, 10) !== tomorrowKey), newsletters };
+};
+
+function MyKidKindergartenCard({ plan, onOpen }: { plan?: MyKidKindergartenSnapshot; onOpen?: () => void }) {
+  if (!plan) return <div className="weekly-plan-empty">Ingen MyKid-informasjon er tilgjengelig ennå.</div>;
+  const sections = mykidSections(plan);
+  const compactItems = (items: MyKidKindergartenSnapshot['events']) => items.slice(0, 3).map((item, index) => <li key={`${item.date ?? 'item'}-${item.title}-${index}`}><b><ScrollingPlanText>{item.title}</ScrollingPlanText></b>{mykidItemWhen(item) && <span>{mykidItemWhen(item)}</span>}</li>);
+  return <div className="weekly-plan-content mykid-kindergarten-content">
+    {plan.summary && <p className="weekly-plan-summary">{plan.summary}</p>}
+    <div className="weekly-plan-sections">
+      <section aria-labelledby="mykid-today-title"><h4 id="mykid-today-title"><Icon>today</Icon>I dag</h4>{sections.today.length ? <ul>{compactItems(sections.today)}</ul> : <p>Ingen ting planlagt</p>}</section>
+      <section aria-labelledby="mykid-tomorrow-title"><h4 id="mykid-tomorrow-title"><Icon>event</Icon>I morgen</h4>{sections.tomorrow.length ? <ul>{compactItems(sections.tomorrow)}</ul> : <p>Ingen ting planlagt</p>}</section>
+      <section aria-labelledby="mykid-noticeboard-title"><h4 id="mykid-noticeboard-title"><Icon>campaign</Icon>Oppslagstavle</h4>{plan.noticeboard.length ? <ul>{compactItems(plan.noticeboard)}</ul> : <p>Ingen oppslag</p>}</section>
+      <section aria-labelledby="mykid-newsletter-title"><h4 id="mykid-newsletter-title"><Icon>article</Icon>Siste nyhetsbrev</h4>{sections.newsletters.length ? <><ul>{compactItems(sections.newsletters.slice(0, 1))}</ul>{onOpen && <button type="button" className="mykid-show-more" onClick={onOpen}>Vis mer nyhetsbrev</button>}</> : <p>Ingen nyhetsbrev</p>}</section>
+    </div>
+  </div>;
+}
+
+function MyKidKindergartenDetail({ plan, onClose }: { plan: MyKidKindergartenSnapshot; onClose: () => void }) {
+  const updatedAt = planUpdatedAt(plan.source_updated_at);
+  const sections = mykidSections(plan);
+  const [olderNewslettersVisible, setOlderNewslettersVisible] = useState(false);
+  const renderItems = (items: MyKidKindergartenSnapshot['events']) => items.length ? <ul className="weekly-plan-detail-list">{items.map((item, index) => <li key={`${item.date ?? 'item'}-${item.title}-${index}`}>
+    <div className="weekly-plan-detail-item-heading"><span>{item.date ?? item.time ?? ''}</span><strong>{item.title}</strong></div>
+    {item.details && <p>{item.details}</p>}
+  </li>)}</ul> : <p className="weekly-plan-detail-empty">Ingen oppføringer.</p>;
+  return <div className="weekly-plan-detail-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="weekly-plan-detail-modal mykid-detail-modal" role="dialog" aria-modal="true" aria-labelledby="mykid-detail-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }} tabIndex={-1}>
+      <header className="weekly-plan-detail-header"><div><h2 id="mykid-detail-title">MyKid · full oversikt</h2>{plan.summary && <p>{plan.summary}</p>}{updatedAt && <small>Oppdatert {updatedAt}</small>}</div><button type="button" aria-label="Lukk MyKid-oversikten" onClick={onClose}><Icon>close</Icon></button></header>
+      <div className="weekly-plan-detail-body mykid-detail-body">
+        <section className="weekly-plan-detail-section weekly-plan-detail-wide-section"><h3><Icon>today</Icon>I dag</h3>{renderItems(sections.today)}</section>
+        <section className="weekly-plan-detail-section"><h3><Icon>event</Icon>I morgen</h3>{renderItems(sections.tomorrow)}</section>
+        <section className="weekly-plan-detail-section"><h3><Icon>campaign</Icon>Oppslagstavle</h3>{renderItems(plan.noticeboard)}</section>
+        <section className="weekly-plan-detail-section weekly-plan-detail-wide-section"><h3><Icon>article</Icon>Siste nyhetsbrev</h3>{renderItems(sections.newsletters.slice(0, 1))}{sections.newsletters.length > 1 && <button type="button" className="mykid-show-more" onClick={() => setOlderNewslettersVisible((visible) => !visible)}>{olderNewslettersVisible ? 'Skjul eldre nyhetsbrev' : `Vis ${sections.newsletters.length - 1} eldre nyhetsbrev`}</button>}</section>
+        {olderNewslettersVisible && <section className="weekly-plan-detail-section weekly-plan-detail-wide-section"><h3><Icon>article</Icon>Flere nyhetsbrev</h3>{renderItems(sections.newsletters.slice(1))}</section>}
+        <section className="weekly-plan-detail-section"><h3><Icon>event_upcoming</Icon>Kommende hendelser</h3>{renderItems(sections.upcoming)}</section>
+        <section className="weekly-plan-detail-section"><h3><Icon>calendar_month</Icon>Ukeplaner</h3>{renderItems(plan.weeklyPlans)}</section>
+        <section className="weekly-plan-detail-section"><h3><Icon>cake</Icon>Bursdager</h3>{renderItems(plan.birthdays)}</section>
+      </div>
+    </section>
+  </div>;
+}
+
 function CalendarPlanCarousel({ states, events, days, wasteDays, wasteTypes }: { states: Record<string, HomeAssistantState>; events: ReturnType<typeof calendarEvents>; days: Array<{ label: string; key: string }>; wasteDays?: number; wasteTypes: string }) {
-  const [slide, setSlide] = useState<0 | 1>(0);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [slide, setSlide] = useState<0 | 1 | 2>(0);
+  const [jacobDetailOpen, setJacobDetailOpen] = useState(false);
+  const [mykidDetailOpen, setMykidDetailOpen] = useState(false);
   const pointerStart = useRef<{ x: number; y: number }>();
   const timer = useRef<number>();
   const plan = jacobWeeklyPlan(states.jacobWeeklyPlan);
+  const mykid = mykidKindergarten(states.mykidKindergarten);
 
   const resetTimer = useMemo(() => () => {
     if (timer.current !== undefined) window.clearInterval(timer.current);
     if (document.visibilityState === 'hidden') return;
-    timer.current = window.setInterval(() => setSlide((current) => current === 0 ? 1 : 0), 3_000);
+    timer.current = window.setInterval(() => setSlide((current) => (current === 2 ? 0 : current + 1) as 0 | 1 | 2), 3_000);
   }, []);
   useEffect(() => {
     resetTimer();
@@ -1042,7 +1101,7 @@ function CalendarPlanCarousel({ states, events, days, wasteDays, wasteTypes }: {
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => { if (timer.current !== undefined) window.clearInterval(timer.current); document.removeEventListener('visibilitychange', onVisibilityChange); };
   }, [resetTimer]);
-  const selectSlide = (next: 0 | 1) => { setSlide(next); resetTimer(); };
+  const selectSlide = (next: 0 | 1 | 2) => { setSlide(next); resetTimer(); };
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => { pointerStart.current = { x: event.clientX, y: event.clientY }; };
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const start = pointerStart.current;
@@ -1051,17 +1110,19 @@ function CalendarPlanCarousel({ states, events, days, wasteDays, wasteTypes }: {
     const deltaX = event.clientX - start.x;
     const deltaY = event.clientY - start.y;
     if (Math.abs(deltaX) < 44 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-    selectSlide(deltaX < 0 ? 1 : 0);
+    selectSlide((deltaX < 0 ? (slide === 2 ? 0 : slide + 1) : (slide === 0 ? 2 : slide - 1)) as 0 | 1 | 2);
   };
-  return <section className="card metric calendar-plan-carousel" aria-label="Kalender og Jacobs skoleplan" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { pointerStart.current = undefined; }}>
-    <header className="calendar-plan-header"><h3>{slide === 0 ? 'Kalender' : planTitle(plan)}</h3><div className="calendar-plan-dots" aria-label="Velg kort">
+  return <section className="card metric calendar-plan-carousel" aria-label="Kalender, Jacobs skoleplan og MyKid" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { pointerStart.current = undefined; }}>
+    <header className="calendar-plan-header"><h3>{slide === 0 ? 'Kalender' : slide === 1 ? planTitle(plan) : mykidTitle}</h3><div className="calendar-plan-dots" aria-label="Velg kort">
       <button type="button" aria-label="Vis kalender" aria-current={slide === 0 ? 'true' : undefined} className={slide === 0 ? 'active' : ''} onClick={() => selectSlide(0)}><span aria-hidden="true"/></button>
       <button type="button" aria-label="Vis Jacobs skoleplan" aria-current={slide === 1 ? 'true' : undefined} className={slide === 1 ? 'active' : ''} onClick={() => selectSlide(1)}><span aria-hidden="true"/></button>
+      <button type="button" aria-label="Vis MyKid" aria-current={slide === 2 ? 'true' : undefined} className={slide === 2 ? 'active' : ''} onClick={() => selectSlide(2)}><span aria-hidden="true"/></button>
     </div></header>
     <div className="calendar-plan-viewport">
-      {slide === 0 ? <div className="calendar-plan-slide calendar-slide">{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}<div className="calendar-waste-section"><h3>Søppeltømming</h3><div className="calendar-waste"><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong><span>-</span><span>{wasteTypes}</span></div></div></div> : <div className="calendar-plan-slide weekly-plan-slide">{plan ? <div className="weekly-plan-open" role="button" tabIndex={0} aria-label="Åpne Jacobs skoleplan i detalj" onClick={() => setDetailOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDetailOpen(true); } }}><JacobWeeklyPlanCard plan={plan}/></div> : <JacobWeeklyPlanCard plan={plan}/>}</div>}
+      {slide === 0 ? <div className="calendar-plan-slide calendar-slide">{days.map((day) => { const dayEvents = events.filter((event) => calendarEventOccursOnDay(event, day.key)); return <div className="calendar-day" key={day.key}><strong>{day.label}</strong>{dayEvents.length ? dayEvents.map((event) => <p key={`${event.start}-${event.title}`}><b>{event.title}</b><span>{event.allDay ? 'Hele dagen' : `${formatCalendarTime(event.start)}–${formatCalendarTime(event.end)}`}</span></p>) : <p>Ingen avtaler</p>}</div>; })}<div className="calendar-waste-section"><h3>Søppeltømming</h3><div className="calendar-waste"><Icon>delete</Icon><strong>{wasteDays === undefined ? '—' : `${wasteDays} ${wasteDays === 1 ? 'dag' : 'dager'}`}</strong><span>-</span><span>{wasteTypes}</span></div></div></div> : slide === 1 ? <div className="calendar-plan-slide weekly-plan-slide">{plan ? <div className="weekly-plan-open" role="button" tabIndex={0} aria-label="Åpne Jacobs skoleplan i detalj" onClick={() => setJacobDetailOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setJacobDetailOpen(true); } }}><JacobWeeklyPlanCard plan={plan}/></div> : <JacobWeeklyPlanCard plan={plan}/>}</div> : <div className="calendar-plan-slide weekly-plan-slide"><MyKidKindergartenCard plan={mykid} onOpen={() => setMykidDetailOpen(true)}/></div>}
     </div>
-    {detailOpen && plan && <JacobWeeklyPlanDetail plan={plan} onClose={() => setDetailOpen(false)}/>} 
+    {jacobDetailOpen && plan && <JacobWeeklyPlanDetail plan={plan} onClose={() => setJacobDetailOpen(false)}/>}
+    {mykidDetailOpen && mykid && <MyKidKindergartenDetail plan={mykid} onClose={() => setMykidDetailOpen(false)}/>}
   </section>;
 }
 
@@ -1240,10 +1301,11 @@ function WeatherRadar() {
 function DetailedWeather({ states, close }: { states: Record<string, HomeAssistantState>; close: () => void }) {
   const [tab, setTab] = useState<WeatherTab>('today');
   const hourly = forecastPoints(states.weatherHourly); const daily = forecastPoints(states.weatherDaily);
+  const upcomingDaily = daily.filter((point) => osloDayKey(new Date(point.datetime)) > osloDayKey(new Date())).slice(0, 7);
   const strikes = lightningStrikes(states.lightningStrikes); const distance = numberState(states.lightningDistance);
   const pollen = [['Bjørk', states.pollenBirch], ['Gress', states.pollenGrass], ['Burot', states.pollenMugwort]] as const;
   const windDirection = stateValue(states.netatmoWindDirection) ?? '—';
-  if (tab === 'week') return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected={false} onClick={() => setTab('today')}>I dag</button><button type="button" role="tab" aria-selected className="selected">Neste 7 dager</button></div></header><div className="weather-detail-grid week-view"><section className="card detail-chart"><h2>Neste 7 dager</h2><WeatherChart points={daily} detailed/></section><section className="card week-card"><h2>Utsikt</h2>{daily.slice(0, 7).map((point) => <div key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>/ {fmt(point.templow, '°')}</small></div>)}</section><section className="card hourly-card"><h2>Planlegg uken</h2><p className="weather-detail-copy">Varslet beholder fokus på temperatur, nedbør og vind. Pollenstatus og lokale målinger vises på fanen I dag.</p></section></div></main>;
+  if (tab === 'week') return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected={false} onClick={() => setTab('today')}>I dag</button><button type="button" role="tab" aria-selected className="selected">Neste 7 dager</button></div></header><div className="weather-detail-grid week-view"><section className="card detail-chart"><h2>Neste 7 dager</h2><WeatherChart points={upcomingDaily} detailed labelByDay/></section><section className="card week-card"><h2>Utsikt</h2>{upcomingDaily.map((point) => <div key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>/ {fmt(point.templow, '°')}</small></div>)}</section><section className="card hourly-card"><h2>Planlegg uken</h2><p className="weather-detail-copy">Varslet beholder fokus på temperatur, nedbør og vind. Pollenstatus og lokale målinger vises på fanen I dag.</p></section></div></main>;
   return <main className="dashboard weather-detail"><header className="weather-detail-header"><button type="button" onClick={close}><Icon>arrow_back</Icon>Tilbake</button><h1>Detaljert vær</h1><div role="tablist" aria-label="Værperiode"><button type="button" role="tab" aria-selected className="selected">I dag</button><button type="button" role="tab" aria-selected={false} onClick={() => setTab('week')}>Neste 7 dager</button></div></header><div className="weather-detail-grid today-view"><section className="card detail-chart"><div className="detail-chart-heading"><h2>I dag · vær og prognose</h2><div className="weather-live-readings"><LocalReading icon="air" label="Vind" value={`${fmt(numberState(states.netatmoWindSpeed), ' m/s')} ${windDirection}`} detail={`Kast ${fmt(numberState(states.netatmoWindGust), ' m/s')}`}/><LocalReading icon="water_drop" label="Regn" value={fmt(numberState(states.netatmoRain), ' mm')} detail={`${fmt(numberState(states.netatmoRainToday), ' mm')} i dag`}/><LocalReading icon="speed" label="Trykk" value={fmt(numberState(states.netatmoPressure), ' hPa')}/></div></div><WeatherChart points={hourly} detailed/></section><WeatherRadar/><LightningMap strikes={strikes} distance={distance}/><section className="card pollen-card"><header><div><h2>Pollen</h2><small>Østlandet med Oslo</small></div><Icon>eco</Icon></header>{pollen.map(([label, state]) => <div className="pollen-row" key={label}><span>{label}</span><b className={`pollen-level level-${pollenLevel(state).value ?? 0}`}>{pollenLevel(state).label}</b></div>)}<p>{stateValue(states.pollenForecast) ?? 'Pollenvarsel ikke tilgjengelig'}</p></section><SunMoonSky sunState={states.sun} moonPhase={states.moonPhase}/><section className="card aurora-card"><header><h2>Nordlys</h2></header><strong>{fmt(numberState(states.auroraChance), ' %')}</strong><span>{stateValue(states.auroraVisibility) === 'on' ? 'Mulig synlighet nå' : 'Lav synlighet akkurat nå'}</span><div className="aurora-lines" aria-hidden="true"/></section></div></main>;
 }
 

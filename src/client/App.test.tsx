@@ -81,6 +81,54 @@ describe('redesigned dashboard', () => {
     expect(screen.queryByRole('dialog', { name: 'Jacobs skoleplan – uke 35' })).not.toBeInTheDocument();
   });
 
+  it('shows MyKid as a third carousel slide and opens the full newsletter and noticeboard bodies', async () => {
+    const newsletterBody = 'Første avsnitt med praktisk informasjon. Andre avsnitt med resten av meldingen.';
+    const olderNewsletterBody = 'Dette er et eldre nyhetsbrev som blir tilgjengelig via Vis mer.';
+    const noticeboardBody = 'Ta med ekstra skift og klær som passer været.';
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString().slice(0, 10);
+    render(<App api={createApi({
+      calendar: state('calendar.family', 'on', { events: [] }),
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Plan' }),
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
+        summary: '15 hendelser, 2 oppslag og 6 nyhetsbrev.', health: 'ok', source_updated_at: '2026-09-03T20:41:00Z',
+        events: [{ title: 'Turdag', date: tomorrow }],
+        noticeboard: [{ title: 'Husk klær etter vær', details: noticeboardBody, date: '2026-09-03' }],
+        weekly_plans: [{ title: 'Ukeplan', details: 'Mandag: tur.' }],
+        newsletters: [{ title: 'Velkommen til ny uke', details: newsletterBody, date: today, published_at: `${today}T12:00:00Z` }, { title: 'Forrige uke', details: olderNewsletterBody, date: '2026-08-26', published_at: '2026-08-26T12:00:00Z' }],
+        today: [{ title: 'Dagens informasjon', details: 'Vi er ute før lunsj.', date: today }],
+      }),
+    })} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Vis MyKid' }));
+    expect(screen.getByText('MyKid · Bjørnehiet')).toBeInTheDocument();
+    expect(screen.getByText('15 hendelser, 2 oppslag og 6 nyhetsbrev.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'I dag' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'I morgen' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Siste nyhetsbrev' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vis mer nyhetsbrev' })).toBeInTheDocument();
+    expect(screen.getByText('Husk klær etter vær')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vis mer nyhetsbrev' }));
+    expect(screen.getByRole('dialog', { name: 'MyKid · full oversikt' })).toBeInTheDocument();
+    const detail = screen.getByRole('dialog', { name: 'MyKid · full oversikt' });
+    const todayHeading = within(detail).getByRole('heading', { name: 'I dag' });
+    const tomorrowHeading = within(detail).getByRole('heading', { name: 'I morgen' });
+    const noticeboardHeading = within(detail).getByRole('heading', { name: 'Oppslagstavle' });
+    const newsletterHeading = within(detail).getByRole('heading', { name: 'Siste nyhetsbrev' });
+    expect(todayHeading.compareDocumentPosition(tomorrowHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tomorrowHeading.compareDocumentPosition(noticeboardHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(noticeboardHeading.compareDocumentPosition(newsletterHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(detail).getByText(newsletterBody)).toBeInTheDocument();
+    expect(within(detail).getByText(noticeboardBody)).toBeInTheDocument();
+    expect(within(detail).queryByText(olderNewsletterBody)).not.toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole('button', { name: 'Vis 1 eldre nyhetsbrev' }));
+    expect(within(detail).getByText(olderNewsletterBody)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lukk MyKid-oversikten' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('pauses rotation while the document is hidden and resumes when visible', async () => {
     vi.useFakeTimers();
     render(<App api={createApi({ jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Plan' }) })} />);
@@ -434,6 +482,26 @@ describe('redesigned dashboard', () => {
     render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Åpne detaljert vær' }));
     expect(screen.getByRole('heading', { name: 'Detaljert vær' })).toBeInTheDocument();
     const week = screen.getByRole('tab', { name: 'Neste 7 dager' }); fireEvent.click(week); expect(week).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('starts the seven-day weather graph tomorrow and labels it by weekday', async () => {
+    const now = new Date();
+    const forecast = Array.from({ length: 8 }, (_, index) => ({
+      datetime: new Date(now.getTime() + index * 24 * 60 * 60 * 1000).toISOString(),
+      temperature: 12 + index,
+    }));
+    render(<App api={createApi({ weatherDaily: state('sensor.daily', 'sunny', { forecast }) })} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Åpne detaljert vær' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Neste 7 dager' }));
+
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowLabel = tomorrow.toLocaleDateString('nb-NO', { weekday: 'short' });
+    const graph = screen.getByRole('img', { name: /Samlet graf/ });
+    expect(Array.from(graph.querySelectorAll('.time-label')).map((label) => label.textContent)).toEqual(expect.arrayContaining([tomorrowLabel]));
+    expect(Array.from(graph.querySelectorAll('.time-label')).map((label) => label.textContent)).not.toContain('12:00');
+    const weekRows = document.querySelectorAll('.week-card > div');
+    expect(weekRows).toHaveLength(7);
+    expect(weekRows[0]).toHaveTextContent(tomorrowLabel);
   });
 
   it('reloads the detailed-weather radar every 15 minutes', async () => {

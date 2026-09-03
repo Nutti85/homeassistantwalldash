@@ -21,7 +21,7 @@ export const dashboardStateKeys = [
   'pollenForecast', 'pollenAlder', 'pollenBirch', 'pollenGrass', 'pollenHazel', 'pollenMugwort', 'pollenWillow',
   'energyToday', 'energyYesterday', 'energyHourlyConsumption', 'energyPower', 'energyPrice', 'roomLiving',
   'roomBedroom', 'roomBathroom', 'roomLivingHumidity', 'roomLivingCo2', 'roomBedroomHumidity', 'roomBedroomCo2', 'roomBathroomHumidity', 'roomBathroomCo2', 'roomFirstFloorBathroom', 'roomFirstFloorBathroomHumidity', 'roomClimateAdvice', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
-  'andreasTravelTime', 'hegeTravelTime', 'calendar', 'jacobWeeklyPlan', 'repairHealth',
+  'andreasTravelTime', 'hegeTravelTime', 'calendar', 'jacobWeeklyPlan', 'mykidKindergarten', 'repairHealth',
   'vacuum', 'vacuumBattery', 'vacuumStatus', 'vacuumProgress', 'vacuumArea', 'vacuumTime', 'vacuumRoom', 'vacuumCharging', 'vacuumCleaning', 'vacuumMopAttached', 'vacuumWaterBoxAttached', 'vacuumWaterShortage', 'vacuumMopDrying', 'vacuumCleaningMode', 'vacuumMopMode', 'vacuumMopIntensity', 'vacuumVolume', 'vacuumMap',
   ...lightControlKeys,
 ] as const;
@@ -33,6 +33,7 @@ export interface JacobPlanItem {
   date?: string;
   weekday?: string;
   time?: string;
+  published_at?: string;
   title: string;
   details?: string;
   subject?: string;
@@ -50,6 +51,26 @@ export interface JacobWeeklyPlanSnapshot {
   school_schedule: JacobPlanItem[];
   topics: string[];
   messages: string[];
+}
+
+export interface MyKidKindergartenItem {
+  date?: string;
+  time?: string;
+  title: string;
+  details?: string;
+  published_at?: string;
+}
+
+export interface MyKidKindergartenSnapshot {
+  summary: string;
+  health: string;
+  source_updated_at?: string;
+  events: MyKidKindergartenItem[];
+  noticeboard: MyKidKindergartenItem[];
+  weeklyPlans: MyKidKindergartenItem[];
+  newsletters: MyKidKindergartenItem[];
+  birthdays: MyKidKindergartenItem[];
+  today: MyKidKindergartenItem[];
 }
 
 export const homeStateKey = 'home';
@@ -131,6 +152,7 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   hegeTravelTime: '',
   calendar: 'calendar.outlook_andreas_felles',
   jacobWeeklyPlan: 'sensor.jacob_weekly_plan',
+  mykidKindergarten: 'sensor.mykid_kindergarten',
   repairHealth: '',
   vacuum: 'vacuum.roborock_s8',
   vacuumBattery: 'sensor.sucky_v2_battery',

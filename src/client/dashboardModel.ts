@@ -1,4 +1,4 @@
-import type { HomeAssistantState, JacobPlanItem, JacobWeeklyPlanSnapshot } from '../shared/entities';
+import type { HomeAssistantState, JacobPlanItem, JacobWeeklyPlanSnapshot, MyKidKindergartenItem, MyKidKindergartenSnapshot } from '../shared/entities';
 
 export const unavailableLabel = 'Ikke tilgjengelig';
 const unavailableStates = new Set(['unknown', 'unavailable', 'none', '']);
@@ -42,6 +42,30 @@ export const jacobWeeklyPlan = (state: HomeAssistantState | undefined): JacobWee
     school_schedule: planItems(attributes.school_schedule),
     topics: planStrings(attributes.topics),
     messages: planStrings(attributes.messages),
+  };
+};
+
+const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value).map((item) => ({
+  ...(item.date ? { date: item.date } : {}),
+  ...(item.time ? { time: item.time } : {}),
+  title: item.title,
+  ...(item.details ? { details: item.details } : {}),
+  ...(item.published_at ? { published_at: item.published_at } : {}),
+}));
+
+export const mykidKindergarten = (state: HomeAssistantState | undefined): MyKidKindergartenSnapshot | undefined => {
+  if (!stateValue(state)) return undefined;
+  const attributes = state?.attributes ?? {};
+  return {
+    summary: planText(attributes.summary) ?? '',
+    health: planText(attributes.health) ?? 'unavailable',
+    ...(planText(attributes.source_updated_at) ? { source_updated_at: planText(attributes.source_updated_at) } : {}),
+    events: mykidItems(attributes.events),
+    noticeboard: mykidItems(attributes.noticeboard),
+    weeklyPlans: mykidItems(attributes.weekly_plans),
+    newsletters: mykidItems(attributes.newsletters),
+    birthdays: mykidItems(attributes.birthdays),
+    today: mykidItems(attributes.today),
   };
 };
 
