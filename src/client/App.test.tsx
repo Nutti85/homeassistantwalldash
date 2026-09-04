@@ -399,9 +399,12 @@ describe('redesigned dashboard', () => {
 
   it('shows the n8n AI report from the bottom control', async () => {
     render(<App api={createApi()} />); fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
-    expect(await screen.findByText('Regn i kveld.')).toBeInTheDocument();
+    const reportDialog = await screen.findByRole('dialog');
+    expect(within(reportDialog).getByText(/Neste 24 timer/)).toBeInTheDocument();
     expect(screen.getByText('Klara AI', { selector: '.klara-ai-eyebrow' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Full briefing' })).toBeInTheDocument();
+    expect(within(reportDialog).getByText('Regn i kveld.')).not.toBeVisible();
+    fireEvent.click(within(reportDialog).getByText('Vis detaljer'));
     expect(screen.getByRole('heading', { name: 'Oppsummert' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Oppsummert' }).compareDocumentPosition(screen.getByRole('heading', { name: 'Vær' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Vær' })).toBeInTheDocument();
@@ -411,14 +414,13 @@ describe('redesigned dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Råd' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Personlig oversikt' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Full rapport' })).toHaveAttribute('aria-pressed', 'true');
-    const reportDialog = screen.getByRole('dialog');
     expect(within(reportDialog).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('button', { name: 'Formiddag' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('button', { name: 'Ettermiddag' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('button', { name: 'Kveld' })).toBeInTheDocument();
   });
 
-  it('structures the dedicated briefing summary into readable paragraphs', async () => {
+  it('keeps the dedicated briefing prose under the details disclosure', async () => {
     const api = createApi();
     vi.mocked(api.getAiReport!).mockResolvedValue({
       mode: 'evening',
@@ -428,12 +430,13 @@ describe('redesigned dashboard', () => {
     });
     render(<App api={api}/>);
 
-    const summary = await screen.findByText('Det blir en tørr og rolig natt i Sandefjord, med delvis skyet vær og 12–14 grader opplevd temperatur.');
-    const paragraphs = [...(summary.closest('.briefing-card-summary')?.querySelectorAll('p') ?? [])];
-    expect(paragraphs).toHaveLength(4);
-    expect(paragraphs[1]).toHaveTextContent('Mandag morgen blir også tørr og delvis skyet');
-    expect(paragraphs[2]).toHaveTextContent('Kalender: Fotballkamp Jacob');
-    expect(paragraphs[3]).toHaveTextContent('Temperatur 12,2–22,6 °C');
+    const compact = await screen.findByRole('region', { name: 'Kveldsbriefing' });
+    expect(within(compact).queryByText(/Det blir en tørr og rolig natt/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Kveldsbriefing' });
+    fireEvent.click(within(dialog).getByText('Vis detaljer'));
+    expect(within(dialog).getByText(/Det blir en tørr og rolig natt/)).toBeVisible();
+    expect(within(dialog).getByText(/Mandag morgen blir også tørr/)).toBeVisible();
   });
 
   it('uses tomorrow as the calendar heading when the report only contains tomorrow events', async () => {
@@ -446,7 +449,8 @@ describe('redesigned dashboard', () => {
     });
     render(<App api={api}/>);
     fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
-    expect(await screen.findByRole('heading', { name: 'Kveldsbriefing' })).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'Kveldsbriefing' });
+    fireEvent.click(within(dialog).getByText('Vis detaljer'));
     expect(screen.getAllByRole('heading', { name: 'I morgen' })).toHaveLength(1);
     expect(screen.getByText('Fotballkamp kl. 17:30.')).toBeInTheDocument();
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Kveld' })).toHaveAttribute('aria-pressed', 'true');
@@ -462,6 +466,7 @@ describe('redesigned dashboard', () => {
     render(<App api={api}/>);
     fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
     const reportDialog = await screen.findByRole('dialog');
+    fireEvent.click(within(reportDialog).getByText('Vis detaljer'));
     expect(within(reportDialog).getByRole('heading', { name: 'Senere' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('heading', { name: 'I dag' })).toBeInTheDocument();
     expect(within(reportDialog).getByRole('heading', { name: 'I morgen' })).toBeInTheDocument();
@@ -475,7 +480,9 @@ describe('redesigned dashboard', () => {
     render(<App api={api} />);
     await waitFor(() => expect(api.getAiReport).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
-    expect(await within(screen.getByRole('dialog')).findByText('Rapport fra bakgrunnssjekken')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByText('Vis detaljer'));
+    expect(await within(dialog).findByText('Rapport fra bakgrunnssjekken')).toBeInTheDocument();
   });
 
   it('opens detailed weather and switches its tabs', async () => {
@@ -684,6 +691,51 @@ describe('redesigned dashboard', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
     expect(await within(screen.getByRole('dialog')).findByRole('heading', { name: 'Full briefing' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Hjemkomstbriefing' })).not.toBeInTheDocument();
+  });
+
+  it('renders the structured Klara overview before the original report details', async () => {
+    const api = createApi({
+      outdoor: state('sensor.outdoor', '12.7'),
+      netatmoWindSpeed: state('sensor.wind', '0.0'),
+      netatmoWindGust: state('sensor.gust', '4.4'),
+      netatmoRain: state('sensor.rain', '0'),
+      netatmoRainToday: state('sensor.rain_today', '1.2'),
+      weatherHourly: state('sensor.hourly', 'partlycloudy', { forecast: [
+        { datetime: '2026-09-04T17:00:00Z', condition: 'partlycloudy', temperature: 12, wind_speed: 2, wind_gust_speed: 4, precipitation: 0, precipitation_probability: 10 },
+        { datetime: '2026-09-04T18:00:00Z', condition: 'rainy', temperature: 11, wind_speed: 3, wind_gust_speed: 5, precipitation: 0.2, precipitation_probability: 50 },
+        { datetime: '2026-09-04T19:00:00Z', condition: 'cloudy', temperature: 10, wind_speed: 2, wind_gust_speed: 4, precipitation: 0, precipitation_probability: 25 },
+        { datetime: '2026-09-04T21:00:00Z', temperature: 9 },
+      ] }),
+      calendar: state('calendar.family', 'on', { events: [{ summary: 'Middag', start: '2026-09-04T20:30:00+02:00', end: '2026-09-04T21:30:00+02:00' }] }),
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 36', { events: [{ date: '2026-09-04', title: 'Lekser' }] }),
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', { health: 'ok', today: [{ date: '2026-09-04', title: 'Utelek' }] }),
+    });
+    vi.mocked(api.getAiReport!).mockResolvedValue({ mode: 'evening', report: '## Kveld\nDette er original Klara-tekst.', publishedAt: '2026-09-04T20:00:00+02:00' });
+    render(<App api={api} />);
+
+    const compact = await screen.findByRole('region', { name: 'Kveldsbriefing' });
+    expect(within(compact).getAllByTestId('briefing-metric')).toHaveLength(5);
+    expect(within(compact).queryByTestId('briefing-practical-grid')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Kveldsbriefing' });
+    expect(within(dialog).getByText('Kveld · 19:00–23:00')).toBeInTheDocument();
+    expect(within(dialog).getAllByTestId('briefing-metric').map((node) => node.dataset.metric)).toEqual(['weather', 'temperature', 'wind', 'rain', 'clothing']);
+    expect(within(dialog).getAllByTestId('briefing-practical').map((node) => node.dataset.practical)).toEqual(['calendar', 'travel', 'school', 'kindergarten', 'home', 'warnings']);
+    expect(within(dialog).getByText('Dette er original Klara-tekst.')).not.toBeVisible();
+    fireEvent.click(within(dialog).getByText('Vis detaljer'));
+    expect(within(dialog).getByText('Dette er original Klara-tekst.')).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Kveld' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps all structured cards in order when every source is unavailable', async () => {
+    const api = createApi({ weatherHourly: state('sensor.hourly', 'unavailable'), calendar: state('calendar.family', 'unavailable'), jacobWeeklyPlan: state('sensor.school', 'unavailable'), mykidKindergarten: state('sensor.mykid', 'unavailable'), frontDoorLock: state('lock.front', 'unavailable'), securityMode: state('input_number.security', 'unavailable') });
+    vi.mocked(api.getAiReport!).mockResolvedValue({ mode: 'evening', report: 'Klara-tekst', publishedAt: '2026-09-04T20:00:00+02:00' });
+    render(<App api={api} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Kveldsbriefing' });
+    expect(within(dialog).getAllByTestId('briefing-metric')).toHaveLength(5);
+    expect(within(dialog).getAllByTestId('briefing-practical')).toHaveLength(6);
+    expect(within(dialog).getAllByText('Ikke tilgjengelig').length).toBeGreaterThan(0);
   });
 
   it('does not request an arrival briefing when the family returns home', async () => {
