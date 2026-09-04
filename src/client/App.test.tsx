@@ -675,6 +675,28 @@ describe('redesigned dashboard', () => {
     vi.useRealTimers();
   });
 
+  it('falls back to the full briefing title for a legacy arrival report', async () => {
+    const api = createApi();
+    vi.mocked(api.getAiReport!).mockResolvedValue({ report: 'Gammel hjemkomsttekst', mode: 'coming_home' as never, publishedAt: '2026-08-24T17:00:50.000Z' });
+    render(<App api={api} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Klara AI' }));
+    expect(await within(screen.getByRole('dialog')).findByRole('heading', { name: 'Full briefing' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Hjemkomstbriefing' })).not.toBeInTheDocument();
+  });
+
+  it('does not request an arrival briefing when the family returns home', async () => {
+    vi.useFakeTimers();
+    const api = createApi({ family: state('group.familie', 'away') });
+    vi.mocked(api.getStates)
+      .mockResolvedValueOnce({ states: { ...baseStates, family: state('group.familie', 'away') } })
+      .mockResolvedValueOnce({ states: { ...baseStates, family: state('group.familie', 'home') } });
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(api.requestAiReportRefresh).not.toHaveBeenCalledWith('coming_home');
+    vi.useRealTimers();
+  });
+
   it('checks for a scheduled report immediately when the display regains focus', async () => {
     vi.useFakeTimers();
     const api = createApi();

@@ -23,7 +23,7 @@ export interface DashboardClient {
 export interface AiReport {
   report: string;
   title?: string;
-  mode?: 'full' | 'morning' | 'midday' | 'afternoon' | 'evening' | 'coming_home';
+  mode?: 'full' | 'morning' | 'midday' | 'afternoon' | 'evening';
   publishedAt: string;
 }
 
@@ -43,7 +43,7 @@ const loadAiReport = (storePath: string): AiReport | undefined => {
     return {
       report: parsed.report,
       ...(typeof parsed.title === 'string' && parsed.title.trim() ? { title: parsed.title } : {}),
-      ...(parsed.mode === 'full' || parsed.mode === 'morning' || parsed.mode === 'midday' || parsed.mode === 'afternoon' || parsed.mode === 'evening' || parsed.mode === 'coming_home' ? { mode: parsed.mode } : {}),
+      ...(parsed.mode === 'full' || parsed.mode === 'morning' || parsed.mode === 'midday' || parsed.mode === 'afternoon' || parsed.mode === 'evening' ? { mode: parsed.mode } : {}),
       publishedAt: parsed.publishedAt,
     };
   } catch {
@@ -137,7 +137,7 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
     const body = request.body as unknown;
     if (!isRecord(body) || typeof body.report !== 'string' || !body.report.trim() || body.report.length > 200_000
       || (body.title !== undefined && typeof body.title !== 'string')
-      || (body.mode !== undefined && body.mode !== 'full' && body.mode !== 'morning' && body.mode !== 'midday' && body.mode !== 'afternoon' && body.mode !== 'evening' && body.mode !== 'coming_home')
+      || (body.mode !== undefined && body.mode !== 'full' && body.mode !== 'morning' && body.mode !== 'midday' && body.mode !== 'afternoon' && body.mode !== 'evening')
       || (body.publishedAt !== undefined && (typeof body.publishedAt !== 'string' || !Number.isFinite(Date.parse(body.publishedAt))))) { response.sendStatus(400); return; }
     aiReport = { report: body.report.trim(), ...(typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim().slice(0, 160) } : {}), ...(typeof body.mode === 'string' ? { mode: body.mode as AiReport['mode'] } : {}), publishedAt: typeof body.publishedAt === 'string' ? body.publishedAt : new Date().toISOString() };
     if (aiReportStorePath) saveAiReport(aiReportStorePath, aiReport);
@@ -172,7 +172,7 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
         aiReport = {
           report: candidate.report.trim(),
           ...(typeof candidate.title === 'string' && candidate.title.trim() ? { title: candidate.title.trim().slice(0, 160) } : {}),
-          ...(candidate.mode === 'full' || candidate.mode === 'morning' || candidate.mode === 'midday' || candidate.mode === 'afternoon' || candidate.mode === 'evening' || candidate.mode === 'coming_home' ? { mode: candidate.mode } : {}),
+          ...(candidate.mode === 'full' || candidate.mode === 'morning' || candidate.mode === 'midday' || candidate.mode === 'afternoon' || candidate.mode === 'evening' ? { mode: candidate.mode } : {}),
           publishedAt: candidate.publishedAt,
         };
         if (aiReportStorePath) saveAiReport(aiReportStorePath, aiReport);
@@ -189,7 +189,7 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
   app.post('/api/ai-report/refresh', async (request: Request, response: Response) => {
     if (!aiReportRefreshUrl) { response.status(503).json({ error: 'AI-oppdatering er ikke konfigurert.' }); return; }
     const body = isRecord(request.body) ? request.body : {};
-    const mode = body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'evening' || body.mode === 'coming_home'
+    const mode = body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'evening'
       ? body.mode
       : body.mode === undefined || body.mode === 'on_demand'
         ? 'on_demand'

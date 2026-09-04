@@ -172,6 +172,8 @@ describe('dashboard API', () => {
     expect(result.body).toEqual({ title: 'Morgenbrief', mode: 'morning', report: 'Første linje\nAndre linje', publishedAt });
     await request(app).post('/api/ai-report').set('X-AI-Report-Secret', 'n8n-secret')
       .send({ mode: 'bedtime', report: 'Ugyldig modus' }).expect(400);
+    await request(app).post('/api/ai-report').set('X-AI-Report-Secret', 'n8n-secret')
+      .send({ mode: 'coming_home', report: 'Ugyldig modus' }).expect(400);
   });
 
   it('restores the latest AI report after an app restart when persistence is configured', async () => {
@@ -235,16 +237,15 @@ describe('dashboard API', () => {
   it('forwards focused report intents and rejects unsupported modes', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
     const app = createApp(createClient(), '', '', 'http://n8n.test/webhook/refresh');
-    await request(app).post('/api/ai-report/refresh').send({ mode: 'coming_home' }).expect(202);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ mode: 'coming_home' });
+    await request(app).post('/api/ai-report/refresh').send({ mode: 'coming_home' }).expect(400);
     await request(app).post('/api/ai-report/refresh').send({ mode: 'morning' }).expect(202);
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({ mode: 'morning' });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ mode: 'morning' });
     await request(app).post('/api/ai-report/refresh').send({ mode: 'afternoon' }).expect(202);
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toMatchObject({ mode: 'afternoon' });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({ mode: 'afternoon' });
     await request(app).post('/api/ai-report/refresh').send({ mode: 'midday' }).expect(202);
-    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toMatchObject({ mode: 'midday' });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toMatchObject({ mode: 'midday' });
     await request(app).post('/api/ai-report/refresh').send({ mode: 'evening' }).expect(202);
-    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body))).toMatchObject({ mode: 'evening' });
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toMatchObject({ mode: 'evening' });
     await request(app).post('/api/ai-report/refresh').send({ mode: 'bedtime' }).expect(400);
     fetchMock.mockRestore();
   });

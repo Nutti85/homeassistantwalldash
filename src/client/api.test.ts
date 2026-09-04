@@ -16,15 +16,22 @@ describe('browser dashboard API', () => {
     await expect(getStates()).rejects.toThrow('Kunne ikke oppdatere smarthuset. Prøv igjen.');
   });
 
-  it('forwards the requested report mode and trigger time', async () => {
+  it('ignores the removed arrival report mode when reading a published report', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ report: 'Rapport', mode: 'coming_home', publishedAt: '2026-08-23T08:00:00.000Z' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getAiReport()).resolves.toEqual({ report: 'Rapport', publishedAt: '2026-08-23T08:00:00.000Z' });
+  });
+
+  it('forwards the requested scheduled report mode and trigger time', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await requestAiReportRefresh('coming_home');
+    await requestAiReportRefresh('evening');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/ai-report/refresh', expect.objectContaining({
       method: 'POST',
-      body: expect.stringContaining('"mode":"coming_home"'),
+      body: expect.stringContaining('"mode":"evening"'),
     }));
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).requestedAt).toEqual(expect.any(String));
   });

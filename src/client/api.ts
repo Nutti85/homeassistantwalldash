@@ -4,7 +4,7 @@ export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
 }
 
-export type AiReportMode = 'full' | 'morning' | 'midday' | 'afternoon' | 'evening' | 'coming_home';
+export type AiReportMode = 'full' | 'morning' | 'midday' | 'afternoon' | 'evening';
 
 export interface AiReportResponse {
   report: string;
@@ -79,7 +79,7 @@ export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
     return {
       report: body.report,
       ...(typeof body.title === 'string' ? { title: body.title } : {}),
-      ...(body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'evening' || body.mode === 'coming_home' ? { mode: body.mode } : {}),
+      ...(body.mode === 'full' || body.mode === 'morning' || body.mode === 'midday' || body.mode === 'afternoon' || body.mode === 'evening' ? { mode: body.mode } : {}),
       publishedAt: body.publishedAt,
     };
   } catch {

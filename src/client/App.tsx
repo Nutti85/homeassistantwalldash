@@ -611,7 +611,7 @@ const formatBriefingSummary = (text: string) => text.split('\n').map((line) => {
   return trimmed ? trimmed.replace(briefingParagraphBreak, '$1\n') : '';
 }).join('\n');
 
-const reportRequestLabels: Record<Exclude<AiReportRefreshMode, 'coming_home' | 'on_demand'>, { label: string; icon: string }> = {
+const reportRequestLabels: Record<Exclude<AiReportRefreshMode, 'on_demand'>, { label: string; icon: string }> = {
   full: { label: 'Full rapport', icon: 'description' },
   morning: { label: 'Morgen', icon: 'wb_twilight' },
   midday: { label: 'Formiddag', icon: 'light_mode' },
@@ -640,14 +640,16 @@ const reportSectionPresentation = (section: ReportSection) => {
   return { label: section.heading ?? 'Oversikt', icon: 'notes', kind: 'other' as const, text: section.text };
 };
 
+const scheduledReportModes = ['full', 'morning', 'midday', 'afternoon', 'evening'] as const;
+const isScheduledReportMode = (value: unknown): value is AiReportMode => scheduledReportModes.includes(value as AiReportMode);
+
 const inferredReportMode = (report?: AiReportResponse): AiReportMode => {
-  if (report?.mode) return report.mode;
+  if (isScheduledReportMode(report?.mode)) return report.mode;
   const descriptor = `${report?.title ?? ''}\n${report?.report.match(/^##\s+Rapportperiode\s*\n([^\n]+)/mi)?.[1] ?? ''}`.toLocaleLowerCase('nb-NO');
   if (descriptor.includes('formiddag')) return 'midday';
   if (descriptor.includes('ettermiddag')) return 'afternoon';
   if (descriptor.includes('kveld')) return 'evening';
   if (descriptor.includes('morgen')) return 'morning';
-  if (descriptor.includes('hjemkomst')) return 'coming_home';
   return 'full';
 };
 
@@ -657,7 +659,6 @@ const briefingTitles: Record<AiReportMode, string> = {
   midday: 'Formiddagsbriefing',
   afternoon: 'Ettermiddagsbriefing',
   evening: 'Kveldsbriefing',
-  coming_home: 'Hjemkomstbriefing',
 };
 
 function KlaraAiModal({ report, loading, error, refreshing, refreshingMode, refreshProgress, refresh, close, closeButtonRef }: { report?: AiReportResponse; loading: boolean; error?: string; refreshing: boolean; refreshingMode?: AiReportRefreshMode; refreshProgress?: string; refresh: (mode: AiReportRefreshMode) => void; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
@@ -1312,7 +1313,6 @@ function DetailedWeather({ states, close }: { states: Record<string, HomeAssista
 const stateRefreshIntervalMs = 30_000;
 const recentAiReportWindowMs = 12 * 60 * 60 * 1_000;
 const aiReportSeenStorageKey = 'walldash.klara-ai.last-seen-published-at';
-const familyStateStorageKey = 'walldash.family.last-state';
 
 export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
@@ -1453,7 +1453,6 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     void (api.getAiReport ?? browserApi.getAiReport)().then((next) => { if (next) setAiReport(next); }).catch(() => setAiReportError('Kunne ikke hente AI-rapporten. Prøv igjen.')).finally(() => setAiReportLoading(false));
   };
   const lastReportPublishedAt = useRef<string>();
-  const lastFamilyState = useRef<string>();
   useEffect(() => {
     let active = true;
     let requestInFlight = false;
@@ -1509,13 +1508,12 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
       afternoon: 'Lager en ettermiddagsrapport med aktiviteter …',
       evening: 'Lager en kveldsrapport med resten av dagen og morgendagen …',
       on_demand: 'Starter ny rapport …',
-      coming_home: 'Lager en fersk hjemkomstrapport …',
     };
     setAiReportRefreshProgress(progressByMode[mode]);
     setAiReportError(undefined);
     try {
       await (api.requestAiReportRefresh ?? browserApi.requestAiReportRefresh)(mode);
-      setAiReportRefreshProgress(mode === 'coming_home' ? 'Tilpasser rapporten til resten av dagen …' : 'Klara AI lager rapporten …');
+      setAiReportRefreshProgress('Klara AI lager rapporten …');
       for (let attempt = 0; attempt < 45; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 2_000));
         const next = await (api.getAiReport ?? browserApi.getAiReport)();
@@ -1526,16 +1524,6 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     } catch (refreshError) { setAiReportRefreshProgress(refreshError instanceof Error ? refreshError.message : 'Kunne ikke starte AI-oppdateringen. Prøv igjen.'); }
     finally { setAiReportRefreshing(false); setAiReportRefreshingMode(undefined); }
   };
-  useEffect(() => {
-    const nextState = states.family?.state;
-    const previousState = lastFamilyState.current ?? window.localStorage.getItem(familyStateStorageKey) ?? undefined;
-    if (previousState && previousState !== 'home' && nextState === 'home') void refreshAiReport('coming_home');
-    if (nextState) {
-      lastFamilyState.current = nextState;
-      window.localStorage.setItem(familyStateStorageKey, nextState);
-    }
-  }, [states.family?.state]);
-
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
   return <main className="dashboard"><Toast message={toast}/><DashboardHeader mode={mode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>{errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mode === 'regular' ? <RegularDashboard {...dashboardProps} aiReport={aiReport} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div><QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openVehicles={() => setVehiclesOpen(true)} openMode={() => setModeOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} vehiclesButtonRef={vehiclesButton} modeButtonRef={modeButton} klaraButtonRef={klaraButton}/>{lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {vehiclesOpen && <VehicleModal states={states} close={() => setVehiclesOpen(false)} closeButtonRef={vehiclesCloseButton}/>} {modeOpen && <DashboardModeModal mode={mode} setMode={setMode} close={() => setModeOpen(false)} closeButtonRef={modeCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} loading={aiReportLoading} error={aiReportError} refreshing={aiReportRefreshing} refreshingMode={aiReportRefreshingMode} refreshProgress={aiReportRefreshProgress} refresh={(reportMode) => { void refreshAiReport(reportMode); }} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }
