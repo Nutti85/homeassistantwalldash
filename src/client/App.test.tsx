@@ -715,6 +715,7 @@ describe('redesigned dashboard', () => {
 
     const compact = await screen.findByRole('region', { name: 'Kveldsbriefing' });
     expect(within(compact).getAllByTestId('briefing-metric')).toHaveLength(5);
+    expect(within(compact).getByLabelText('Vær og klær')).toHaveClass('is-compact-grid');
     expect(within(compact).queryByTestId('briefing-practical-grid')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
     const dialog = await screen.findByRole('dialog', { name: 'Kveldsbriefing' });

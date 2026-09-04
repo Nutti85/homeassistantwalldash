@@ -20,7 +20,7 @@ function BriefingPractical({ item }: { item: BriefingItem<'calendar' | 'travel' 
 export function BriefingOverview({ model, compact = false }: { model: BriefingViewModel; compact?: boolean }) {
   return <div className={`briefing-overview${compact ? ' is-compact' : ''}`}>
     <p className="briefing-period"><BriefingIcon name="schedule"/>{model.period.label}</p>
-    <div className="briefing-metrics" aria-label="Vær og klær">
+    <div className={`briefing-metrics${compact ? ' is-compact-grid' : ''}`} aria-label="Vær og klær">
       {model.metrics.map((item) => <BriefingMetric key={item.id} item={item}/>) }
     </div>
     {!compact && <div className="briefing-practical-grid" data-testid="briefing-practical-grid" aria-label="Praktisk oversikt">
