@@ -14,6 +14,8 @@ npm run start
 
 For lokal utvikling med automatisk klientoppdatering, bruk `npm.cmd run dev` og åpne `http://127.0.0.1:5173`. Dette er den eneste lokale dashboard-adressen; API-et på port 3000 brukes bare internt av Vite. Legg lokale Home Assistant-verdier i `.env` først.
 
+På enkelte Windows-maskiner med Node 24 feiler `tsx` før serverkoden starter fordi Node-kallet `os.userInfo()` returnerer `uv_os_get_passwd` med `ENOMEM`. Dev-launcheren forhåndslaster derfor `scripts/node-os-userinfo-fallback.cjs`, som bare håndterer akkurat denne kjente Windows-feilen og bruker `USERNAME`/`USERPROFILE` som lokal fallback. Ikke patch `node_modules` eller fjern `tsx`; produksjonscontaineren bruker sin egen Linux-runtime.
+
 ### Feilsøking lokalt: «Kunne ikke oppdatere smarthuset»
 
 Denne meldingen vises når dashboardet ikke får et gyldig svar fra `GET /api/states`. Den kan derfor dukke opp selv om Klara AI-rapporten er tilgjengelig. Unngå å åpne eller bruke `http://127.0.0.1:3000` i nettleseren; bruk alltid `http://127.0.0.1:5173`.
@@ -38,6 +40,16 @@ Begge skal normalt svare med status `200` (`/api/ai-report` kan også svare `204
 4. Oppdater siden på `http://127.0.0.1:5173`. Ikke start en ekstra kopi; den skal bruke API-port `3000` og Vite-port `5173`.
 
 Hvis kommandoen over fortsatt ikke gir `200`, er årsaken forbindelse eller autentisering mot Home Assistant, ikke nettleserens cache. Bekreft at Home Assistant er nåbar fra denne maskinen og opprett eventuelt et nytt token i Home Assistant før du starter utviklingsserveren på nytt.
+
+Hvis port 3000 eller 5173 er opptatt, identifiser prosessen med `netstat -ano` og kontroller kommando og arbeidsmappe før den stoppes. Ikke stopp en annen apps listener. For en isolert lokal kontroll når API-port 3000 er opptatt, kan du midlertidig bruke en annen API-port uten å endre filer:
+
+```powershell
+$env:PORT = '3001'
+$env:DASHBOARD_API_PROXY_TARGET = 'http://127.0.0.1:3001'
+npm.cmd run dev
+```
+
+Åpne fortsatt `http://127.0.0.1:5173`; stopp hele dev-prosesstreet med `Ctrl+C` etter kontrollen og bekreft at 3001/5173 ikke lenger har `LISTENING`-prosesser.
 
 ## Portainer
 

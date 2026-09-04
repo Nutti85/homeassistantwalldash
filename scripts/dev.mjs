@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const node = process.execPath;
 const environment = existsSync('.env') ? ['--env-file=.env'] : [];
+const nodeOsUserInfoFallback = path.resolve('scripts/node-os-userinfo-fallback.cjs');
 const logPath = path.resolve('.local-dev.log');
 const stableBackendMs = 30_000;
 const maximumConsecutiveBackendFailures = 5;
@@ -54,7 +55,7 @@ const stop = (code = 0) => {
 const startBackend = () => {
   if (stopping) return;
   const startedAt = Date.now();
-  backend = spawn(node, [...environment, '--import', 'tsx', 'src/server/index.ts'], {
+  backend = spawn(node, [...environment, '--require', nodeOsUserInfoFallback, '--import', 'tsx', 'src/server/index.ts'], {
     stdio: ['inherit', 'pipe', 'pipe'],
     env: { ...process.env, DASHBOARD_SERVE_STATIC: 'false', AI_REPORT_SOURCE_URL: process.env.AI_REPORT_SOURCE_URL || 'http://192.168.1.50:3100' },
   });
