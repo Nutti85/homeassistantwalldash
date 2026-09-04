@@ -1,5 +1,5 @@
 import type { AiReportMode } from './api';
-import { conditionIcon, conditionLabel, currentTemperatureNumber, forecastPoints, stateValue, type ForecastPoint } from './dashboardModel';
+import { calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, meteoAlarmEntries, mykidKindergarten, jacobWeeklyPlan, securityPresentation, forecastPoints, stateValue, type CalendarEvent, type ForecastPoint } from './dashboardModel';
 import type { HomeAssistantState } from '../shared/entities';
 
 const OSLO_TIME_ZONE = 'Europe/Oslo';
@@ -167,6 +167,102 @@ export const clothingAdvice = (points: ForecastPoint[]): ClothingAdvice => {
   return { icon: 'checkroom', primary, additions };
 };
 
+const osloDayKey = (date: Date): string => date.toLocaleDateString('en-CA', { timeZone: OSLO_TIME_ZONE });
+const periodDayKeys = (period: BriefingPeriod): Set<string> => {
+  const days = new Set<string>();
+  for (let timestamp = Date.parse(period.startAt); timestamp < Date.parse(period.endAt); timestamp += 24 * 60 * 60 * 1000) days.add(osloDayKey(new Date(timestamp)));
+  days.add(osloDayKey(new Date(Date.parse(period.endAt) - 1)));
+  return days;
+};
+const formatOsloDateTime = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('nb-NO', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: OSLO_TIME_ZONE }).format(date).replace(' kl. ', ' ');
+};
+const formatItemContext = (title: string, date?: string, time?: string): string => {
+  const when = time && !Number.isNaN(Date.parse(time)) ? formatOsloDateTime(time) : date && !Number.isNaN(Date.parse(date)) ? new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeZone: OSLO_TIME_ZONE }).format(new Date(`${date}T12:00:00Z`)) : time || date || '';
+  return when ? `${title} · ${when}` : title;
+};
+const eventOverlapsPeriod = (event: CalendarEvent, period: BriefingPeriod): boolean => {
+  const start = Date.parse(event.start);
+  const end = event.end ? Date.parse(event.end) : start + 1;
+  return start < Date.parse(period.endAt) && end > Date.parse(period.startAt);
+};
+const calendarBriefing = (state: HomeAssistantState | undefined, period: BriefingPeriod): BriefingItem<'calendar'> => {
+  if (!stateValue(state)) return unavailable('calendar', 'Kalender', 'calendar_month');
+  const events = calendarEvents(state);
+  const relevant = events.filter((event) => eventOverlapsPeriod(event, period)).slice(0, 2);
+  if (relevant.length) return { id: 'calendar', label: 'Kalender', icon: 'calendar_month', value: relevant[0].title, context: relevant.map((event) => event.allDay ? `${event.title} · Hele dagen` : formatItemContext(event.title, undefined, event.start)).join(' · '), tone: 'default' };
+  const next = events.find((event) => Date.parse(event.start) >= Date.parse(period.endAt));
+  return { id: 'calendar', label: 'Kalender', icon: 'calendar_month', value: 'Ingen avtaler i perioden', context: next ? `Neste: ${formatItemContext(next.title, undefined, next.start)}` : 'Ingen kommende avtaler', tone: 'muted' };
+};
+
+const travelValue = (state: HomeAssistantState | undefined): string => {
+  const value = numberState(state);
+  return value === undefined ? 'Ikke tilgjengelig' : `${roundWind(value)} min`;
+};
+const travelBriefing = (andreas: HomeAssistantState | undefined, hege: HomeAssistantState | undefined): BriefingItem<'travel'> => ({
+  id: 'travel', label: 'Reise', icon: 'route', value: `Andreas: ${travelValue(andreas)}`, context: `Hege: ${travelValue(hege)}`, tone: andreas || hege ? 'default' : 'muted',
+});
+
+const periodWeekdays = (period: BriefingPeriod): Set<string> => {
+  const values = new Set<string>();
+  for (let timestamp = Date.parse(period.startAt); timestamp < Date.parse(period.endAt); timestamp += 60 * 60 * 1000) values.add(new Intl.DateTimeFormat('nb-NO', { weekday: 'long', timeZone: OSLO_TIME_ZONE }).format(new Date(timestamp)).toLocaleLowerCase('nb-NO'));
+  return values;
+};
+const itemMatchesPeriod = (item: { date?: string; weekday?: string; time?: string }, period: BriefingPeriod): boolean => {
+  const days = periodDayKeys(period);
+  if (item.date && days.has(item.date.slice(0, 10))) return true;
+  if (item.time && !Number.isNaN(Date.parse(item.time))) {
+    const timestamp = Date.parse(item.time);
+    if (timestamp >= Date.parse(period.startAt) && timestamp < Date.parse(period.endAt)) return true;
+  }
+  if (item.weekday) {
+    const weekday = periodWeekdays(period);
+    return [...weekday].some((day) => item.weekday!.toLocaleLowerCase('nb-NO').includes(day));
+  }
+  return false;
+};
+const itemText = (item: { title: string; date?: string; weekday?: string; time?: string; details?: string }): string => {
+  const when = item.time || item.date || item.weekday;
+  return item.details ? `${item.title} · ${item.details}` : formatItemContext(item.title, when && !item.time ? when : undefined, item.time);
+};
+const schoolBriefing = (state: HomeAssistantState | undefined, period: BriefingPeriod): BriefingItem<'school'> => {
+  const plan = jacobWeeklyPlan(state);
+  if (!plan) return unavailable('school', 'Skole', 'school');
+  const items = [...plan.events, ...plan.reminders, ...plan.homework, ...plan.school_schedule].filter((item) => itemMatchesPeriod(item, period)).slice(0, 2);
+  return items.length ? { id: 'school', label: 'Skole', icon: 'school', value: items[0].title, context: items.map(itemText).join(' · '), tone: 'default' } : { id: 'school', label: 'Skole', icon: 'school', value: 'Ingen skole denne perioden', context: 'Ingen relevant planpunkt', tone: 'muted' };
+};
+const kindergartenBriefing = (state: HomeAssistantState | undefined, period: BriefingPeriod): BriefingItem<'kindergarten'> => {
+  const plan = mykidKindergarten(state);
+  if (!plan || plan.health === 'unavailable') return unavailable('kindergarten', 'Barnehage', 'child_care');
+  const items = [...plan.today, ...plan.events, ...plan.birthdays, ...plan.weeklyPlans, ...plan.noticeboard, ...plan.newsletters].filter((item) => itemMatchesPeriod(item, period)).slice(0, 2);
+  return items.length ? { id: 'kindergarten', label: 'Barnehage', icon: 'child_care', value: items[0].title, context: items.map(itemText).join(' · '), tone: 'default' } : { id: 'kindergarten', label: 'Barnehage', icon: 'child_care', value: 'Ingen plan denne perioden', context: 'Ingen relevant planpunkt', tone: 'muted' };
+};
+
+const homeBriefing = (lock: HomeAssistantState | undefined, security: HomeAssistantState | undefined): BriefingItem<'home'> => {
+  const lockValue = stateValue(lock);
+  const door = lockValue === 'locked' ? 'Låst' : lockValue === 'unlocked' ? 'Ulåst' : 'Ytterdør: Ikke tilgjengelig';
+  const securityValue = security ? securityPresentation(security).label : 'Ikke tilgjengelig';
+  return { id: 'home', label: 'Hjemmet', icon: lockValue === 'locked' ? 'lock' : 'home', value: door, context: securityValue, tone: lockValue === 'locked' || securityValue === 'Armert' ? 'positive' : 'default' };
+};
+
+const severityLabel: Record<'yellow' | 'orange' | 'red', string> = { yellow: 'Gult nivå', orange: 'Oransje nivå', red: 'Rødt nivå' };
+const warningsBriefing = (states: Record<string, HomeAssistantState>, period: BriefingPeriod, now: Date): BriefingItem<'warnings'> => {
+  const meteo = meteoAlarmEntries(states.meteoAlarm, period, now);
+  const lightning = numberState(states.lightningDistance);
+  const gusts = forecastPointsInPeriod(forecastPoints(states.weatherHourly), period).flatMap((point) => point.windGustSpeed === undefined ? [] : [point.windGustSpeed]);
+  const hasGustWarning = gusts.some((gust) => gust >= 10);
+  const aurora = stateValue(states.auroraVisibility)?.toLocaleLowerCase('nb-NO') === 'on';
+  const warnings = [
+    ...meteo.map((alert) => `${alert.name}${alert.severity ? ` · ${severityLabel[alert.severity]}` : ''}`),
+    ...(lightning !== undefined && lightning < 10 ? [`Lyn ${lightning.toLocaleString('nb-NO', { maximumFractionDigits: 1 })} km`] : []),
+    ...(hasGustWarning ? ['Vindkastvarsel'] : []),
+    ...(aurora ? ['Nordlys'] : []),
+  ];
+  return warnings.length ? { id: 'warnings', label: 'Varsler', icon: 'warning', value: warnings[0], context: warnings.slice(1, 2).join(' · ') || 'Se varsel for detaljer', tone: 'warning' } : { id: 'warnings', label: 'Varsler', icon: 'warning', value: 'Ingen varsler', context: 'Ingen aktive eller overlappende varsler', tone: 'positive' };
+};
+
 const unavailable = <Id extends string>(id: Id, label: string, icon: string): BriefingItem<Id> => ({
   id, label, icon, value: 'Ikke tilgjengelig', context: 'Kilde mangler eller er utilgjengelig', tone: 'muted',
 });
@@ -227,12 +323,12 @@ export const buildBriefingViewModel = (report: BriefingReport, states: Record<st
       { id: 'clothing', label: 'Klær', icon: clothes.icon, value: clothes.primary, context: clothes.additions.join(' · ') || 'For perioden', tone: clothes.primary === 'Ikke tilgjengelig' ? 'muted' : 'default' },
     ],
     practical: [
-      unavailable('calendar', 'Kalender', 'calendar_month'),
-      unavailable('travel', 'Reise', 'route'),
-      unavailable('school', 'Skole', 'school'),
-      unavailable('kindergarten', 'Barnehage', 'child_care'),
-      unavailable('home', 'Hjemmet', 'home'),
-      unavailable('warnings', 'Varsler', 'warning'),
+      calendarBriefing(states.calendar, period),
+      travelBriefing(states.andreasTravelTime, states.hegeTravelTime),
+      schoolBriefing(states.jacobWeeklyPlan, period),
+      kindergartenBriefing(states.mykidKindergarten, period),
+      homeBriefing(states.frontDoorLock, states.securityMode),
+      warningsBriefing(states, period, now),
     ],
   };
 };

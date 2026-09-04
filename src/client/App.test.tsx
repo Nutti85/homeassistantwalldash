@@ -588,13 +588,15 @@ describe('redesigned dashboard', () => {
   it('shows only active weather alerts and falls back to Ingen varsler', async () => {
     const quietForecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 8 }];
     const forecast = [{ datetime: new Date().toISOString(), temperature: 12, wind_gust_speed: 11.8 }];
+    const warningStart = new Date(Date.now() - 60_000).toISOString();
+    const warningEnd = new Date(Date.now() + 60 * 60_000).toISOString();
     const { rerender } = render(<App api={createApi({ weatherHourly: state('sensor.hourly', 'rainy', { forecast: quietForecast }) })} />);
     expect(await screen.findByText('Ingen varsler')).toBeInTheDocument();
     expect(screen.getByLabelText('Varsler')).not.toHaveClass('has-alerts');
 
     rerender(<App api={createApi({
       weatherHourly: state('sensor.hourly', 'rainy', { forecast }),
-      meteoAlarm: state('sensor.met_weather_alerts_county_39', 'Skogbrannfare, gult nivå, Deler av Agder og Østlandet sør for Mjøsa, 2026-08-05T08:30:00+00:00, 2026-08-25T21:59:00+00:00', { event: 'forestFire', eventAwarenessName: 'Skogbrannfare', riskMatrixColor: 'Yellow', area: 'Deler av Agder og Østlandet sør for Mjøsa', description: 'Lokal skogbrannfare.', instruction: 'Ikke bruk åpen ild.' }),
+      meteoAlarm: state('sensor.met_weather_alerts_county_39', `Skogbrannfare, gult nivå, Deler av Agder og Østlandet sør for Mjøsa, ${warningStart}, ${warningEnd}`, { event: 'forestFire', eventAwarenessName: 'Skogbrannfare', riskMatrixColor: 'Yellow', area: 'Deler av Agder og Østlandet sør for Mjøsa', description: 'Lokal skogbrannfare.', instruction: 'Ikke bruk åpen ild.' }),
       lightningDistance: state('sensor.blitzortung_lightning_distance', '8.2'),
       auroraVisibility: state('binary_sensor.aurora_visibility_visibility_alert', 'on'),
     })} />);

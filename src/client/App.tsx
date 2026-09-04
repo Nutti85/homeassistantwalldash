@@ -7,8 +7,8 @@ import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, typ
 import { classifyClimateValue, climateStatusColor, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import './roomCards.css';
 import {
-  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, jacobWeeklyPlan, mykidKindergarten, stateValue, wasteDaysUntil,
-  securityPresentation, temperatureNumber, type ForecastPoint,
+  calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, jacobWeeklyPlan, meteoAlarmEntries, meteoEventMeta, mykidKindergarten, securityPresentation, stateValue, wasteDaysUntil,
+  temperatureNumber, type AlertSeverity, type ForecastPoint, type MeteoAlert,
 } from './dashboardModel';
 
 export interface DashboardApi {
@@ -363,50 +363,14 @@ function ForecastStrip({ points }: { points: ForecastPoint[] }) {
   return <div className="forecast-strip">{days.length ? days.map((point) => <div className="forecast-day" key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>{fmt(point.templow, '°')}</small></div>) : <div className="unavailable">— Prognose ikke tilgjengelig</div>}</div>;
 }
 
-type AlertSeverity = 'yellow' | 'orange' | 'red';
 type WeatherAlert = { kind: 'meteoalarm' | 'lightning' | 'wind' | 'aurora'; icon: string; label: string; value?: string; severity?: AlertSeverity };
-type MeteoAlert = { events: string[]; severity?: AlertSeverity; name: string; description?: string; consequences?: string; instruction?: string; area?: string; response?: string; seriousness?: string; startsAt?: string; endsAt?: string; incidentName?: string; altitude?: string };
 const osloDayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Oslo' });
 
-const meteoEventMeta: Record<string, { label: string; icon: string }> = {
-  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'air' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy' }, snow: { label: 'Snø', icon: 'ac_unit' }, blowingSnow: { label: 'Snøfokk', icon: 'ac_unit' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'local_fire_department' }, icing: { label: 'Ising', icon: 'severe_cold' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
-};
 const severityLabel: Record<AlertSeverity, string> = { yellow: 'Gult nivå', orange: 'Oransje nivå', red: 'Rødt nivå' };
-
-function meteoAlarmSeverity(value?: string): AlertSeverity | undefined {
-  const normalized = value?.trim().toLocaleLowerCase('nb-NO');
-  if (normalized?.includes('red') || normalized?.includes('rødt')) return 'red';
-  if (normalized?.includes('orange') || normalized?.includes('oransje')) return 'orange';
-  if (normalized?.includes('yellow') || normalized?.includes('gult')) return 'yellow';
-  return undefined;
-}
-
-const attrText = (attributes: Record<string, unknown>, ...keys: string[]) => {
-  const value = keys.map((key) => attributes[key]).find((candidate) => typeof candidate === 'string' && candidate.trim());
-  return typeof value === 'string' ? value.trim() : undefined;
-};
-const attrEvents = (attributes: Record<string, unknown>) => {
-  const value = attributes.event;
-  return (Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;|]/) : []).map((event) => String(event).trim()).filter(Boolean);
-};
-const isoTimes = (value?: string) => value?.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})/g) ?? [];
 const formatWarningTime = (value?: string) => {
   if (!value || Number.isNaN(new Date(value).getTime())) return undefined;
   return new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Oslo' }).format(new Date(value));
 };
-function parseMeteoAlert(attributes: Record<string, unknown>, state?: string): MeteoAlert {
-  const [startsAt, endsAt] = [attrText(attributes, 'onset', 'effective', 'startsAt', 'start'), attrText(attributes, 'expires', 'ends', 'endsAt', 'end')];
-  const stateTimes = isoTimes(state);
-  const events = attrEvents(attributes);
-  const name = attrText(attributes, 'eventAwarenessName', 'headline', 'title') ?? (events.map((event) => meteoEventMeta[event]?.label ?? event).join(' · ') || state?.split(',')[0]?.trim() || 'Farevarsel');
-  return { events, severity: meteoAlarmSeverity(attrText(attributes, 'riskMatrixColor', 'awareness_level') ?? state), name, description: attrText(attributes, 'description'), consequences: attrText(attributes, 'consequences'), instruction: attrText(attributes, 'instruction'), area: attrText(attributes, 'area', 'areaDesc'), response: attrText(attributes, 'awarenessResponse'), seriousness: attrText(attributes, 'awarenessSeriousness'), startsAt: startsAt ?? stateTimes[0], endsAt: endsAt ?? stateTimes[1], incidentName: attrText(attributes, 'incidentName'), altitude: attrText(attributes, 'altitude', 'ceiling') };
-}
-function meteoAlarmEntries(state?: HomeAssistantState): MeteoAlert[] {
-  if (!state || !state.state || ['0', 'ingen farevarsel', 'unavailable', 'unknown'].includes(state.state.trim().toLocaleLowerCase('nb-NO'))) return [];
-  const alerts = state.attributes.alerts;
-  if (Array.isArray(alerts)) return alerts.filter((alert): alert is Record<string, unknown> => typeof alert === 'object' && alert !== null && !Array.isArray(alert)).map((alert) => parseMeteoAlert(alert));
-  return [parseMeteoAlert(state.attributes, state.state)];
-}
 
 function WeatherAlerts({ states, header = false }: { states: Record<string, HomeAssistantState>; header?: boolean }) {
   const [meteoAlarmOpen, setMeteoAlarmOpen] = useState(false);

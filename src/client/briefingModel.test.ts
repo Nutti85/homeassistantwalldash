@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import { briefingPeriod, buildBriefingViewModel, clothingAdvice, roundTemperature, roundWind } from './briefingModel';
+import { meteoAlarmEntries } from './dashboardModel';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 
@@ -119,5 +120,57 @@ describe('briefing rounding and clothing rules', () => {
       .toEqual(['Regntøy eller paraply', 'Vindtett lag']);
     expect(clothingAdvice([{ datetime: '2026-09-05T06:00:00Z', temperature: 12, precipitation: 0.2, precipitationProbability: 0, windGustSpeed: 9.9 }]).additions)
       .toEqual(['Regntøy eller paraply']);
+  });
+});
+
+describe('briefing practical cards', () => {
+  const report = { mode: 'evening' as const, publishedAt: '2026-09-04T20:00:00+02:00' };
+  const now = new Date('2026-09-04T20:05:00+02:00');
+  const card = (model: ReturnType<typeof buildBriefingViewModel>, id: string) => model.practical.find((item) => item.id === id)!;
+
+  it('keeps an empty calendar card and points to the next event', () => {
+    const model = buildBriefingViewModel(report, {
+      calendar: state('calendar.family', 'on', { events: [{ summary: 'Legetime', start: '2026-09-05T09:00:00+02:00', end: '2026-09-05T10:00:00+02:00' }] }),
+    }, now);
+    expect(card(model, 'calendar')).toMatchObject({ value: 'Ingen avtaler i perioden', context: expect.stringContaining('Legetime') });
+  });
+
+  it('names unavailable travel sources instead of dropping the card', () => {
+    const model = buildBriefingViewModel(report, {
+      andreasTravelTime: state('sensor.andreas_travel', 'unavailable'),
+    }, now);
+    expect(card(model, 'travel')).toMatchObject({ value: expect.stringContaining('Andreas: Ikke tilgjengelig'), context: expect.stringContaining('Hege: Ikke tilgjengelig') });
+  });
+
+  it('distinguishes an empty school or kindergarten period from an unavailable source', () => {
+    const model = buildBriefingViewModel(report, {
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 36', { events: [{ date: '2026-09-05', title: 'Matteprøve' }], reminders: [] }),
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', { health: 'ok', today: [{ date: '2026-09-05', title: 'Turdag' }] }),
+    }, now);
+    expect(card(model, 'school').value).toBe('Ingen skole denne perioden');
+    expect(card(model, 'kindergarten').value).toBe('Ingen plan denne perioden');
+
+    const unavailableModel = buildBriefingViewModel(report, {
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'unavailable'),
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'unavailable'),
+    }, now);
+    expect(card(unavailableModel, 'school').value).toBe('Ikke tilgjengelig');
+    expect(card(unavailableModel, 'kindergarten').value).toBe('Ikke tilgjengelig');
+  });
+
+  it('shows the lock before the raw security mode label', () => {
+    const model = buildBriefingViewModel(report, {
+      frontDoorLock: state('lock.front', 'locked'),
+      securityMode: state('input_number.security', '2'),
+    }, now);
+    expect(card(model, 'home')).toMatchObject({ value: 'Låst', context: 'Notifikasjoner' });
+  });
+
+  it('filters expired meteo alerts and keeps an overlapping future alert', () => {
+    const expired = state('sensor.alerts', 'Skogbrannfare, gult nivå, 2026-09-04T16:00:00+00:00, 2026-09-04T17:00:00+00:00', { event: 'forestFire', eventAwarenessName: 'Gammelt varsel', riskMatrixColor: 'Yellow' });
+    expect(meteoAlarmEntries(expired, undefined, now)).toEqual([]);
+
+    const future = state('sensor.alerts', 'on', { alerts: [{ event: 'wind', eventAwarenessName: 'Vindvarsel', riskMatrixColor: 'Orange', onset: '2026-09-04T20:30:00+02:00', expires: '2026-09-04T22:30:00+02:00' }] });
+    expect(meteoAlarmEntries(future, { startAt: '2026-09-04T19:00:00+02:00', endAt: '2026-09-04T23:00:00+02:00' }, now)[0]).toMatchObject({ name: 'Vindvarsel', severity: 'orange' });
   });
 });

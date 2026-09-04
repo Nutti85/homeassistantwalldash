@@ -188,6 +188,59 @@ export const forecastPoints = (state: HomeAssistantState | undefined): ForecastP
   });
 };
 
+export type AlertSeverity = 'yellow' | 'orange' | 'red';
+export type MeteoAlert = { events: string[]; severity?: AlertSeverity; name: string; description?: string; consequences?: string; instruction?: string; area?: string; response?: string; seriousness?: string; startsAt?: string; endsAt?: string; incidentName?: string; altitude?: string };
+
+export const meteoEventMeta: Record<string, { label: string; icon: string }> = {
+  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'air' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy' }, snow: { label: 'Snø', icon: 'ac_unit' }, blowingSnow: { label: 'Snøfokk', icon: 'ac_unit' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'local_fire_department' }, icing: { label: 'Ising', icon: 'severe_cold' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
+};
+
+export const meteoAlarmSeverity = (value?: string): AlertSeverity | undefined => {
+  const normalized = value?.trim().toLocaleLowerCase('nb-NO');
+  if (normalized?.includes('red') || normalized?.includes('rødt')) return 'red';
+  if (normalized?.includes('orange') || normalized?.includes('oransje')) return 'orange';
+  if (normalized?.includes('yellow') || normalized?.includes('gult')) return 'yellow';
+  return undefined;
+};
+
+export const attrText = (attributes: Record<string, unknown>, ...keys: string[]) => {
+  const value = keys.map((key) => attributes[key]).find((candidate) => typeof candidate === 'string' && candidate.trim());
+  return typeof value === 'string' ? value.trim() : undefined;
+};
+
+export const attrEvents = (attributes: Record<string, unknown>) => {
+  const value = attributes.event;
+  return (Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;|]/) : []).map((event) => String(event).trim()).filter(Boolean);
+};
+
+export const isoTimes = (value?: string) => value?.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})/g) ?? [];
+
+export const parseMeteoAlert = (attributes: Record<string, unknown>, state?: string): MeteoAlert => {
+  const [startsAt, endsAt] = [attrText(attributes, 'onset', 'effective', 'startsAt', 'start'), attrText(attributes, 'expires', 'ends', 'endsAt', 'end')];
+  const stateTimes = isoTimes(state);
+  const events = attrEvents(attributes);
+  const name = attrText(attributes, 'eventAwarenessName', 'headline', 'title') ?? (events.map((event) => meteoEventMeta[event]?.label ?? event).join(' · ') || state?.split(',')[0]?.trim() || 'Farevarsel');
+  return { events, severity: meteoAlarmSeverity(attrText(attributes, 'riskMatrixColor', 'awareness_level') ?? state), name, description: attrText(attributes, 'description'), consequences: attrText(attributes, 'consequences'), instruction: attrText(attributes, 'instruction'), area: attrText(attributes, 'area', 'areaDesc'), response: attrText(attributes, 'awarenessResponse'), seriousness: attrText(attributes, 'awarenessSeriousness'), startsAt: startsAt ?? stateTimes[0], endsAt: endsAt ?? stateTimes[1], incidentName: attrText(attributes, 'incidentName'), altitude: attrText(attributes, 'altitude', 'ceiling') };
+};
+
+export const meteoAlarmEntries = (
+  state?: HomeAssistantState,
+  period?: { startAt: string; endAt: string },
+  now = new Date(),
+): MeteoAlert[] => {
+  if (!state || !state.state || ['0', 'ingen farevarsel', 'unavailable', 'unknown'].includes(state.state.trim().toLocaleLowerCase('nb-NO'))) return [];
+  const alerts = state.attributes.alerts;
+  const parsedAlerts = Array.isArray(alerts)
+    ? alerts.filter((alert): alert is Record<string, unknown> => typeof alert === 'object' && alert !== null && !Array.isArray(alert)).map((alert) => parseMeteoAlert(alert))
+    : [parseMeteoAlert(state.attributes, state.state)];
+  return parsedAlerts.filter((alert) => {
+    if (!period) return !alert.endsAt || !Number.isFinite(Date.parse(alert.endsAt)) || Date.parse(alert.endsAt) >= now.getTime();
+    const starts = alert.startsAt ? Date.parse(alert.startsAt) : Number.NEGATIVE_INFINITY;
+    const ends = alert.endsAt ? Date.parse(alert.endsAt) : Number.POSITIVE_INFINITY;
+    return starts < Date.parse(period.endAt) && ends >= Date.parse(period.startAt);
+  });
+};
+
 export const securityPresentation = (state: HomeAssistantState | undefined) => {
   const value = Number(stateValue(state));
   if (value === 1) return { label: 'Armert', icon: 'shield_lock', tone: 'safe' } as const;
