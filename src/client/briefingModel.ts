@@ -233,10 +233,12 @@ const schoolBriefing = (state: HomeAssistantState | undefined, period: BriefingP
   const items = [...plan.events, ...plan.reminders, ...plan.homework, ...plan.school_schedule].filter((item) => itemMatchesPeriod(item, period)).slice(0, 2);
   return items.length ? { id: 'school', label: 'Skole', icon: 'school', value: items[0].title, context: items.map(itemText).join(' · '), tone: 'default' } : { id: 'school', label: 'Skole', icon: 'school', value: 'Ingen skole denne perioden', context: 'Ingen relevant planpunkt', tone: 'muted' };
 };
-const kindergartenBriefing = (state: HomeAssistantState | undefined, period: BriefingPeriod): BriefingItem<'kindergarten'> => {
+const kindergartenBriefing = (state: HomeAssistantState | undefined, period: BriefingPeriod, now: Date): BriefingItem<'kindergarten'> => {
   const plan = mykidKindergarten(state);
   if (!plan || plan.health === 'unavailable') return unavailable('kindergarten', 'Barnehage', 'child_care');
-  const items = [...plan.today, ...plan.events, ...plan.birthdays, ...plan.weeklyPlans, ...plan.noticeboard, ...plan.newsletters].filter((item) => itemMatchesPeriod(item, period)).slice(0, 2);
+  const currentDay = osloDayKey(now);
+  const todayItems = plan.today.filter((item) => itemMatchesPeriod(item, period) || (!item.date && !item.time && periodDayKeys(period).has(currentDay)));
+  const items = [...todayItems, ...plan.events, ...plan.birthdays, ...plan.weeklyPlans, ...plan.noticeboard, ...plan.newsletters].filter((item, index, all) => index < todayItems.length || itemMatchesPeriod(item, period)).slice(0, 2);
   return items.length ? { id: 'kindergarten', label: 'Barnehage', icon: 'child_care', value: items[0].title, context: items.map(itemText).join(' · '), tone: 'default' } : { id: 'kindergarten', label: 'Barnehage', icon: 'child_care', value: 'Ingen plan denne perioden', context: 'Ingen relevant planpunkt', tone: 'muted' };
 };
 
@@ -326,7 +328,7 @@ export const buildBriefingViewModel = (report: BriefingReport, states: Record<st
       calendarBriefing(states.calendar, period),
       travelBriefing(states.andreasTravelTime, states.hegeTravelTime),
       schoolBriefing(states.jacobWeeklyPlan, period),
-      kindergartenBriefing(states.mykidKindergarten, period),
+      kindergartenBriefing(states.mykidKindergarten, period, now),
       homeBriefing(states.frontDoorLock, states.securityMode),
       warningsBriefing(states, period, now),
     ],

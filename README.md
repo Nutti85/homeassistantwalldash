@@ -81,6 +81,8 @@ Webhooken mottar `{ "mode": "full", "requestedAt": "..." }`, `{ "mode": "morning
 
 Rapportperiodene i n8n og outputen er: `Natt` 23:00–06:00, `Morgen` 06:00–09:00, `Formiddag` 09:00–15:00, `Ettermiddag` 16:00–19:00 og `Kveld` 19:00–23:00. Mellomrommet 15:00–16:00 har bevisst ingen navngitt periode. Morgenrapporten prioriterer morgen og reise til jobb, skole og barnehage 07:30–09:30 på arbeidsdager. Ettermiddagsrapporten prioriterer 16:00–19:00, aktiviteter og kalenderhendelser. Kveldsrapporten prioriterer resten av kvelden, natten og morgendagens første avtaler. Full rapport er den detaljerte oversikten. Planlagte kjøringer (06:30 og 22:00) beholdes uendret; den interne `bedtime`-modusen for 22:00 publiseres som den kanoniske modusen `evening`, slik at dashboardet viser **Kveldsbriefing**.
 
+Klara AI viser først en strukturert oversikt basert på det siste Home Assistant-øyeblikksbildet og værvarselet for den valgte perioden. Oversikten har alltid fast rekkefølge for værmålingene (vær, temperatur, vind, nedbør og bekledning) og de praktiske områdene (kalender, reise, skole, barnehage, hjemmet og varsler). Temperatur avrundes til nærmeste 0,5 °C, vind til hele m/s og nedbør til én desimal. Manglende kildedata vises eksplisitt som `Ikke tilgjengelig`; den opprinnelige n8n-Markdownen ligger fortsatt under **Vis detaljer**.
+
 ## Temperatur
 
 Temperaturknappene blir aktive først når climate-entiteten rapporterer et faktisk settpunkt i attributtet `temperature`. Den nåværende enheten rapporterer bare `current_temperature`, som vises som målt romtemperatur. Dette hindrer dashboardet i å anta at en målt temperatur er et ønsket settpunkt.

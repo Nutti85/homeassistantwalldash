@@ -93,6 +93,16 @@ describe('briefing weather metrics', () => {
     expect(model.metrics[2].value).not.toContain('20');
     expect(model.metrics[3].value).toBe('0,1 mm');
   });
+
+  it('rounds forecast rain amounts to the nearest tenth of a millimeter', () => {
+    const model = buildBriefingViewModel({ mode: 'morning', publishedAt: '2026-09-04T22:00:00+02:00' }, {
+      weatherHourly: state('sensor.hourly', 'rainy', { forecast: [
+        { datetime: '2026-09-05T04:00:00Z', temperature: 10, precipitation: 0.26, precipitation_probability: 45 },
+      ] }),
+    }, new Date('2026-09-04T22:05:00+02:00'));
+
+    expect(model.metrics[3].value).toBe('0,3 mm');
+  });
 });
 
 describe('briefing rounding and clothing rules', () => {
@@ -156,6 +166,14 @@ describe('briefing practical cards', () => {
     }, now);
     expect(card(unavailableModel, 'school').value).toBe('Ikke tilgjengelig');
     expect(card(unavailableModel, 'kindergarten').value).toBe('Ikke tilgjengelig');
+  });
+
+  it('uses undated MyKid today items for a period containing the current Oslo day', () => {
+    const model = buildBriefingViewModel(report, {
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', { health: 'ok', today: [{ title: 'Husk matpakke' }] }),
+    }, now);
+
+    expect(card(model, 'kindergarten')).toMatchObject({ value: 'Husk matpakke' });
   });
 
   it('shows the lock before the raw security mode label', () => {
