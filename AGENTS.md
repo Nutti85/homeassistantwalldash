@@ -3,6 +3,7 @@
 ## Engineering workflow
 
 - For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority.
+- If `engineering-router` is not available, install the canonical global stack from `Nutti85/assistant-skills` by running the router installer at `skills/engineering-router/scripts/install.ps1` (or install `engineering-router` globally with `npx skills@latest add Nutti85/assistant-skills -g --copy -y --skill engineering-router` and then run its installer). Do not silently substitute a different top-level methodology.
 - Preserve the project-specific operational rules in this file; they take precedence over generic skill guidance.
 - Let the router classify work as QUICK, FEATURE, BUG, ARCHITECTURE, or SPIKE and use the lightest workflow that preserves correctness.
 - Use Matt Pocock skills for requirements discovery, domain modeling, codebase design, and research when the router calls for them.
