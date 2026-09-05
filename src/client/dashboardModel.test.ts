@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarEventOccursOnDay, calendarEvents, forecastPoints, homeLabel, mykidKindergarten, securityPresentation, temperatureValue, wasteDaysUntil } from './dashboardModel';
+import { calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, forecastPoints, homeLabel, mykidKindergarten, securityPresentation, temperatureValue, wasteDaysUntil } from './dashboardModel';
 
 describe('dashboard state presentation', () => {
   it('uses Home Assistant returned state for the home label', () => {
@@ -25,6 +25,21 @@ describe('dashboard state presentation', () => {
       precipitation_probability: 65, wind_speed: 3.8, wind_gust_speed: 9, cloud_coverage: 42,
     }] } });
     expect(point).toMatchObject({ precipitationProbability: 65, windGustSpeed: 9, cloudCoverage: 42 });
+  });
+
+  it('translates Home Assistant weather conditions into Norwegian labels', () => {
+    expect({
+      night: conditionLabel('clear-night'),
+      lightningRain: conditionLabel('lightning-rainy'),
+      snowRain: conditionLabel('snowy-rainy'),
+      windy: conditionLabel('windy'),
+    }).toEqual({
+      night: 'Klar natt',
+      lightningRain: 'Tordenvær med regn',
+      snowRain: 'Sludd',
+      windy: 'Vindfullt',
+    });
+    expect(conditionIcon('clear-night')).toBe('clear_night');
   });
 
   it('reads garbage days and collection type from a combined sensor state', () => {

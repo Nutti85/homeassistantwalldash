@@ -258,14 +258,20 @@ export const isRepairNeeded = (state: HomeAssistantState | undefined): boolean =
 
 export const conditionLabel = (condition?: string): string => ({
   rainy: 'Regn', pouring: 'Kraftig regn', cloudy: 'Skyet', partlycloudy: 'Delvis skyet',
-  sunny: 'Sol', clear: 'Klart', snowy: 'Snø', fog: 'Tåke', lightning: 'Tordenvær',
+  'partly-cloudy': 'Delvis skyet', sunny: 'Sol', clear: 'Klart', 'clear-night': 'Klar natt',
+  snowy: 'Snø', 'snowy-rainy': 'Sludd', fog: 'Tåke', lightning: 'Tordenvær',
+  'lightning-rainy': 'Tordenvær med regn', windy: 'Vindfullt', 'windy-variant': 'Vindfullt',
+  hail: 'Hagl', exceptional: 'Uvanlig vær',
 }[condition?.toLowerCase() ?? ''] ?? (condition || 'Ikke tilgjengelig'));
 
 export const conditionIcon = (condition?: string): string => {
   const value = condition?.toLowerCase() ?? '';
+  if (value === 'clear-night') return 'clear_night';
+  if (value.includes('lightning')) return 'thunderstorm';
   if (value.includes('rain') || value === 'pouring') return 'rainy';
   if (value.includes('snow')) return 'weather_snowy';
   if (value.includes('sun') || value === 'clear') return 'sunny';
   if (value.includes('partly')) return 'partly_cloudy_day';
+  if (value.includes('windy')) return 'air';
   return 'cloud';
 };
