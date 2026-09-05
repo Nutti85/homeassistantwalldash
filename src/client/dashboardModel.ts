@@ -256,11 +256,12 @@ export const isRepairNeeded = (state: HomeAssistantState | undefined): boolean =
 
 export const conditionLabel = (condition?: string): string => ({
   rainy: 'Regn', pouring: 'Kraftig regn', cloudy: 'Skyet', partlycloudy: 'Delvis skyet',
-  sunny: 'Sol', clear: 'Klart', snowy: 'Snø', fog: 'Tåke', lightning: 'Tordenvær',
+  sunny: 'Sol', clear: 'Klart', 'clear-night': 'Klar natt', snowy: 'Snø', fog: 'Tåke', lightning: 'Tordenvær',
 }[condition?.toLowerCase() ?? ''] ?? (condition || 'Ikke tilgjengelig'));
 
 export const conditionIcon = (condition?: string): string => {
   const value = condition?.toLowerCase() ?? '';
+  if (value === 'clear-night') return 'nights_stay';
   if (value.includes('rain') || value === 'pouring') return 'rainy';
   if (value.includes('snow')) return 'weather_snowy';
   if (value.includes('sun') || value === 'clear') return 'sunny';

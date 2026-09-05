@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyKid card mock</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07121d; --card:#12201f; --surface:#172827; --line:rgba(226,244,236,.12); --muted:#9fb2ac; --text:#e9f2ee; --mint:#8ee2b2; --blue:#86c8ed; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; padding:32px; color:var(--text); background:radial-gradient(circle at 18% 5%,#153348 0,#07121d 44%),var(--bg); font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+    .shell { max-width:1420px; margin:auto; }
+    .eyebrow { margin:0 0 10px; color:var(--muted); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+    .heading { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:26px; }
+    .heading h1 { margin:0; font-size:34px; font-weight:500; }
+    .heading p { margin:6px 0 0; color:var(--muted); }
+    .legend { display:inline-flex; align-items:center; gap:8px; color:#dcebe4; font-size:13px; white-space:nowrap; }
+    .legend::before { width:8px; height:8px; border-radius:50%; content:""; background:var(--mint); box-shadow:0 0 10px var(--mint); }
+    .mock-card { width:min(500px,100%); min-height:360px; padding:20px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(150deg,#152624,#10201e); box-shadow:0 16px 35px rgba(0,0,0,.26); }
+    .card-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .card-head h2 { margin:0; font-size:18px; font-weight:600; }
+    .dots { display:flex; align-items:center; gap:8px; }
+    .dot { display:block; width:8px; height:8px; border:1px solid #8aa69b; border-radius:50%; }
+    .dot.active { border-color:var(--mint); background:var(--mint); }
+    .mykid-content { display:flex; min-height:290px; flex-direction:column; }
+    .summary { margin:0 0 13px; color:var(--text); font-size:14px; line-height:1.4; }
+    .sections { display:grid; gap:9px; }
+    .compact-section { padding-top:9px; border-top:1px solid var(--line); }
+    .compact-section h3 { display:flex; align-items:center; gap:7px; margin:0 0 6px; color:var(--mint); font-size:12px; font-weight:600; }
+    .icon { display:inline-grid; width:16px; height:16px; place-items:center; border:1px solid currentColor; border-radius:50%; font-size:10px; line-height:1; }
+    .compact-section ul { display:grid; gap:5px; margin:0; padding:0; list-style:none; }
+    .compact-section li { display:flex; justify-content:space-between; gap:10px; min-width:0; font-size:13px; }
+    .compact-section b { overflow:hidden; min-width:0; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+    .compact-section span { flex:0 0 auto; color:var(--muted); font-size:11px; }
+    .open-line { display:flex; justify-content:space-between; align-items:center; gap:14px; margin-top:auto; padding-top:13px; border-top:1px solid var(--line); color:var(--mint); font-size:12px; }
+    .open-line button { min-height:36px; padding:8px 12px; border:1px solid rgba(142,226,178,.35); border-radius:9px; background:#1a3830; color:var(--mint); font-weight:600; }
+    .mock-note { width:min(500px,100%); margin:12px 0 34px; color:var(--muted); font-size:12px; line-height:1.45; }
+    .wide-stage { display:grid; place-items:center; padding:30px 0 8px; border-top:1px solid rgba(226,244,236,.08); }
+    .wide-label { width:min(1100px,100%); margin:0 0 10px; color:var(--muted); font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+    .modal { width:min(1100px,100%); overflow:hidden; border:1px solid rgba(132,221,170,.34); border-radius:16px; background:#12201f; box-shadow:0 24px 80px rgba(0,0,0,.42); }
+    .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:22px 24px 18px; border-bottom:1px solid var(--line); }
+    .modal-head h2 { margin:0; font-size:23px; }
+    .modal-head p { margin:5px 0 3px; color:#b9c9c2; font-size:14px; }
+    .modal-head small { color:var(--muted); }
+    .close { display:grid; width:36px; height:36px; flex:0 0 auto; place-items:center; border:0; border-radius:9px; background:#223431; color:#d9efe3; font-size:20px; }
+    .modal-body { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 34px; padding:22px 24px 28px; }
+    .detail-section { min-width:0; }
+    .detail-section.wide { grid-column:1 / -1; }
+    .detail-section h3 { margin:0 0 11px; color:var(--mint); font-size:14px; }
+    .detail-list { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+    .detail-list li { padding:11px 0; border-top:1px solid rgba(226,244,236,.08); }
+    .detail-list li:first-child { padding-top:0; border-top:0; }
+    .item-head { display:grid; grid-template-columns:92px minmax(0,1fr); gap:12px; align-items:start; }
+    .item-head time { color:var(--blue); font-size:12px; }
+    .item-head strong { font-size:14px; }
+    .detail-list p { margin:4px 0 0 104px; color:#c6d3ce; font-size:12px; line-height:1.45; }
+    .info-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .info-card { padding:12px; border-radius:9px; background:var(--surface); }
+    .info-card small { display:block; margin-bottom:4px; color:var(--blue); font-size:11px; }
+    .info-card strong { display:block; font-size:14px; }
+    .info-card p { margin:4px 0 0; color:#c6d3ce; font-size:12px; line-height:1.45; }
+    .footer { margin:20px 0 0; color:var(--muted); font-size:12px; }
+    @media (max-width:760px) { body { padding:18px; } .heading { align-items:flex-start; flex-direction:column; } .modal-body { grid-template-columns:minmax(0,1fr); padding:18px; } .detail-section.wide { grid-column:auto; } .info-strip { grid-template-columns:minmax(0,1fr); } .item-head { grid-template-columns:70px minmax(0,1fr); gap:10px; } .detail-list p { margin-left:80px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <p class="eyebrow">Dashboard mock · revised structure</p>
+    <header class="heading"><div><h1>MyKid i kalender-karusellen</h1><p>Kortet følger samme komprimerte innholdshierarki som Jacobs skoleplan.</p></div><span class="legend">MyKid oppdatert</span></header>
+
+    <section class="mock-card" aria-label="MyKid kompaktkort">
+      <header class="card-head"><h2>MyKid · Bjørnehiet</h2><div class="dots" aria-label="Kalender, Jacobs skoleplan og MyKid"><span class="dot"></span><span class="dot"></span><span class="dot active"></span></div></header>
+      <div class="mykid-content">
+        <p class="summary">2 oppslag, 1 ukeplan, 6 nyhetsbrev og 15 kommende hendelser.</p>
+        <div class="sections">
+          <section class="compact-section"><h3><span class="icon">●</span>Hendelser</h3><ul><li><b>Turdag i nærmiljøet</b><span>torsdag</span></li><li><b>Foreldremøte</b><span>neste uke</span></li><li><b>Planleggingsdag</b><span>fredag</span></li></ul></section>
+          <section class="compact-section"><h3><span class="icon">i</span>Oppslagstavle</h3><ul><li><b>Husk klær etter vær</b><span>i dag</span></li><li><b>Informasjon fra Bjørnehiet</b><span>tirsdag</span></li></ul></section>
+        </div>
+        <div class="open-line"><span>Trykk for full oversikt</span><button type="button">Åpne MyKid</button></div>
+      </div>
+    </section>
+    <p class="mock-note">Karusellen er fortsatt Kalender → Jacobs skoleplan → MyKid. Denne sliden bruker Jacobs kompakte oppsummering, seksjonsoverskrifter og liste-rader i stedet for et rutenett med tellere.</p>
+
+    <section class="wide-stage" aria-label="MyKid detalj-popup mock">
+      <p class="wide-label">Egen MyKid-popup · bred desktopvisning</p>
+      <article class="modal">
+        <header class="modal-head"><div><h2>MyKid · full oversikt</h2><p>Nyhetsbrev, oppslag, ukeplan og dagens informasjon</p><small>Oppdatert i dag kl. 20:41</small></div><button class="close" type="button" aria-label="Lukk">×</button></header>
+        <div class="modal-body">
+          <section class="detail-section wide"><h3>Nyhetsbrev · 6</h3><ul class="detail-list"><li><div class="item-head"><time>02.09</time><strong>Velkommen til ny uke</strong></div><p>Hele nyhetsbrevet vises i den brede detaljvisningen, med avsnitt og praktisk informasjon bevart.</p></li><li><div class="item-head"><time>07.08</time><strong>Praktisk informasjon</strong></div><p>Eldre nyhetsbrev kan leses i samme liste uten at innholdet forkortes.</p></li></ul></section>
+          <section class="detail-section"><h3>Oppslagstavle · 2</h3><ul class="detail-list"><li><div class="item-head"><time>02.09</time><strong>Foreldremøte</strong></div><p>Full meldingstekst med alle detaljer.</p></li><li><div class="item-head"><time>28.08</time><strong>Husk klær etter vær</strong></div><p>Praktisk informasjon fra avdelingen.</p></li></ul></section>
+          <section class="detail-section"><h3>Ukeplan og i dag</h3><div class="info-strip"><div class="info-card"><small>DENNE UKEN</small><strong>Ukeplan</strong><p>Planen vises som en komplett, lesbar tekstblokk.</p></div><div class="info-card"><small>I DAG</small><strong>Dagens informasjon</strong><p>Én oppdatering med alt innhold tilgjengelig.</p></div></div></section>
+        </div>
+      </article>
+    </section>
+    <p class="footer">Mocken fokuserer på struktur: kompakt slide som Jacob, og en bred detalj-popup for langt innhold.</p>
+  </main>
+</body>
+</html>

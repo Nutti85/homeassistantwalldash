@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarEventOccursOnDay, calendarEvents, forecastPoints, homeLabel, mykidKindergarten, securityPresentation, temperatureValue, wasteDaysUntil } from './dashboardModel';
+import { calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, forecastPoints, homeLabel, mykidKindergarten, securityPresentation, temperatureValue, wasteDaysUntil } from './dashboardModel';
 
 describe('dashboard state presentation', () => {
   it('uses Home Assistant returned state for the home label', () => {
@@ -34,6 +34,11 @@ describe('dashboard state presentation', () => {
   it('uses a supported icon when monitoring is deactivated', () => {
     expect(securityPresentation({ entity_id: 'alarm_control_panel.home', state: '3', attributes: {} }))
       .toEqual({ label: 'Deaktivert', icon: 'shield', tone: 'danger' });
+  });
+
+  it('translates Home Assistant clear-night weather for the dashboard', () => {
+    expect(conditionLabel('clear-night')).toBe('Klar natt');
+    expect(conditionIcon('clear-night')).toBe('nights_stay');
   });
 
   it('reads Outlook calendar data and includes an all-day event on each covered day', () => {

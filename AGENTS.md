@@ -1,5 +1,15 @@
 # Project operations
 
+## Engineering workflow
+
+- For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority unless an explicit project instruction overrides it.
+- Classify each request as `QUICK`, `FEATURE`, `BUG`, `ARCHITECTURE`, or `SPIKE`, and use the lightest workflow that preserves correctness.
+- Preserve the local development, Home Assistant, and Portainer rules in this file; repository-specific instructions take precedence over generic skills.
+- Use Matt Pocock skills for discovery, domain modeling, codebase design, and research when selected by the router.
+- Use the selected Superpowers skills for planning, implementation, debugging, review, and verification when selected by the router.
+- Do not independently activate Superpowers `using-superpowers` or `brainstorming`, or Matt Pocock `tdd`, `diagnosing-bugs`, `code-review`, or `implement`, as top-level workflow controllers unless explicitly requested.
+- For UI/UX work, read the repository's `design.md` or other design guidance first and preserve the existing component and interaction patterns.
+
 ## Local development and reloads
 
 - Run `npm.cmd run dev` from the repository root for local development. It starts an API-only backend on port `3000` and Vite on port `5173`.
