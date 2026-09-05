@@ -1,4 +1,4 @@
-import type { BriefingItem, BriefingViewModel } from './briefingModel';
+import type { BriefingItem, BriefingPracticalId, BriefingViewModel } from './briefingModel';
 
 const BriefingIcon = ({ name }: { name: string }) => <span className="material-symbols-outlined" aria-hidden="true">{name}</span>;
 
@@ -9,7 +9,7 @@ function BriefingMetric({ item }: { item: BriefingItem<'weather' | 'temperature'
   </article>;
 }
 
-function BriefingPractical({ item }: { item: BriefingItem<'calendar' | 'travel' | 'school' | 'kindergarten' | 'home' | 'warnings'> }) {
+function BriefingPractical({ item }: { item: BriefingItem<BriefingPracticalId> }) {
   return <section className={`briefing-practical briefing-tone-${item.tone}`} data-testid="briefing-practical" data-practical={item.id}>
     <h3><BriefingIcon name={item.icon}/>{item.label}</h3>
     <strong>{item.value}</strong>

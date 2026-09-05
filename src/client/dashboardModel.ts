@@ -44,7 +44,6 @@ export const jacobWeeklyPlan = (state: HomeAssistantState | undefined): JacobWee
     messages: planStrings(attributes.messages),
   };
 };
-
 const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value).map((item) => ({
   ...(item.date ? { date: item.date } : {}),
   ...(item.time ? { time: item.time } : {}),
@@ -78,7 +77,7 @@ const calendarTimestamp = (value: unknown): string | undefined => {
   return validDate(timestamp.dateTime ?? timestamp.date);
 };
 
-export interface CalendarEvent { title: string; start: string; end?: string; allDay: boolean }
+export interface CalendarEvent { id?: string; recurrenceId?: string; location?: string; status?: string; travelMinutes?: number; travelObservedAt?: string; title: string; start: string; end?: string; allDay: boolean }
 
 export const calendarEvents = (state: HomeAssistantState | undefined): CalendarEvent[] => {
   const attributes = state?.attributes ?? {};
@@ -86,22 +85,25 @@ export const calendarEvents = (state: HomeAssistantState | undefined): CalendarE
   return rawEvents.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
     const row = item as Record<string, unknown>;
+    if (row.status === 'cancelled' || row.status === 'canceled') return [];
     const start = calendarTimestamp(row.start ?? row.start_time ?? row.begin);
     if (!start) return [];
     const end = calendarTimestamp(row.end ?? row.end_time ?? row.finish);
     const title = [row.title, row.summary, row.message, row.description].find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? 'Uten tittel';
     const startValue = row.start;
-    const allDay = row.all_day === true || (
+    const allDay = row.all_day === true || /^\d{4}-\d{2}-\d{2}$/.test(start) || (
       !!startValue && typeof startValue === 'object' && !Array.isArray(startValue)
       && typeof (startValue as Record<string, unknown>).date === 'string'
     );
-    return [{ title, start, end, allDay }];
+    const travelMinutes = Number(row.travel_minutes ?? row.travelMinutes);
+    const travelObservedAt = validDate(row.travel_updated_at ?? row.travelUpdatedAt);
+    return [{ title, start, end, allDay, ...(planText(row.id ?? row.uid) ? { id: planText(row.id ?? row.uid) } : {}), ...(planText(row.recurrence_id ?? row.recurrenceId) ? { recurrenceId: planText(row.recurrence_id ?? row.recurrenceId) } : {}), ...(planText(row.location) ? { location: planText(row.location) } : {}), ...(planText(row.status) ? { status: planText(row.status) } : {}), ...(Number.isFinite(travelMinutes) && travelMinutes > 0 ? { travelMinutes } : {}), ...(travelObservedAt ? { travelObservedAt } : {}) }];
   }).sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
 };
 
-const localDateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-export const calendarDayKey = (value: string): string => localDateKey(new Date(value));
-export const formatCalendarTime = (value: string | undefined): string => value ? new Date(value).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
+const localDateKey = (date: Date): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo' }).format(date);
+export const calendarDayKey = (value: string): string => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : localDateKey(new Date(value));
+export const formatCalendarTime = (value: string | undefined): string => value ? new Date(value).toLocaleTimeString('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit' }) : '—';
 export const calendarEventOccursOnDay = (event: CalendarEvent, dayKey: string): boolean => {
   const startDay = calendarDayKey(event.start);
   if (!event.end) return startDay === dayKey;

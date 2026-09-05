@@ -55,6 +55,15 @@ describe('dashboard state presentation', () => {
     ]);
   });
 
+  it('assigns timed calendar events to the Oslo day, not the browser day', () => {
+    const [event] = calendarEvents({ entity_id: 'calendar.felles', state: 'off', attributes: { events: [
+      { uid: 'series', recurrence_id: 'instance-1', summary: 'Sen avtale', start: { dateTime: '2026-09-06T23:30:00Z' }, end: { dateTime: '2026-09-07T00:30:00Z' } },
+    ] } });
+
+    expect(event).toMatchObject({ id: 'series', start: '2026-09-06T23:30:00Z' });
+    expect(calendarEventOccursOnDay(event, '2026-09-07')).toBe(true);
+  });
+
   it('preserves full MyKid newsletter and noticeboard bodies for the detail popup', () => {
     const newsletter = 'Første avsnitt med praktisk informasjon. Andre avsnitt med resten av meldingen.';
     const noticeboard = 'Ta med ekstra skift og klær som passer været.';

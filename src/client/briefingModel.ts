@@ -1,11 +1,15 @@
 import type { AiReportMode } from './api';
+import { buildChargingAdvice, chargingPreparationAdvice } from './briefingAdvice';
+import { briefingCopy } from './briefingCopy';
+import { calendarTrips, relevantTrips, tripDeparture } from './briefingTravel';
+import { resolveBriefingPeriod, type BriefingMode } from './briefingPeriod';
 import { calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, meteoAlarmEntries, mykidKindergarten, jacobWeeklyPlan, securityPresentation, forecastPoints, stateValue, type CalendarEvent, type ForecastPoint } from './dashboardModel';
 import type { HomeAssistantState } from '../shared/entities';
 
 const OSLO_TIME_ZONE = 'Europe/Oslo';
 
 export type BriefingMetricId = 'weather' | 'temperature' | 'wind' | 'rain' | 'clothing';
-export type BriefingPracticalId = 'calendar' | 'travel' | 'school' | 'kindergarten' | 'home' | 'warnings';
+export type BriefingPracticalId = 'calendar' | 'travel' | 'school' | 'kindergarten' | 'home' | 'warnings' | 'charging';
 export type BriefingTone = 'default' | 'positive' | 'notice' | 'warning' | 'muted';
 
 export interface BriefingItem<Id extends string> {
@@ -269,8 +273,7 @@ const unavailable = <Id extends string>(id: Id, label: string, icon: string): Br
   id, label, icon, value: 'Ikke tilgjengelig', context: 'Kilde mangler eller er utilgjengelig', tone: 'muted',
 });
 
-export const buildBriefingViewModel = (report: BriefingReport, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel => {
-  const period = briefingPeriod(report.mode, report.publishedAt);
+const buildViewModelForPeriod = (period: BriefingPeriod, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel => {
   const allForecast = forecastPoints(states.weatherHourly);
   const points = forecastPointsInPeriod(allForecast, period);
   const partial = forecastIsPartial(allForecast, period);
@@ -333,6 +336,149 @@ export const buildBriefingViewModel = (report: BriefingReport, states: Record<st
       warningsBriefing(states, period, now),
     ],
   };
+};
+
+export const buildBriefingViewModel = (report: BriefingReport, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel =>
+  buildViewModelForPeriod(briefingPeriod(report.mode, report.publishedAt), states, now);
+
+const sourceAvailable = (state: HomeAssistantState | undefined): boolean => {
+  const value = state?.state.trim().toLowerCase();
+  return !!state && !!state.entity_id && !!value && !['unknown', 'unavailable', 'none', 'null'].includes(value);
+};
+
+const sourceReading = (state: HomeAssistantState | undefined, now: Date, maxAgeMs = 5 * 60_000) => {
+  const value = Number(stateValue(state));
+  const observed = [state?.last_reported, state?.last_updated, state?.last_changed, state?.attributes.timestamp]
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => Date.parse(item)).filter(Number.isFinite).sort((a, b) => b - a)[0];
+  const quality = !state?.entity_id ? 'unconfigured' as const
+    : !Number.isFinite(value) ? 'unknown' as const
+      : observed === undefined ? 'unknown' as const
+        : now.getTime() - observed > maxAgeMs ? 'stale' as const : 'available' as const;
+  return { value: Number.isFinite(value) ? value : undefined, observedAt: observed === undefined ? undefined : new Date(observed).toISOString(), fetchedAt: now.toISOString(), quality };
+};
+
+const dateOnlyInOslo = (date: Date): string => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Oslo' });
+const addOsloDay = (date: Date, days: number): string => {
+  const value = new Date(`${dateOnlyInOslo(date)}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+};
+const departureFor = (state: HomeAssistantState | undefined, now: Date, days: number): Date | undefined => {
+  const raw = stateValue(state)?.trim();
+  if (!raw) return undefined;
+  if (Number.isFinite(Date.parse(raw)) && /\d{4}-\d{2}-\d{2}/.test(raw)) return new Date(raw);
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return undefined;
+  const day = addOsloDay(now, days);
+  const localAsUtc = new Date(`${day}T${String(Number(match[1])).padStart(2, '0')}:${match[2]}:00Z`);
+  const offset = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Oslo', timeZoneName: 'shortOffset' }).formatToParts(localAsUtc).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT+1';
+  const offsetMatch = offset.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  const offsetMinutes = offsetMatch ? (Number(offsetMatch[2]) * 60 + Number(offsetMatch[3] ?? 0)) * (offsetMatch[1] === '-' ? -1 : 1) : 60;
+  return new Date(localAsUtc.getTime() - offsetMinutes * 60_000);
+};
+const confirmedWorkday = (states: Record<string, HomeAssistantState>, date: string, days: number): boolean => {
+  const candidate = states[days === 0 ? 'workdayToday' : 'workdayTomorrow'] ?? states.workday;
+  if (!sourceAvailable(candidate) || candidate?.state.trim().toLowerCase() !== 'on') return false;
+  const statedDate = typeof candidate?.attributes.date === 'string' ? candidate.attributes.date.slice(0, 10) : undefined;
+  return !statedDate || statedDate === date;
+};
+const commuteTrip = (states: Record<string, HomeAssistantState>, now: Date): import('../shared/briefing').Trip | undefined => {
+  const departureState = states.carAndreasDeparture;
+  for (const days of [0, 1]) {
+    const departure = departureFor(departureState, now, days);
+    if (!departure) continue;
+    const date = dateOnlyInOslo(departure);
+    if (!confirmedWorkday(states, date, days)) continue;
+    return {
+      id: `commute:andreas:${date}`,
+      kind: 'commute',
+      startsAt: departure.toISOString(),
+      person: 'Andreas',
+      minutes: sourceReading(states.andreasTravelTime, now),
+    };
+  }
+  return undefined;
+};
+const liveTripsForPeriod = (states: Record<string, HomeAssistantState>, period: BriefingPeriod, now: Date) => {
+  const calendar = calendarTrips(calendarEvents(states.calendar));
+  const commute = commuteTrip(states, now);
+  const candidates = [...calendar, ...(commute ? [commute] : [])];
+  const scoped = candidates.filter((trip) => Date.parse(trip.startsAt) >= Date.parse(period.startAt) && Date.parse(trip.startsAt) < Date.parse(period.endAt));
+  const isRollingOrFuture = period.label.startsWith('Neste døgn') || Date.parse(period.startAt) > now.getTime();
+  const relevant = isRollingOrFuture ? scoped : relevantTrips(candidates, now, true).filter((trip) => scoped.some((candidate) => candidate.id === trip.id));
+  if (commute && period.label.includes('Kveld') && Date.parse(commute.startsAt) > now.getTime()
+    && Date.parse(commute.startsAt) - now.getTime() <= 24 * 60 * 60_000 && !relevant.some((trip) => trip.id === commute.id)) return [commute, ...relevant];
+  return relevant;
+};
+const liveTravelItem = (trip: ReturnType<typeof liveTripsForPeriod>[number] | undefined, now: Date) => {
+  if (!trip) return undefined;
+  const destination = trip.destination ? ` til ${trip.destination}` : '';
+  const title = trip.kind === 'commute' ? 'Andreas skal på jobb' : trip.title ?? `Avtale${destination}`;
+  const departure = tripDeparture(trip, now);
+  const startTime = new Date(trip.startsAt).toLocaleTimeString('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit' });
+  const context = departure
+    ? `Dra senest kl. ${departure.toLocaleTimeString('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit' })} · ${trip.minutes?.value} min reisetid.`
+    : `${trip.kind === 'commute' ? 'Avreise' : 'Starter'} kl. ${startTime}. ${briefingCopy.travelTimeUnavailable}`;
+  return { id: 'travel' as const, label: 'Reise', icon: 'route', value: title, context, tone: 'default' as const };
+};
+const liveWarningItem = (states: Record<string, HomeAssistantState>, period: BriefingPeriod, now: Date) => {
+  const item = warningsBriefing(states, period, now);
+  if (item.value !== 'Ingen varsler') return item;
+  if (sourceAvailable(states.meteoAlarm) || sourceAvailable(states.lightningDistance) || sourceAvailable(states.auroraVisibility)) {
+    return { ...item, value: 'Ingen aktive varsler', context: 'Det er ikke registrert noe varsel akkurat nå.' };
+  }
+  return { ...item, value: briefingCopy.warningsUnavailable, context: 'Prøv igjen litt senere.', tone: 'muted' as const };
+};
+const latestForecastTime = (states: Record<string, HomeAssistantState>): string => {
+  const timestamps = forecastPoints(states.weatherHourly)
+    .map((point) => Date.parse(point.datetime))
+    .filter((timestamp) => Number.isFinite(timestamp));
+  const latest = timestamps.length ? Math.max(...timestamps) : undefined;
+  return latest === undefined ? 'senere' : new Date(latest).toLocaleTimeString('nb-NO', {
+    timeZone: OSLO_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).replace(/:00$/, '');
+};
+const liveLanguage = (model: BriefingViewModel, states: Record<string, HomeAssistantState>): BriefingViewModel => ({
+  ...model,
+  metrics: model.metrics.map((item) => {
+    if (item.id === 'weather' && !sourceAvailable(states.weatherHourly)) return { ...item, value: 'Ikke tilgjengelig', context: briefingCopy.weatherUnavailable, tone: 'muted' as const };
+    if (['temperature', 'wind', 'rain'].includes(item.id) && item.value === 'Ikke tilgjengelig') return { ...item, context: briefingCopy.weatherUnavailable };
+    if (item.context.toLocaleLowerCase('nb-NO').includes('prognose mangler')) return { ...item, context: briefingCopy.noForecast };
+    if (item.context.toLocaleLowerCase('nb-NO').includes('delvis prognose')) {
+      const last = item.context.split('·').at(-1)?.trim();
+      return { ...item, context: last?.startsWith('Delvis') ? briefingCopy.partialForecast(latestForecastTime(states)) : item.context };
+    }
+    return item;
+  }),
+  practical: model.practical.map((item) => {
+    if (item.value !== 'Ikke tilgjengelig') return item;
+    const fallback = item.id === 'calendar' ? 'Får ikke sjekket kalenderen nå.'
+      : item.id === 'school' ? 'Får ikke sjekket skoleplanen nå.'
+        : item.id === 'kindergarten' ? 'Får ikke sjekket barnehageplanen nå.'
+          : item.id === 'home' ? 'Får ikke sjekket hjemmet nå.'
+            : item.context;
+    return fallback === item.context ? item : { ...item, context: fallback };
+  }),
+});
+
+export const buildLiveBriefingViewModel = (mode: BriefingMode, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel => {
+  const period = resolveBriefingPeriod(mode, now);
+  const base = liveLanguage(buildViewModelForPeriod(period, states, now), states);
+  const trips = liveTripsForPeriod(states, period, now);
+  const trip = trips[0];
+  const travel = liveTravelItem(trip, now);
+  const charging = buildChargingAdvice(states, now, travel !== undefined);
+  const practical = base.practical
+    .filter((item) => item.id !== 'travel' && item.id !== 'charging')
+    .map((item) => item.id === 'warnings' ? liveWarningItem(states, period, now) : item)
+    .map((item) => item.id === 'school' && item.value === 'Ingen skole denne perioden' ? { ...item, value: 'Ingen opplysninger om skole akkurat nå.', context: 'Sjekk skoleplanen senere.', tone: 'muted' as const } : item)
+    .map((item) => item.id === 'kindergarten' && item.value === 'Ingen plan denne perioden' ? { ...item, value: 'Ingen opplysninger fra barnehagen akkurat nå.', context: 'Sjekk barnehageplanen senere.', tone: 'muted' as const } : item);
+  const preparation = trip?.kind === 'commute' ? chargingPreparationAdvice(trip.id, new Date(trip.startsAt)) : undefined;
+  const chargingItem = charging ?? (preparation && now.getTime() >= Date.parse(preparation.prepareAt) && now.getTime() < Date.parse(preparation.dueAt)
+    ? { text: preparation.text, context: 'Andreas skal dra snart. Sjekk bilen etter at du har koblet til.', observation: { status: 'unknown' as const, confidence: 'unknown' as const } }
+    : undefined);
+  return { ...base, practical: [...practical, ...(travel ? [travel] : []), ...(chargingItem ? [{ id: 'charging' as const, label: 'Lading', icon: 'ev_station', value: chargingItem.text, context: chargingItem.context, tone: chargingItem.observation.confidence === 'unknown' ? 'muted' as const : 'default' as const }] : [])] };
 };
 
 export const briefingForecastPoints = (states: Record<string, HomeAssistantState>, period: BriefingPeriod): ForecastPoint[] =>

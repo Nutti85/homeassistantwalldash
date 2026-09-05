@@ -190,6 +190,8 @@ export class HomeAssistantClient {
         const state = await this.getState(entityId);
         states[key] = key === 'calendar'
           ? await this.getCalendarState(state)
+          : key === 'workdayToday' || key === 'workdayTomorrow'
+            ? await this.getWorkdayState(state, key === 'workdayTomorrow')
           : state;
       } catch {
         states[key] = { entity_id: entityId, state: 'unavailable', attributes: {} };
@@ -578,6 +580,8 @@ export class HomeAssistantClient {
       entity_id: payload.entity_id,
       state: payload.state,
       attributes: payload.attributes,
+      ...Object.fromEntries(['last_updated', 'last_reported', 'last_changed']
+        .flatMap((key) => typeof payload[key] === 'string' ? [[key, payload[key]]] : [])),
     };
   }
 
@@ -614,6 +618,24 @@ export class HomeAssistantClient {
     const events: unknown = await response.json();
     if (!Array.isArray(events)) throw communicationError();
     return { ...state, attributes: { ...state.attributes, events } };
+  }
+
+  private async getWorkdayState(state: HomeAssistantState, tomorrow: boolean): Promise<HomeAssistantState> {
+    const calendar = await this.getCalendarState(state);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo' }).format(new Date());
+    const target = new Date(`${today}T12:00:00Z`);
+    target.setUTCDate(target.getUTCDate() + (tomorrow ? 1 : 0));
+    const targetDay = target.toISOString().slice(0, 10);
+    const events = Array.isArray(calendar.attributes.events) ? calendar.attributes.events : [];
+    const working = events.some((event) => {
+      if (!isPlainObject(event)) return false;
+      const start = event.start;
+      const end = event.end;
+      const startDay = isPlainObject(start) && typeof start.date === 'string' ? start.date : undefined;
+      const endDay = isPlainObject(end) && typeof end.date === 'string' ? end.date : undefined;
+      return !!startDay && startDay <= targetDay && (!endDay || targetDay < endDay);
+    });
+    return { ...state, state: working ? 'on' : 'off', attributes: { ...state.attributes, date: targetDay } };
   }
 
   private async waitForChangedState(entityId: string, previous: HomeAssistantState): Promise<HomeAssistantState> {

@@ -22,6 +22,8 @@ export const dashboardStateKeys = [
   'energyToday', 'energyYesterday', 'energyHourlyConsumption', 'energyPower', 'energyPrice', 'roomLiving',
   'roomBedroom', 'roomBathroom', 'roomLivingHumidity', 'roomLivingCo2', 'roomBedroomHumidity', 'roomBedroomCo2', 'roomBathroomHumidity', 'roomBathroomCo2', 'roomFirstFloorBathroom', 'roomFirstFloorBathroomHumidity', 'roomClimateAdvice', 'waste', 'carAndreasRange', 'carAndreasBattery', 'carHegeRange', 'carHegeBattery',
   'andreasTravelTime', 'hegeTravelTime', 'calendar', 'jacobWeeklyPlan', 'mykidKindergarten', 'repairHealth',
+  'carAndreasTargetBattery', 'carAndreasChargingPower', 'carAndreasChargingStatus', 'carAndreasDeparture',
+  'chargerMode', 'chargerPower', 'chargerPlug', 'chargerCharging', 'chargerConnectivity', 'workdayToday', 'workdayTomorrow',
   'vacuum', 'vacuumBattery', 'vacuumStatus', 'vacuumProgress', 'vacuumArea', 'vacuumTime', 'vacuumRoom', 'vacuumCharging', 'vacuumCleaning', 'vacuumMopAttached', 'vacuumWaterBoxAttached', 'vacuumWaterShortage', 'vacuumMopDrying', 'vacuumCleaningMode', 'vacuumMopMode', 'vacuumMopIntensity', 'vacuumVolume', 'vacuumMap',
   ...lightControlKeys,
 ] as const;
@@ -146,14 +148,25 @@ export const defaultDashboardEntityIds: DashboardEntityIds = {
   waste: 'sensor.next_garbage_collection',
   carAndreasRange: 'sensor.ee14199_range_electric',
   carAndreasBattery: 'sensor.ee14199_state_of_charge',
+  carAndreasTargetBattery: 'sensor.ee14199_max_state_of_charge',
+  carAndreasChargingPower: 'sensor.ee14199_charging_power',
+  carAndreasChargingStatus: 'sensor.ee14199_charging_status',
+  carAndreasDeparture: 'sensor.ee14199_departure_time',
   carHegeRange: 'sensor.vr3ukzkxzmj881373_autonomy',
   carHegeBattery: 'sensor.vr3ukzkxzmj881373_battery',
+  chargerMode: 'sensor.el_bil_lader_klaras_vei_14_charger_mode',
+  chargerPower: 'sensor.el_bil_lader_klaras_vei_14_charge_power',
+  chargerPlug: 'binary_sensor.el_bil_lader_klaras_vei_14_plug',
+  chargerCharging: 'binary_sensor.el_bil_lader_klaras_vei_14_charging',
+  chargerConnectivity: 'binary_sensor.el_bil_lader_klaras_vei_14_connectivity',
   andreasTravelTime: 'sensor.waze_travel_time',
   hegeTravelTime: '',
   calendar: 'calendar.outlook_andreas_felles',
   jacobWeeklyPlan: 'sensor.jacob_weekly_plan',
   mykidKindergarten: 'sensor.mykid_kindergarten',
   repairHealth: '',
+  workdayToday: '',
+  workdayTomorrow: '',
   vacuum: 'vacuum.roborock_s8',
   vacuumBattery: 'sensor.sucky_v2_battery',
   vacuumStatus: 'sensor.sucky_v2_status',
@@ -196,4 +209,7 @@ export interface HomeAssistantState {
   entity_id: string;
   state: string;
   attributes: Record<string, unknown>;
+  last_updated?: string;
+  last_reported?: string;
+  last_changed?: string;
 }
