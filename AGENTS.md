@@ -1,5 +1,17 @@
 # Project operations
 
+## Engineering workflow
+
+- For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority.
+- Preserve the project-specific operational rules in this file; they take precedence over generic skill guidance.
+- Let the router classify work as QUICK, FEATURE, BUG, ARCHITECTURE, or SPIKE and use the lightest workflow that preserves correctness.
+- Use Matt Pocock skills for requirements discovery, domain modeling, codebase design, and research when the router calls for them.
+- Use selected Superpowers skills for implementation planning, TDD, systematic debugging, review, verification, worktrees, and branch completion when the router calls for them.
+- Do not activate Superpowers `using-superpowers` or `brainstorming` as top-level workflow controllers.
+- Do not use Matt Pocock `tdd`, `diagnosing-bugs`, `code-review`, or `implement` as the default implementation controller.
+- For UI/UX work, inspect the existing UI/component patterns and any design guidance first. Use the configured Intent/design skillset when available; preserve the existing Walldash visual and interaction language rather than inventing a new one.
+- Do not ask the user for facts that can be determined from this repository, Home Assistant, or connected project tooling.
+
 ## Local development and reloads
 
 - Run `npm.cmd run dev` from the repository root for local development. It starts an API-only backend on port `3000` and Vite on port `5173`.
