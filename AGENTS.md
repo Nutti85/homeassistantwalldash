@@ -2,13 +2,16 @@
 
 ## Engineering workflow
 
-- For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority unless an explicit project instruction overrides it.
-- Classify each request as `QUICK`, `FEATURE`, `BUG`, `ARCHITECTURE`, or `SPIKE`, and use the lightest workflow that preserves correctness.
-- Preserve the local development, Home Assistant, and Portainer rules in this file; repository-specific instructions take precedence over generic skills.
-- Use Matt Pocock skills for discovery, domain modeling, codebase design, and research when selected by the router.
-- Use the selected Superpowers skills for planning, implementation, debugging, review, and verification when selected by the router.
-- Do not independently activate Superpowers `using-superpowers` or `brainstorming`, or Matt Pocock `tdd`, `diagnosing-bugs`, `code-review`, or `implement`, as top-level workflow controllers unless explicitly requested.
-- For UI/UX work, read the repository's `design.md` or other design guidance first and preserve the existing component and interaction patterns.
+- For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority.
+- If `engineering-router` is not available, install the canonical global stack from `Nutti85/assistant-skills` by running the router installer at `skills/engineering-router/scripts/install.ps1` (or install `engineering-router` globally with `npx skills@latest add Nutti85/assistant-skills -g --copy -y --skill engineering-router` and then run its installer). Do not silently substitute a different top-level methodology.
+- Preserve the project-specific operational rules in this file; they take precedence over generic skill guidance.
+- Let the router classify work as QUICK, FEATURE, BUG, ARCHITECTURE, or SPIKE and use the lightest workflow that preserves correctness.
+- Use Matt Pocock skills for requirements discovery, domain modeling, codebase design, and research when the router calls for them.
+- Use selected Superpowers skills for implementation planning, TDD, systematic debugging, review, verification, worktrees, and branch completion when the router calls for them.
+- Do not activate Superpowers `using-superpowers` or `brainstorming` as top-level workflow controllers.
+- Do not use Matt Pocock `tdd`, `diagnosing-bugs`, `code-review`, or `implement` as the default implementation controller.
+- For UI/UX work, inspect the existing UI/component patterns and any design guidance first. Use the configured Intent/design skillset when available; preserve the existing Walldash visual and interaction language rather than inventing a new one.
+- Do not ask the user for facts that can be determined from this repository, Home Assistant, or connected project tooling.
 
 ## Local development and reloads
 

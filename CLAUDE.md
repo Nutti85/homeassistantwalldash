@@ -1,11 +1,11 @@
-# Home Assistant Wall Dashboard
+# Claude project instructions
 
-Read and follow `AGENTS.md` for the complete repository instructions, including local development, Home Assistant, and Portainer operations.
+For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority.
 
-## Engineering workflow
+Preserve and follow `AGENTS.md`; its Walldash-specific development, Home Assistant, and Portainer rules take precedence over generic skill guidance.
 
-- Use the globally installed `engineering-router` skill as the workflow authority for software-development work unless an explicit project instruction overrides it.
-- Classify each request as `QUICK`, `FEATURE`, `BUG`, `ARCHITECTURE`, or `SPIKE`, and use the lightest workflow that preserves correctness.
-- Preserve the repository's existing conventions and follow `AGENTS.md` before generic skills.
-- Do not independently activate Superpowers `using-superpowers` or `brainstorming`, or Matt Pocock `tdd`, `diagnosing-bugs`, `code-review`, or `implement`, as top-level workflow controllers unless explicitly requested.
-- For UI/UX work, read the repository's `design.md` or other design guidance first and preserve existing patterns.
+Use the lightest workflow that preserves correctness. The router decides when Matt Pocock discovery/domain/design skills or selected Superpowers implementation/debugging/review/verification skills are needed.
+
+Do not activate Superpowers `using-superpowers` or `brainstorming` as top-level workflow controllers. Do not use Matt Pocock `tdd`, `diagnosing-bugs`, `code-review`, or `implement` as the default implementation controller.
+
+For UI/UX work, inspect existing components and design guidance first, use the configured Intent/design skillset when available, and preserve the existing Walldash visual language.
