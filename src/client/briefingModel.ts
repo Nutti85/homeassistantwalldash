@@ -38,7 +38,7 @@ export interface BriefingReport {
 const focusedPeriods: Record<Exclude<AiReportMode, 'full'>, { startHour: number; endHour: number; label: string }> = {
   morning: { startHour: 6, endHour: 9, label: 'Morgen' },
   midday: { startHour: 9, endHour: 15, label: 'Formiddag' },
-  afternoon: { startHour: 16, endHour: 19, label: 'Ettermiddag' },
+  afternoon: { startHour: 15, endHour: 19, label: 'Ettermiddag' },
   evening: { startHour: 19, endHour: 23, label: 'Kveld' },
 };
 
@@ -338,6 +338,11 @@ export const buildBriefingViewModel = (report: BriefingReport, states: Record<st
   buildBriefingForPeriod(briefingPeriod(report.mode, report.publishedAt), states, now);
 
 export type LiveBriefingMode = AiReportMode | 'night';
+
+export const currentLiveBriefingMode = (now: Date): LiveBriefingMode => {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: OSLO_TIME_ZONE, hour: '2-digit', hourCycle: 'h23' }).format(now));
+  return hour < 6 ? 'night' : hour < 9 ? 'morning' : hour < 15 ? 'midday' : hour < 19 ? 'afternoon' : hour < 23 ? 'evening' : 'night';
+};
 
 const liveBriefingPeriod = (mode: LiveBriefingMode, now: Date): BriefingPeriod => {
   if (mode !== 'night') return briefingPeriod(mode, now.toISOString());

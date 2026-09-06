@@ -13,7 +13,7 @@ describe('briefing periods', () => {
   it.each([
     ['morning', '06:00', '09:00', 'Morgen · 06:00–09:00'],
     ['midday', '09:00', '15:00', 'Formiddag · 09:00–15:00'],
-    ['afternoon', '16:00', '19:00', 'Ettermiddag · 16:00–19:00'],
+    ['afternoon', '15:00', '19:00', 'Ettermiddag · 15:00–19:00'],
     ['evening', '19:00', '23:00', 'Kveld · 19:00–23:00'],
   ] as const)('maps %s to its fixed Oslo interval', (mode, start, end, label) => {
     const period = briefingPeriod(mode, '2026-09-04T22:00:00+02:00');

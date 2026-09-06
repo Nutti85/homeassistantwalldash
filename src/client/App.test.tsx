@@ -429,6 +429,8 @@ describe('redesigned dashboard', () => {
   });
 
   it('keeps the dedicated briefing prose under the details disclosure', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-23T18:05:00.000Z'));
     const api = createApi();
     vi.mocked(api.getAiReport!).mockResolvedValue({
       mode: 'evening',
@@ -437,11 +439,13 @@ describe('redesigned dashboard', () => {
       publishedAt: '2026-08-23T20:00:00.000Z',
     });
     render(<App api={api}/>);
+    await act(async () => { await Promise.resolve(); });
 
-    const compact = await screen.findByRole('region', { name: 'Kveldsbriefing' });
+    const compact = screen.getByRole('region', { name: 'Kveldsbriefing' });
     expect(within(compact).queryByText(/Det blir en tørr og rolig natt/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
-    const dialog = await screen.findByRole('dialog');
+    await act(async () => { await Promise.resolve(); });
+    const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByText('Vis detaljer'));
     expect(within(dialog).getByText(/Det blir en tørr og rolig natt/)).toBeVisible();
     expect(within(dialog).getByText(/Mandag morgen blir også tørr/)).toBeVisible();
@@ -702,6 +706,8 @@ describe('redesigned dashboard', () => {
   });
 
   it('renders the structured Klara overview before the original report details', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-04T18:05:00.000Z'));
     const api = createApi({
       outdoor: state('sensor.outdoor', '12.7'),
       netatmoWindSpeed: state('sensor.wind', '0.0'),
@@ -720,13 +726,15 @@ describe('redesigned dashboard', () => {
     });
     vi.mocked(api.getAiReport!).mockResolvedValue({ mode: 'evening', report: '## Kveld\nDette er original Klara-tekst.', publishedAt: '2026-09-04T20:00:00+02:00' });
     render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
 
-    const compact = await screen.findByRole('region', { name: 'Kveldsbriefing' });
+    const compact = screen.getByRole('region', { name: 'Kveldsbriefing' });
     expect(within(compact).getAllByTestId('briefing-metric')).toHaveLength(5);
     expect(within(compact).getByLabelText('Vær og klær')).toHaveClass('is-compact-grid');
     expect(within(compact).queryByTestId('briefing-practical-grid')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Klara AI' }));
-    const dialog = await screen.findByRole('dialog');
+    await act(async () => { await Promise.resolve(); });
+    const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kveld' }));
     expect(within(dialog).getByText('Kveld · 19:00–23:00')).toBeInTheDocument();
     expect(within(dialog).getAllByTestId('briefing-metric').map((node) => node.dataset.metric)).toEqual(['weather', 'temperature', 'wind', 'rain', 'clothing']);
@@ -735,6 +743,24 @@ describe('redesigned dashboard', () => {
     fireEvent.click(within(dialog).getByText('Vis detaljer'));
     expect(within(dialog).getByText('Dette er original Klara-tekst.')).toBeVisible();
     expect(within(dialog).getByRole('button', { name: 'Kveld' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps the dashboard briefing aligned with the current Oslo time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-06T14:23:00.000Z'));
+    const api = createApi();
+    vi.mocked(api.getAiReport!).mockResolvedValue({
+      mode: 'midday',
+      title: 'Formiddagsrapport',
+      report: '## Formiddag\nEldre rapportinnhold.',
+      publishedAt: '2026-09-06T10:18:25.224Z',
+    });
+    render(<App api={api} />);
+    await act(async () => { await Promise.resolve(); });
+
+    const compact = screen.getByRole('region', { name: /briefing$/ });
+    expect(compact).toHaveAccessibleName('Ettermiddagsbriefing');
+    expect(within(compact).getByText('Ettermiddag · 15:00–19:00')).toBeInTheDocument();
   });
 
   it('keeps all structured cards in order when every source is unavailable', async () => {

@@ -3,14 +3,14 @@ import QRCode from 'qrcode';
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, JacobWeeklyPlanSnapshot, LightCommand, LightControlKey, MyKidKindergartenSnapshot } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import * as browserApi from './api';
-import type { AiReportMode, AiReportRefreshMode, AiReportResponse } from './api';
+import type { AiReportRefreshMode, AiReportResponse } from './api';
 import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, type SkyPosition } from './astronomy';
 import { classifyClimateValue, climateStatusColor, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import { BriefingOverview } from './BriefingOverview';
 import { DepartureBriefingModal, DepartureBriefingStatus } from './DepartureBriefing';
 import { departureBriefingFixtureFromQuery } from './departureBriefingFixtures';
 import { departureBriefingsDue, readDepartureDismissals, writeDepartureDismissals, type DepartureDismissal } from './departureBriefingLifecycle';
-import { buildBriefingViewModel, buildLiveBriefingViewModel, type LiveBriefingMode } from './briefingModel';
+import { buildLiveBriefingViewModel, currentLiveBriefingMode, type LiveBriefingMode } from './briefingModel';
 import './roomCards.css';
 import {
   calendarDayKey, calendarEventOccursOnDay, calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, formatCalendarTime, forecastPoints, isRepairNeeded, jacobWeeklyPlan, meteoAlarmEntries, meteoEventMeta, mykidKindergarten, securityPresentation, stateValue, wasteDaysUntil,
@@ -613,17 +613,6 @@ const briefingTitles: Record<LiveBriefingMode, string> = {
   night: 'Nattbriefing',
 };
 
-const scheduledReportModes = ['full', 'morning', 'midday', 'afternoon', 'evening'] as const;
-const inferredReportMode = (report?: AiReportResponse): AiReportMode => {
-  if (scheduledReportModes.includes(report?.mode as AiReportMode)) return report!.mode as AiReportMode;
-  const descriptor = `${report?.title ?? ''}\n${report?.report.match(/^##\s+Rapportperiode\s*\n([^\n]+)/mi)?.[1] ?? ''}`.toLocaleLowerCase('nb-NO');
-  if (descriptor.includes('formiddag')) return 'midday';
-  if (descriptor.includes('ettermiddag')) return 'afternoon';
-  if (descriptor.includes('kveld')) return 'evening';
-  if (descriptor.includes('morgen')) return 'morning';
-  return 'full';
-};
-
 const liveReportLabels: Array<{ mode: LiveBriefingMode | 'auto'; label: string; icon: string }> = [
   { mode: 'auto', label: 'Nå', icon: 'schedule' },
   { mode: 'morning', label: 'Morgen', icon: 'wb_twilight' },
@@ -633,11 +622,6 @@ const liveReportLabels: Array<{ mode: LiveBriefingMode | 'auto'; label: string; 
   { mode: 'night', label: 'Natt', icon: 'dark_mode' },
   { mode: 'full', label: 'Neste døgn', icon: 'date_range' },
 ];
-
-const currentLiveBriefingMode = (now: Date): LiveBriefingMode => {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', hour: '2-digit', hourCycle: 'h23' }).format(now));
-  return hour < 6 || hour >= 23 ? 'night' : hour < 9 ? 'morning' : hour < 15 ? 'midday' : hour < 19 ? 'afternoon' : 'evening';
-};
 
 function KlaraAiModal({ report, states, loading, error, close, closeButtonRef }: { report?: AiReportResponse; states: Record<string, HomeAssistantState>; loading: boolean; error?: string; close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {
   const [selection, setSelection] = useState<LiveBriefingMode | 'auto'>('auto');
@@ -904,15 +888,14 @@ function MetricsUpdated({ states }: { states: Record<string, HomeAssistantState>
   </div>;
 }
 
-function BriefingCard({ states, report }: { states: Record<string, HomeAssistantState>; report?: AiReportResponse }) {
-  const mode = inferredReportMode(report);
+function BriefingCard({ states }: { states: Record<string, HomeAssistantState> }) {
+  const now = new Date();
+  const mode = currentLiveBriefingMode(now);
   const title = briefingTitles[mode];
-  const reportPeriod = report?.title ?? 'Siste rapport';
-  const publishedAt = report?.publishedAt ? new Date(report.publishedAt) : undefined;
-  const briefingModel = report ? buildBriefingViewModel({ mode, publishedAt: report.publishedAt }, states) : undefined;
+  const briefingModel = buildLiveBriefingViewModel(mode, states, now);
   return <section className="card briefing-card" aria-labelledby="briefing-card-title">
     <header className="briefing-card-header"><div className="klara-ai-brand"><span className="klara-ai-orb"><Icon filled>auto_awesome</Icon></span><div><span className="briefing-card-eyebrow">Klara AI</span><div id="briefing-card-title" className="briefing-card-title">{title}</div></div></div></header>
-    {report && briefingModel ? <><div className="briefing-card-meta"><span><i/>{reportPeriod}</span>{publishedAt && <time dateTime={report.publishedAt}>{publishedAt.toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })}</time>}</div><BriefingOverview model={briefingModel} compact/></> : <p className="briefing-card-empty">Ingen AI-rapport er publisert ennå.</p>}
+    <><div className="briefing-card-meta"><span><i/>Følger dagen</span><time dateTime={now.toISOString()}>{now.toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Oslo' })}</time></div><BriefingOverview model={briefingModel} compact/></>
   </section>;
 }
 
@@ -1101,7 +1084,7 @@ function CalendarPlanCarousel({ states, events, days, wasteDays, wasteTypes }: {
   </section>;
 }
 
-function metricCards(states: Record<string, HomeAssistantState>, report?: AiReportResponse): LayoutChild[] {
+function metricCards(states: Record<string, HomeAssistantState>): LayoutChild[] {
   const events = calendarEvents(states.calendar);
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -1111,7 +1094,7 @@ function metricCards(states: Record<string, HomeAssistantState>, report?: AiRepo
   return [
     { id: 'energy', label: 'Energi', content: <EnergyCard states={states}/> },
     { id: 'roomClimate', label: 'Romklima', content: <RoomClimateCard states={states}/> },
-    { id: 'briefing', label: 'Klara AI', content: <BriefingCard states={states} report={report}/> },
+    { id: 'briefing', label: 'Klara AI', content: <BriefingCard states={states}/> },
     { id: 'calendar', label: 'Kalender', content: <CalendarPlanCarousel states={states} events={events} days={days} wasteDays={wasteDays} wasteTypes={wasteTypes}/> },
   ];
 }
@@ -1127,14 +1110,14 @@ function GuestWifi({ voucher, pending, renew }: { voucher?: string; pending: boo
   return <section className="card wifi-card" aria-labelledby="wifi-title"><h2 id="wifi-title"><Icon>wifi</Icon>Gjeste-WiFi</h2><p>Koble til nettverk: <strong>GH_Guest</strong></p><p>Passord: <output aria-label="Tilgangskode">{voucher || '—'}</output></p><QrCode payload={payload}/><button type="button" disabled={pending} onClick={renew}>Ny kode</button></section>;
 }
 
-function RegularDashboard({ states, pending, errors, action, adjust, showWeather, editing, layout, updateLayout, aiReport }: DashboardProps & { showWeather: () => void; editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void; aiReport?: AiReportResponse }) {
+function RegularDashboard({ states, pending, errors, action, adjust, showWeather, editing, layout, updateLayout }: DashboardProps & { showWeather: () => void; editing: boolean; layout: GridLayouts; updateLayout: (next: GridLayouts) => void; aiReport?: AiReportResponse }) {
   return <EditableDashboard mode="regular" editing={editing} layout={layout} updateLayout={updateLayout} children={[
     { id: 'frontDoor', label: 'Ytterdør', content: <DoorCard state={states.frontDoorLock} pending={pending.lockDoor || pending.unlockDoor} action={action} error={errors.lockDoor || errors.unlockDoor}/> },
     { id: 'security', label: 'Overvåkning', content: <SecurityCard state={states.securityMode} pending={pending.securityMode} action={() => action('securityMode')} error={errors.securityMode}/> },
     { id: 'weather', label: 'Vær', content: <WeatherOverview states={states} regular onDetails={showWeather}/> },
     { id: 'doorbell', label: 'Ringeklokke', content: <CameraCard title="Ringeklokke" available={Boolean(stateValue(states.doorbellCamera))} streamPath="/api/camera/stream"/> },
     { id: 'courtyard', label: 'Gårdsplassen', content: <CameraCard title="Gårdsplassen" available={Boolean(stateValue(states.courtyardCamera))} streamPath="/api/courtyard-camera/stream"/> },
-    ...metricCards(states, aiReport),
+    ...metricCards(states),
   ]}/>;
 }
 
