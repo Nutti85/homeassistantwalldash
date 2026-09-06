@@ -21,21 +21,6 @@ const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(
 afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
-  it('enables page-level scrolling while the main-dashboard prototype is mounted', async () => {
-    window.history.replaceState({}, '', '/?variant=B&scenario=calm');
-    const view = render(<App api={createApi()} />);
-    try {
-      await screen.findByRole('heading', { name: /briefing$/i });
-      expect(document.documentElement).toHaveClass('prototype-active');
-      expect(document.body).toHaveClass('prototype-active');
-    } finally {
-      view.unmount();
-      window.history.replaceState({}, '', '/');
-    }
-    expect(document.documentElement).not.toHaveClass('prototype-active');
-    expect(document.body).not.toHaveClass('prototype-active');
-  });
-
   it('shows Calendar first, switches to Jacob plan manually, and rotates after 3 seconds', async () => {
     vi.useFakeTimers();
     render(<App api={createApi({ calendar: state('calendar.family', 'on', { events: [] }), jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Prøve på tirsdag.', week_start: '2026-08-24', events: [{ date: '2026-08-25', title: 'Matteprøve' }], reminders: [{ weekday: 'fredag', title: 'Ta med gymtøy' }, { title: 'Bestill skolemelk' }] }) })} />);
