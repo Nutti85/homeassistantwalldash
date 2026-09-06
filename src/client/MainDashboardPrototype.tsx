@@ -199,7 +199,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [period, setPeriod] = useState<Period>('now');
   const [detail, setDetail] = useState<Detail>();
   const [doorbellOpen, setDoorbellOpen] = useState(query.scenario === 'doorbell');
-  useEffect(() => { document.body.classList.add('prototype-active'); const sync = () => setQuery(readQuery()); window.addEventListener('popstate', sync); return () => { document.body.classList.remove('prototype-active'); window.removeEventListener('popstate', sync); }; }, []);
+  useEffect(() => { document.documentElement.classList.add('prototype-active'); document.body.classList.add('prototype-active'); const sync = () => setQuery(readQuery()); window.addEventListener('popstate', sync); return () => { document.documentElement.classList.remove('prototype-active'); document.body.classList.remove('prototype-active'); window.removeEventListener('popstate', sync); }; }, []);
   useEffect(() => setDoorbellOpen(query.scenario === 'doorbell'), [query.scenario]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setDetail(undefined); setDoorbellOpen(false); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
   const now = useMemo(() => new Date(), [period]);

@@ -842,7 +842,9 @@ html,body,#root,.weather-detail{max-width:100%;overflow-x:hidden}
 @media(max-width:700px){.ppf-briefing-identity>span{width:42px;height:42px;border-radius:13px}.ppf-header .ppf-briefing-identity h1{font-size:25px}.ppf-header-context b{font-size:9px}.ppf-header-context time{font-size:10px}.ppf-b-head,.ppf-c-head{padding-bottom:12px}.ppf-weather-tiles{gap:7px}.ppf-weather-tiles>span{min-height:118px;padding:10px 6px}.ppf-weather-tiles .material-symbols-outlined{font-size:31px}.ppf-weather-tiles b{font-size:16px}.ppf-weather-tiles em{font-size:9px}.ppf-stream-label{margin-top:10px}.ppf-message-list button{grid-template-columns:58px minmax(0,1fr) auto}}
 
 /* PROTOTYPE — main dashboard: past, present and future. */
-body.prototype-active{min-width:0;overflow:auto;background:#07100f}
+html.prototype-active{height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto}
+html.prototype-active body,html.prototype-active #root{height:auto;min-height:100%;overflow:visible}
+body.prototype-active{min-width:0;background:#07100f}
 .dashboard.prototype-host{height:auto;min-height:100dvh;padding:0;overflow:visible;background:radial-gradient(circle at 48% -12%,#10201e 0,#081210 45%,#050a0a 100%)}
 .prototype-host>.dashboard-content{height:auto;min-height:100dvh;margin:0}
 .main-dashboard-prototype{--ppf-line:rgba(204,229,218,.1);--ppf-soft:#aab9b2;--ppf-warm:#f4b17b;min-height:100dvh;padding:24px clamp(18px,3vw,46px) 160px;color:#f5f4ee}
