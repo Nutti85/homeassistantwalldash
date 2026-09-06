@@ -1,7 +1,9 @@
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
+import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 
 export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
+  departureBriefings?: DepartureBriefingPayload;
 }
 
 export type AiReportMode = 'full' | 'morning' | 'midday' | 'afternoon' | 'evening';

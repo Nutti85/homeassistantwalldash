@@ -269,8 +269,7 @@ const unavailable = <Id extends string>(id: Id, label: string, icon: string): Br
   id, label, icon, value: 'Ikke tilgjengelig', context: 'Kilde mangler eller er utilgjengelig', tone: 'muted',
 });
 
-export const buildBriefingViewModel = (report: BriefingReport, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel => {
-  const period = briefingPeriod(report.mode, report.publishedAt);
+const buildBriefingForPeriod = (period: BriefingPeriod, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel => {
   const allForecast = forecastPoints(states.weatherHourly);
   const points = forecastPointsInPeriod(allForecast, period);
   const partial = forecastIsPartial(allForecast, period);
@@ -334,6 +333,37 @@ export const buildBriefingViewModel = (report: BriefingReport, states: Record<st
     ],
   };
 };
+
+export const buildBriefingViewModel = (report: BriefingReport, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel =>
+  buildBriefingForPeriod(briefingPeriod(report.mode, report.publishedAt), states, now);
+
+export type LiveBriefingMode = AiReportMode | 'night';
+
+const liveBriefingPeriod = (mode: LiveBriefingMode, now: Date): BriefingPeriod => {
+  if (mode !== 'night') return briefingPeriod(mode, now.toISOString());
+  let date = osloDateParts(now);
+  let start = osloLocalDateTime(date, 23);
+  let end = osloLocalDateTime(addOsloDays(date, 1), 6);
+  if (now.getTime() < start.getTime()) {
+    date = addOsloDays(date, -1);
+    start = osloLocalDateTime(date, 23);
+    end = osloLocalDateTime(addOsloDays(date, 1), 6);
+  } else if (now.getTime() >= end.getTime()) {
+    date = addOsloDays(date, 1);
+    start = osloLocalDateTime(date, 23);
+    end = osloLocalDateTime(addOsloDays(date, 1), 6);
+  }
+  const active = now.getTime() >= start.getTime() && now.getTime() < end.getTime();
+  return {
+    startAt: (active ? now : start).toISOString(),
+    endAt: end.toISOString(),
+    label: 'Natt · 23:00–06:00',
+    source: active ? 'current-and-forecast' : 'forecast',
+  };
+};
+
+export const buildLiveBriefingViewModel = (mode: LiveBriefingMode, states: Record<string, HomeAssistantState>, now = new Date()): BriefingViewModel =>
+  buildBriefingForPeriod(liveBriefingPeriod(mode, now), states, now);
 
 export const briefingForecastPoints = (states: Record<string, HomeAssistantState>, period: BriefingPeriod): ForecastPoint[] =>
   forecastPointsInPeriod(forecastPoints(states.weatherHourly), period);
