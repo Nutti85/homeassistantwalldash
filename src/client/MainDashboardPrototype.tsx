@@ -1,4 +1,4 @@
-// PROTOTYPE: three main-dashboard directions, switchable with ?variant=A|B|C.
+// PROTOTYPE V2: two briefing-led directions, switchable with ?variant=B|C.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
 import { calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
@@ -11,7 +11,7 @@ const dayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Eur
 const dayLabel = (date: Date, now: Date) => dayKey(date) === dayKey(now) ? 'I dag' : dayKey(date) === dayKey(new Date(now.getTime() + 86_400_000)) ? 'I morgen' : date.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'short' });
 const timeLabel = (value?: string) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '';
 
-type Variant = 'A' | 'B' | 'C';
+type Variant = 'B' | 'C';
 type Scenario = 'calm' | 'arrival' | 'doorbell' | 'warning';
 type Period = 'now' | 'later' | 'tomorrow' | 'week';
 type Detail = { title: string; icon: string; body: ReactNode };
@@ -58,9 +58,15 @@ function WeatherFocus({ states, period, showWeather }: Pick<PrototypeProps, 'sta
   const gust = point?.windGustSpeed ?? numberState(states.netatmoWindGust);
   const direction = stateValue(states.netatmoWindDirection) ?? '—';
   const rain = point?.precipitation;
-  return <Surface icon={conditionIcon(condition)} eyebrow={period === 'now' ? 'Været akkurat nå' : 'Værutsikt'} title={`${reading(temperature, '°')} · ${conditionLabel(condition)}`} className="ppf-weather" onClick={showWeather}>
-    <div className="ppf-weather-readings"><span><Icon>air</Icon><b>{reading(wind, ' m/s')}</b><small>{direction}</small></span><span><Icon>weather_hail</Icon><b>{reading(gust, ' m/s')}</b><small>vindkast</small></span><span><Icon>rainy</Icon><b>{reading(rain, ' mm')}</b><small>nedbør</small></span></div>
-    <div className="ppf-hourly">{hourly.slice(0, 6).map((item) => <span key={item.datetime}><small>{timeLabel(item.datetime)}</small><Icon>{conditionIcon(item.condition)}</Icon><b>{reading(item.temperature, '°')}</b></span>)}</div>
+  const clothing = temperature === undefined ? 'Se ut før dere går' : temperature < 5 ? 'Varm jakke og lue' : temperature < 14 || (rain ?? 0) > .4 ? 'Jakke og regntøy' : 'Lett jakke eller genser';
+  return <Surface icon="partly_cloudy_day" eyebrow={period === 'now' ? 'Forhold akkurat nå' : 'Forhold i perioden'} title="Vær og forhold" className="ppf-weather" onClick={showWeather}>
+    <div className="ppf-weather-tiles">
+      <span><Icon>{conditionIcon(condition)}</Icon><small>Vær</small><b>{conditionLabel(condition)}</b><em>{period === 'now' ? 'nå' : 'prognose'}</em></span>
+      <span><Icon>thermostat</Icon><small>Temperatur</small><b>{reading(temperature, '°C')}</b><em>{point?.templow === undefined ? 'føles lokalt' : `lavest ${reading(point.templow, '°')}`}</em></span>
+      <span><Icon>air</Icon><small>Vind</small><b>{reading(wind, ' m/s')}</b><em>{direction} · kast {reading(gust, ' m/s')}</em></span>
+      <span><Icon>rainy</Icon><small>Regn</small><b>{reading(rain, ' mm')}</b><em>i perioden</em></span>
+      <span><Icon>checkroom</Icon><small>Klær</small><b>{clothing}</b><em>for perioden</em></span>
+    </div>
   </Surface>;
 }
 
@@ -86,6 +92,8 @@ function ArrivalEvidence({ scenario, openDetail }: { scenario: Scenario; openDet
 }
 
 type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
+type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string };
+const isMessageLike = (item: { title: string; details?: string }) => /god helg|i dag har vi|vi var |nyhetsbrev|brev|oppslag|referat|ukeplan|informasjon fra/i.test(item.title) || (item.details?.length ?? 0) > 140;
 const planDate = (date: string, time?: string): Date => {
   if (time && !Number.isNaN(Date.parse(time))) return new Date(time);
   const match = time?.match(/^(\d{1,2}):(\d{2})/);
@@ -101,7 +109,7 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
   const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
   const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? []), ...(school?.homework ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kinderItems = [...(kindergarten?.today ?? []), ...(kindergarten?.events ?? []), ...(kindergarten?.birthdays ?? [])].flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const kinderItems = [...(kindergarten?.today ?? []), ...(kindergarten?.events ?? []), ...(kindergarten?.birthdays ?? [])].flatMap((item: MyKidKindergartenItem): AgendaItem[] => isMessageLike(item) || !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const future = [...calendar, ...schoolItems, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
   return future.length ? future : [
@@ -109,6 +117,23 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
     { source: 'Nicolai', title: 'Turdag og varmmat', detail: 'Klær etter været. Mat serveres i barnehagen.', date: new Date(now.getTime() + 86_400_000), time: '09:30' },
     { source: 'Felles', title: 'Familiebesøk i Oslo', detail: 'Avreise etter frokost', date: new Date(now.getTime() + 2 * 86_400_000), time: '10:00', briefing: true },
   ];
+}
+
+function familyMessages(states: PrototypeProps['states']): FamilyMessage[] {
+  const kindergarten = mykidKindergarten(states.mykidKindergarten);
+  const kindergartenMessages = [...(kindergarten?.noticeboard ?? []), ...(kindergarten?.newsletters ?? []), ...(kindergarten?.weeklyPlans ?? []), ...(kindergarten?.today ?? []).filter(isMessageLike), ...(kindergarten?.events ?? []).filter(isMessageLike)]
+    .map((item) => ({ source: 'Nicolai' as const, title: item.title, body: item.details, date: item.date ?? item.published_at }));
+  const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
+  const schoolMessages = (school?.messages ?? []).map((message) => ({ source: 'Jacob' as const, title: message.length > 54 ? `${message.slice(0, 51)}…` : message, body: message, date: school?.source_updated_at }));
+  const messages = [...new Map([...kindergartenMessages, ...schoolMessages]
+    .map((message) => [`${message.source}:${message.title}:${message.body ?? ''}`, message])).values()]
+    .sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
+  return messages.length ? messages : [{ source: 'Nicolai', title: 'God helg til dere alle! ❤️', body: 'Et lite brev fra barnehagen om uken som har gått.' }];
+}
+
+function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']; openDetail: (detail: Detail) => void }) {
+  const messages = familyMessages(states).slice(0, 3);
+  return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-list">{messages.map((message, index) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><span><strong>{message.title}</strong><small>{message.body ?? 'Trykk for å lese hele beskjeden'}</small></span><Icon>chevron_right</Icon></button>)}</div></Surface>;
 }
 
 function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {
@@ -158,10 +183,10 @@ function BottomControls(props: PrototypeProps) {
 }
 
 function PrototypeSwitcher({ variant, scenario }: { variant: Variant; scenario: Scenario }) {
-  const variants: Variant[] = ['A', 'B', 'C']; const scenarios: Scenario[] = ['calm', 'arrival', 'doorbell', 'warning'];
+  const variants: Variant[] = ['B', 'C']; const scenarios: Scenario[] = ['calm', 'arrival', 'doorbell', 'warning'];
   const update = (nextVariant = variant, nextScenario = scenario) => { const params = new URLSearchParams(window.location.search); params.set('variant', nextVariant); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
   const index = variants.indexOf(variant);
-  return <aside className="ppf-prototype-switcher" aria-label="Prototypevelger"><button type="button" aria-label="Forrige variant" onClick={() => update(variants[(index + variants.length - 1) % variants.length])}><Icon>arrow_back</Icon></button><span><small>Prototype</small><b>{variant} · {variant === 'A' ? 'Dagens rytme' : variant === 'B' ? 'Prioritetsstrøm' : 'Tre tidssoner'}</b></span><button type="button" aria-label="Neste variant" onClick={() => update(variants[(index + 1) % variants.length])}><Icon>arrow_forward</Icon></button><select aria-label="Demoscenario" value={scenario} onChange={(event) => update(variant, event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Hjemkomst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
+  return <aside className="ppf-prototype-switcher" aria-label="Prototypevelger"><button type="button" aria-label="Forrige variant" onClick={() => update(variants[(index + variants.length - 1) % variants.length])}><Icon>arrow_back</Icon></button><span><small>Prototype v2</small><b>{variant} · {variant === 'B' ? 'Briefingstrøm' : 'Tidssoner'}</b></span><button type="button" aria-label="Neste variant" onClick={() => update(variants[(index + 1) % variants.length])}><Icon>arrow_forward</Icon></button><select aria-label="Demoscenario" value={scenario} onChange={(event) => update(variant, event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Hjemkomst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
 }
 
 function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
@@ -169,7 +194,7 @@ function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
-  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { variant: (['A', 'B', 'C'].includes(params.get('variant') ?? '') ? params.get('variant') : 'A') as Variant, scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'arrival') as Scenario }; };
+  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { variant: (['B', 'C'].includes(params.get('variant') ?? '') ? params.get('variant') : 'B') as Variant, scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'arrival') as Scenario }; };
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('now');
   const [detail, setDetail] = useState<Detail>();
@@ -180,18 +205,21 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const now = useMemo(() => new Date(), [period]);
   const isWorkday = now.getDay() >= 1 && now.getDay() <= 5;
   const common = { states: props.states, period, openDetail: setDetail };
-  const header = <header className="ppf-header"><div><small>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</small><h1>{isWorkday ? 'En vanlig arbeidsdag' : 'En roligere fridag'}</h1></div><time>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</time></header>;
+  const briefingTitle = now.getHours() < 10 ? 'Morgenbriefing' : now.getHours() < 17 ? 'Dagsbriefing' : now.getHours() < 23 ? 'Kveldsbriefing' : 'Nattbriefing';
+  const header = <header className="ppf-header"><div className="ppf-briefing-identity"><span><Icon filled>auto_awesome</Icon></span><div><small>Klara AI · hjemmebriefing</small><h1>{briefingTitle}</h1></div></div><div className="ppf-header-context"><span><i/>Følger dagen</span><b>{isWorkday ? 'Arbeidsdag' : 'Fridag'}</b><time>{now.toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })}</time></div></header>;
   const weather = <WeatherFocus states={props.states} period={period} showWeather={props.showWeather}/>;
   const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
-  const past = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
+  const past = query.scenario === 'arrival'
+    ? <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>
+    : <p className="ppf-stream-empty">Ingen hendelser som trenger oppmerksomhet.</p>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles}/>;
+  const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
   return <div className={`main-dashboard-prototype ppf-variant-${query.variant.toLowerCase()}`}>
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    {query.variant === 'A' && <><div className="ppf-a-top">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-a-grid">{past}<div className="ppf-a-now">{weather}{nudges}</div>{agenda}{prepare}{rooms}</div></>}
-    {query.variant === 'B' && <><div className="ppf-b-head">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-b-stream"><section className="ppf-stream-label"><Icon>radio_button_checked</Icon><span><small>Viktigst nå</small><strong>{period === 'now' ? 'Hjemmet akkurat nå' : 'Blikket fremover'}</strong></span></section>{weather}{nudges}{past}{agenda}<div className="ppf-b-pair">{prepare}{rooms}</div></div></>}
-    {query.variant === 'C' && <><div className="ppf-c-head">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som skjedde</h2>{past || <p className="ppf-zone-empty">Ingen hendelser som trenger oppmerksomhet.</p>}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><h2><Icon>east</Icon>Det som kommer</h2>{agenda}{prepare}</section></div></>}
+    {query.variant === 'B' && <><div className="ppf-b-head">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-b-stream"><section className="ppf-stream-label"><Icon>history</Icon><span><small>Fortid</small><strong>Det som har skjedd</strong></span></section>{past}<section className="ppf-stream-label"><Icon>radio_button_checked</Icon><span><small>Nå</small><strong>Hjemmet akkurat nå</strong></span></section>{weather}{nudges}{rooms}<section className="ppf-stream-label"><Icon>east</Icon><span><small>Fremover</small><strong>Dette skjer</strong></span></section>{agenda}<div className="ppf-b-pair">{prepare}{messages}</div></div></>}
+    {query.variant === 'C' && <><div className="ppf-c-head">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><h2><Icon>east</Icon>Dette skjer</h2>{agenda}{prepare}</section></div></>}
     <BottomControls {...props}/>
     <PrototypeSwitcher variant={query.variant} scenario={query.scenario}/>
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 

@@ -1273,6 +1273,7 @@ const recentAiReportWindowMs = 12 * 60 * 60 * 1_000;
 const aiReportSeenStorageKey = 'walldash.klara-ai.last-seen-published-at';
 
 export default function App({ api = browserApi }: { api?: DashboardApi }) {
+  const prototypeRequested = new URLSearchParams(window.location.search).has('variant');
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
   const [mode, setMode] = useState<Mode>('regular');
   const [editing, setEditing] = useState(false);
@@ -1455,7 +1456,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
           && Date.now() - publishedAtMs >= -5 * 60 * 1_000
           && Date.now() - publishedAtMs <= recentAiReportWindowMs;
         setAiReport(next);
-        if (isRecentFirstReport || (previousPublishedAt && previousPublishedAt !== next.publishedAt)) {
+        if (!prototypeRequested && (isRecentFirstReport || (previousPublishedAt && previousPublishedAt !== next.publishedAt))) {
           setKlaraAiOpen(true);
           setAiReportRefreshing(false);
           setAiReportRefreshingMode(undefined);
@@ -1483,7 +1484,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
       window.removeEventListener('focus', checkWhenActive);
       window.removeEventListener('online', checkWhenActive);
     };
-  }, [api]);
+  }, [api, prototypeRequested]);
   const refreshAiReport = async (mode: AiReportRefreshMode = 'full') => {
     if (aiReportRefreshing) return;
     const previousPublishedAt = aiReport?.publishedAt ?? lastReportPublishedAt.current;
