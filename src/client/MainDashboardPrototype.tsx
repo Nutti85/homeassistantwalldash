@@ -1,6 +1,7 @@
-// PROTOTYPE V2: two briefing-led directions, switchable with ?variant=B|C.
+// PROTOTYPE V3: the selected time-zone direction, with scenario controls in ?scenario=.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
+import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import { calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 
@@ -11,7 +12,6 @@ const dayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Eur
 const dayLabel = (date: Date, now: Date) => dayKey(date) === dayKey(now) ? 'I dag' : dayKey(date) === dayKey(new Date(now.getTime() + 86_400_000)) ? 'I morgen' : date.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'short' });
 const timeLabel = (value?: string) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '';
 
-type Variant = 'B' | 'C';
 type Scenario = 'calm' | 'arrival' | 'doorbell' | 'warning';
 type Period = 'now' | 'later' | 'tomorrow' | 'week';
 type Detail = { title: string; icon: string; body: ReactNode };
@@ -26,6 +26,7 @@ type PrototypeProps = {
   openKlaraAi: () => void;
   openDeparture: () => void;
   hasDepartureBriefing: boolean;
+  departureBriefings?: DepartureBriefingPayload;
   action: (key: DashboardAction) => void;
 };
 
@@ -41,9 +42,9 @@ function Surface({ icon, eyebrow, title, className = '', onClick, children }: { 
   return onClick ? <button type="button" className={`ppf-surface ${className}`} onClick={onClick}>{content}</button> : <section className={`ppf-surface ${className}`}>{content}</section>;
 }
 
-function PeriodTabs({ period, setPeriod }: { period: Period; setPeriod: (value: Period) => void }) {
-  const periods: Array<[Period, string, string]> = [['now', 'Nå', 'radio_button_checked'], ['later', 'Senere', 'schedule'], ['tomorrow', 'I morgen', 'wb_twilight'], ['week', 'Uken', 'date_range']];
-  return <div className="ppf-period-tabs" role="tablist" aria-label="Tidsperiode">{periods.map(([value, label, icon]) => <button type="button" role="tab" aria-selected={period === value} className={period === value ? 'is-active' : ''} key={value} onClick={() => setPeriod(value)}><Icon>{icon}</Icon><span>{label}</span></button>)}</div>;
+function FutureHorizon({ period, setPeriod }: { period: Period; setPeriod: (value: Period) => void }) {
+  const periods: Array<[Period, string]> = [['later', 'Resten av dagen'], ['tomorrow', 'I morgen'], ['week', '7 dager']];
+  return <div className="ppf-future-horizon"><small>Se fremover</small><div role="tablist" aria-label="Velg hvor langt frem kalenderen skal vise">{periods.map(([value, label]) => <button type="button" role="tab" aria-selected={period === value} className={period === value ? 'is-active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}</div></div>;
 }
 
 function WeatherFocus({ states, period, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'> & { period: Period }) {
@@ -83,12 +84,19 @@ function UrgentStrip({ states, scenario, openDetail }: { states: PrototypeProps[
 
 function ArrivalEvidence({ scenario, openDetail }: { scenario: Scenario; openDetail: (detail: Detail) => void }) {
   if (scenario !== 'arrival') return null;
-  return <Surface icon="history" eyebrow="Siden dere dro" title="2 hendelser ved huset" className="ppf-past">
+  return <Surface icon="videocam" eyebrow="Kamera utløst" title="Aktivitet ved huset" className="ppf-camera-activity">
     <div className="ppf-capture-row">{[
       { time: '14:42', title: 'Bil registrert', path: '/api/courtyard-camera/stream', icon: 'directions_car' },
       { time: '16:08', title: 'Person ved inngangen', path: '/api/camera/stream', icon: 'person' },
     ].map((capture) => <button type="button" key={capture.time} onClick={() => openDetail({ title: capture.title, icon: capture.icon, body: <div className="ppf-large-capture"><img src={capture.path} alt={capture.title}/><p>Frigate-hendelse · {capture.time}. I en produksjonsversjon vises lagret snapshot, sone, kamera og hendelsesvarighet her.</p></div> })}><img src={capture.path} alt=""/><span><b>{capture.time}</b><small>{capture.title}</small></span></button>)}</div>
   </Surface>;
+}
+
+function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBriefingPayload; openDeparture: () => void }) {
+  const trip = payload?.briefings[0];
+  if (!trip) return null;
+  const departure = trip.departureAt ? timeLabel(trip.departureAt) : undefined;
+  return <button type="button" className="ppf-departure-preview" onClick={openDeparture}><span className="ppf-surface-icon"><Icon>route</Icon></span><span><small>Avreisebriefing klar</small><strong>{trip.eventTitle}</strong><em>{departure ? `Dra ca. ${departure}` : 'Åpne for reisetid, bilvalg og vær'}</em></span><Icon>chevron_right</Icon></button>;
 }
 
 type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
@@ -139,7 +147,7 @@ function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']
 function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {
   const now = new Date();
   const items = agendaItems(states, now);
-  const filtered = items.filter((item) => period === 'now' ? dayKey(item.date) === dayKey(now) : period === 'later' ? item.date.getTime() < now.getTime() + 2 * 86_400_000 : period === 'tomorrow' ? dayKey(item.date) === dayKey(new Date(now.getTime() + 86_400_000)) : item.date.getTime() < now.getTime() + 7 * 86_400_000).slice(0, 7);
+  const filtered = items.filter((item) => period === 'now' || period === 'later' ? dayKey(item.date) === dayKey(now) : period === 'tomorrow' ? dayKey(item.date) === dayKey(new Date(now.getTime() + 86_400_000)) : item.date.getTime() < now.getTime() + 7 * 86_400_000).slice(0, 7);
   const grouped = Object.entries(filtered.reduce<Record<string, AgendaItem[]>>((days, item) => { (days[dayKey(item.date)] ??= []).push(item); return days; }, {}));
   return <Surface icon="calendar_month" eyebrow="Neste" title={period === 'week' ? 'Dette skjer denne uken' : 'Det familien må vite'} className="ppf-agenda">
     <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => item.briefing && hasDepartureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{(item.briefing || (hasDepartureBriefing && /reise|tur/i.test(item.title))) && <em title="Reisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}</div>
@@ -175,18 +183,14 @@ function ContextNudges({ states, openVehicles }: Pick<PrototypeProps, 'states' |
 function BottomControls(props: PrototypeProps) {
   const locked = stateValue(props.states.frontDoorLock) === 'locked';
   const securityOn = Number(stateValue(props.states.securityMode)) > 0;
-  const controls: Array<[string, string, () => void, boolean?]> = [
-    ['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles],
-    [locked ? 'lock' : 'lock_open', locked ? 'Låst' : 'Lås', () => props.action(locked ? 'unlockDoor' : 'lockDoor'), locked], ['shield', securityOn ? 'Overvåket' : 'Overvåk', () => props.action('securityMode'), securityOn], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi],
-  ];
-  return <nav className="ppf-bottom-controls" aria-label="Hjemkontroller">{controls.map(([icon, label, action, active]) => <button type="button" key={label} className={active ? 'is-active' : ''} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}</nav>;
+  const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi]];
+  return <nav className="ppf-bottom-controls" aria-label="Hjemkontroller"><div className="ppf-home-controls">{controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}</div><div className="ppf-safety-controls" aria-label="Sikkerhet"><button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button><button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button></div></nav>;
 }
 
-function PrototypeSwitcher({ variant, scenario }: { variant: Variant; scenario: Scenario }) {
-  const variants: Variant[] = ['B', 'C']; const scenarios: Scenario[] = ['calm', 'arrival', 'doorbell', 'warning'];
-  const update = (nextVariant = variant, nextScenario = scenario) => { const params = new URLSearchParams(window.location.search); params.set('variant', nextVariant); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
-  const index = variants.indexOf(variant);
-  return <aside className="ppf-prototype-switcher" aria-label="Prototypevelger"><button type="button" aria-label="Forrige variant" onClick={() => update(variants[(index + variants.length - 1) % variants.length])}><Icon>arrow_back</Icon></button><span><small>Prototype v2</small><b>{variant} · {variant === 'B' ? 'Briefingstrøm' : 'Tidssoner'}</b></span><button type="button" aria-label="Neste variant" onClick={() => update(variants[(index + 1) % variants.length])}><Icon>arrow_forward</Icon></button><select aria-label="Demoscenario" value={scenario} onChange={(event) => update(variant, event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Hjemkomst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
+function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
+  const scenarios: Scenario[] = ['calm', 'arrival', 'doorbell', 'warning'];
+  const update = (nextScenario: Scenario) => { const params = new URLSearchParams(window.location.search); params.set('variant', 'C'); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
+  return <aside className="ppf-prototype-switcher" aria-label="Prototypescenario"><span><small>Prototype v3</small><b>C · Tidssoner</b></span><select aria-label="Vis dynamisk tilstand" value={scenario} onChange={(event) => update(event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Kameraer utløst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
 }
 
 function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
@@ -194,9 +198,9 @@ function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
-  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { variant: (['B', 'C'].includes(params.get('variant') ?? '') ? params.get('variant') : 'B') as Variant, scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'arrival') as Scenario }; };
+  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'arrival') as Scenario }; };
   const [query, setQuery] = useState(readQuery);
-  const [period, setPeriod] = useState<Period>('now');
+  const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
   const [doorbellOpen, setDoorbellOpen] = useState(query.scenario === 'doorbell');
   useEffect(() => { document.documentElement.classList.add('prototype-active'); document.body.classList.add('prototype-active'); const sync = () => setQuery(readQuery()); window.addEventListener('popstate', sync); return () => { document.documentElement.classList.remove('prototype-active'); document.body.classList.remove('prototype-active'); window.removeEventListener('popstate', sync); }; }, []);
@@ -205,23 +209,20 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const now = useMemo(() => new Date(), [period]);
   const isWorkday = now.getDay() >= 1 && now.getDay() <= 5;
   const common = { states: props.states, period, openDetail: setDetail };
-  const briefingTitle = now.getHours() < 10 ? 'Morgenbriefing' : now.getHours() < 17 ? 'Dagsbriefing' : now.getHours() < 23 ? 'Kveldsbriefing' : 'Nattbriefing';
-  const header = <header className="ppf-header"><div className="ppf-briefing-identity"><span><Icon filled>auto_awesome</Icon></span><div><small>Klara AI · hjemmebriefing</small><h1>{briefingTitle}</h1></div></div><div className="ppf-header-context"><span><i/>Følger dagen</span><b>{isWorkday ? 'Arbeidsdag' : 'Fridag'}</b><time>{now.toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })}</time></div></header>;
-  const weather = <WeatherFocus states={props.states} period={period} showWeather={props.showWeather}/>;
+  const header = <header className="ppf-v3-header"><div className="ppf-v3-brand"><span><Icon filled>auto_awesome</Icon></span><div><small>Klara AI</small><strong>Hjemmeoversikt</strong></div></div><time><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time><div className="ppf-v3-day"><i/><span><small>I dag</small><strong>{isWorkday ? 'Arbeidsdag' : 'Fridag'}</strong></span></div></header>;
+  const weather = <WeatherFocus states={props.states} period="now" showWeather={props.showWeather}/>;
   const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
-  const past = query.scenario === 'arrival'
-    ? <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>
-    : <p className="ppf-stream-empty">Ingen hendelser som trenger oppmerksomhet.</p>;
+  const past = <p className="ppf-stream-empty">Ingen hendelser som trenger oppmerksomhet.</p>;
+  const cameras = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles}/>;
   const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
-  return <div className={`main-dashboard-prototype ppf-variant-${query.variant.toLowerCase()}`}>
+  return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    {query.variant === 'B' && <><div className="ppf-b-head">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-b-stream"><section className="ppf-stream-label ppf-stream-past-label"><Icon>history</Icon><span><small>Fortid</small><strong>Det som har skjedd</strong></span></section>{past}<section className="ppf-stream-label ppf-stream-now-label"><Icon>radio_button_checked</Icon><span><small>Nå</small><strong>Hjemmet akkurat nå</strong></span></section>{weather}{nudges}{rooms}<section className="ppf-stream-label ppf-stream-future-label"><Icon>east</Icon><span><small>Fremover</small><strong>Dette skjer</strong></span></section>{agenda}<div className="ppf-b-pair">{prepare}{messages}</div></div></>}
-    {query.variant === 'C' && <><div className="ppf-c-head">{header}<PeriodTabs period={period} setPeriod={setPeriod}/></div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><h2><Icon>east</Icon>Dette skjer</h2>{agenda}{prepare}</section></div></>}
+    <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
-    <PrototypeSwitcher variant={query.variant} scenario={query.scenario}/>
+    <PrototypeSwitcher scenario={query.scenario}/>
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
     {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
   </div>;
