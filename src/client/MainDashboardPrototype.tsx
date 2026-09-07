@@ -97,6 +97,8 @@ function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBrief
 type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
 type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string };
 const isMessageLike = (item: { title: string; details?: string }) => /god helg|i dag har vi|vi var |nyhetsbrev|brev|oppslag|referat|ukeplan|informasjon fra/i.test(item.title) || (item.details?.length ?? 0) > 140;
+const practicalKindergartenSignals = /\b(?:tur(?:dag)?|utflukt|skitur|ski(?:dag)?|svømm(?:ing)?|foreldremøte|foreldresamtale|planleggingsdag|dugnad|temadag|sommerfest|juleavslutning|avslutning|karneval|teater|konsert|fotografering|overnatting|sovedag|stengt|fridag|husk|ta med|medbring|lever(?:e|ing)?|hent(?:e|ing)?|påmelding|klær|utstyr|sekk|matpakke|regntøy|gummistøvler|badetøy)\b/i;
+const isPracticalKindergartenItem = (item: MyKidKindergartenItem) => practicalKindergartenSignals.test(`${item.title} ${item.details ?? ''}`);
 const planDate = (date: string, time?: string): Date => {
   if (time && !Number.isNaN(Date.parse(time))) return new Date(time);
   const match = time?.match(/^(\d{1,2}):(\d{2})/);
@@ -112,7 +114,7 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
   const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
   const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? []), ...(school?.homework ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kinderItems = [...(kindergarten?.today ?? []), ...(kindergarten?.events ?? []), ...(kindergarten?.birthdays ?? [])].flatMap((item: MyKidKindergartenItem): AgendaItem[] => isMessageLike(item) || !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const kinderItems = [...(kindergarten?.today ?? []), ...(kindergarten?.events ?? [])].filter(isPracticalKindergartenItem).flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const future = [...calendar, ...schoolItems, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
   return future.length ? future : [
