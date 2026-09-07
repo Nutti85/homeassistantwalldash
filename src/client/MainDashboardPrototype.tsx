@@ -95,9 +95,18 @@ function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBrief
 }
 
 type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
-type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string };
+type FamilyMessageFreshness = 'today' | 'dated' | 'persistent';
+type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string; freshness: FamilyMessageFreshness };
 type FamilySource = FamilyMessage['source'];
 const isMessageLike = (item: { title: string; details?: string }) => /god helg|i dag har vi|vi var |nyhetsbrev|brev|oppslag|referat|ukeplan|informasjon fra/i.test(item.title) || (item.details?.length ?? 0) > 140;
+const osloWeekday = (date: Date): string => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', weekday: 'short' }).format(date);
+const isStaleFamilyItem = (item: { title: string; details?: string; date?: string }, freshness: FamilyMessageFreshness, now: Date): boolean => {
+  const content = `${item.title} ${item.details ?? ''}`;
+  if (/\bgod\s+helg\b/i.test(content) && !['Fri', 'Sat', 'Sun'].includes(osloWeekday(now))) return true;
+  if (freshness === 'today' && item.date && !Number.isNaN(Date.parse(item.date))) return dayKey(new Date(item.date)) !== dayKey(now);
+  if (freshness === 'dated' && item.date && !Number.isNaN(Date.parse(item.date))) return dayKey(new Date(item.date)) < dayKey(now);
+  return false;
+};
 const practicalKindergartenSignals = /\b(?:tur(?:dag)?|utflukt|skitur|ski(?:dag)?|svømm(?:ing)?|foreldremøte|foreldresamtale|planleggingsdag|dugnad|temadag|sommerfest|juleavslutning|avslutning|karneval|teater|konsert|fotografering|overnatting|sovedag|stengt|fridag|husk|ta med|medbring|lever(?:e|ing)?|hent(?:e|ing)?|påmelding|klær|utstyr|sekk|matpakke|regntøy|gummistøvler|badetøy)\b/i;
 const isPracticalKindergartenItem = (item: MyKidKindergartenItem) => practicalKindergartenSignals.test(`${item.title} ${item.details ?? ''}`);
 const planDate = (date: string, time?: string): Date => {
@@ -125,14 +134,20 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
   ];
 }
 
-function familyMessages(states: PrototypeProps['states']): FamilyMessage[] {
+function familyMessages(states: PrototypeProps['states'], now = new Date()): FamilyMessage[] {
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kindergartenMessages = [...(kindergarten?.noticeboard ?? []), ...(kindergarten?.newsletters ?? []), ...(kindergarten?.weeklyPlans ?? []), ...(kindergarten?.today ?? []).filter(isMessageLike), ...(kindergarten?.events ?? []).filter(isMessageLike)]
-    .map((item) => ({ source: 'Nicolai' as const, title: item.title, body: item.details, date: item.date ?? item.published_at }));
+  const kindergartenMessages = [
+    ...(kindergarten?.noticeboard ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
+    ...(kindergarten?.newsletters ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
+    ...(kindergarten?.weeklyPlans ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
+    ...(kindergarten?.today ?? []).filter(isMessageLike).map((item) => ({ item, freshness: 'today' as const })),
+    ...(kindergarten?.events ?? []).filter(isMessageLike).map((item) => ({ item, freshness: 'dated' as const })),
+  ].map(({ item, freshness }) => ({ source: 'Nicolai' as const, title: item.title, body: item.details, date: item.date ?? item.published_at, freshness }));
   const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
-  const schoolMessages = (school?.messages ?? []).map((message) => ({ source: 'Jacob' as const, title: message.length > 54 ? `${message.slice(0, 51)}…` : message, body: message, date: school?.source_updated_at }));
+  const schoolMessages = (school?.messages ?? []).map((message) => ({ source: 'Jacob' as const, title: message.length > 54 ? `${message.slice(0, 51)}…` : message, body: message, date: school?.source_updated_at, freshness: 'persistent' as const }));
   const messages = [...new Map([...kindergartenMessages, ...schoolMessages]
     .map((message) => [`${message.source}:${message.title}:${message.body ?? ''}`, message])).values()]
+    .filter((message) => !isStaleFamilyItem(message, message.freshness, now))
     .sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
   return messages;
 }
@@ -159,15 +174,15 @@ const chronologicalPlanItems = (items: JacobWeeklyPlanSnapshot['events']): Jacob
   return (leftOrder === -1 ? weekdayOrder.length : leftOrder) - (rightOrder === -1 ? weekdayOrder.length : rightOrder);
 });
 const localDayKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const mykidDetailSections = (plan: MyKidKindergartenSnapshot) => {
-  const today = localDayKey(new Date());
+const mykidDetailSections = (plan: MyKidKindergartenSnapshot, now = new Date()) => {
+  const today = localDayKey(now);
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowKey = localDayKey(tomorrow);
   const dated = (date: string) => plan.events.filter((item) => item.date?.slice(0, 10) === date);
   const newsletters = [...plan.newsletters].sort((left, right) => Date.parse(right.published_at ?? right.date ?? '') - Date.parse(left.published_at ?? left.date ?? ''));
   return {
-    today: [...plan.today, ...dated(today)].filter((item, index, items) => items.findIndex((candidate) => `${candidate.date ?? ''}-${candidate.title}` === `${item.date ?? ''}-${item.title}`) === index),
+    today: [...plan.today.filter((item) => !isStaleFamilyItem(item, 'today', now)), ...dated(today)].filter((item, index, items) => items.findIndex((candidate) => `${candidate.date ?? ''}-${candidate.title}` === `${item.date ?? ''}-${item.title}`) === index),
     tomorrow: dated(tomorrowKey),
     upcoming: plan.events.filter((item) => item.date?.slice(0, 10) !== today && item.date?.slice(0, 10) !== tomorrowKey),
     newsletters,
@@ -203,7 +218,7 @@ function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']
   const messages = familyMessages(states);
   const sources: Array<{ source: FamilySource; icon: string }> = [{ source: 'Jacob', icon: 'school' }, { source: 'Nicolai', icon: 'child_care' }];
   const openFamilyDetail = (source: FamilySource, icon: string) => openDetail({ title: familyDetailTitle(source, states), icon, body: <FamilyDetailBody source={source} states={states}/> });
-  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><span><strong>{message.title}</strong><small>{message.body ?? 'Trykk for å lese hele beskjeden'}</small></span><Icon>chevron_right</Icon></button>;
+  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span><strong>{message.title}</strong><small>{message.body ?? 'Trykk for å lese hele beskjeden'}</small></span><Icon>chevron_right</Icon></button>;
   return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-sections">{sources.map(({ source, icon }) => { const sourceMessages = messages.filter((message) => message.source === source).slice(0, 3); return <section key={source} className="ppf-message-section" aria-label={`${source} beskjeder`}><h3 className="ppf-message-section-heading"><button type="button" aria-label={`Åpne full oversikt for ${source}`} onClick={() => openFamilyDetail(source, icon)}><span className={`ppf-source ppf-source-${source.toLowerCase()}`}>{source}</span><Icon>arrow_outward</Icon></button></h3>{sourceMessages.length ? <div className="ppf-message-list">{sourceMessages.map(renderMessage)}</div> : <p className="ppf-message-empty">Ingen beskjeder</p>}</section>; })}</div></Surface>;
 }
 

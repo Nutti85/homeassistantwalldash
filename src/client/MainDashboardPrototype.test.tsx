@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
@@ -93,5 +93,38 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     fireEvent.click(jacobHeader);
     expect(screen.getByRole('dialog', { name: 'Jacobs skoleplan – uke 36' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Meldinger til hjemmet' })).toBeInTheDocument();
+  });
+
+  it('removes a stale weekend greeting and keeps the source label in the section header', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
+
+    render(<MainDashboardPrototype
+      states={{
+        mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
+          today: [
+            { title: 'God helg til dere alle! ❤️', details: 'God helg til dere alle! ❤️', date: '2026-09-07' },
+            { title: 'I dag har vi laget salatbuffé', details: 'I dag har vi laget salatbuffé og lekt med togbane.', date: '2026-09-07' },
+          ],
+          events: [], noticeboard: [], weekly_plans: [], newsletters: [], birthdays: [],
+        }),
+        jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Oppdatert', { events: [], reminders: [], homework: [], school_schedule: [], topics: [], messages: [] }),
+      }}
+      showWeather={() => {}}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={() => {}}
+      hasDepartureBriefing={false}
+      action={() => {}}
+    />);
+
+    const section = screen.getByRole('region', { name: 'Nicolai beskjeder' });
+    expect(within(section).queryAllByText('God helg til dere alle! ❤️')).toHaveLength(0);
+    expect(within(section).getByText('I dag har vi laget salatbuffé')).toBeInTheDocument();
+    expect(within(section).getAllByText('Nicolai')).toHaveLength(1);
   });
 });
