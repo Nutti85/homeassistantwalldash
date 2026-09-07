@@ -33,3 +33,11 @@
 - Do not assume the local Docker daemon controls the deployed dashboard.
 - Re-discover the Portainer environment and stack IDs before mutating them; target the stack named `homeassistant-wall-dashboard`.
 - Preserve existing Portainer environment variables, especially Home Assistant credentials, during stack updates.
+
+## V2 completion and deployment
+
+- After every completed implementation change on `codex/dashboard-prototype-v2`, run `npm.cmd test`, `npm.cmd run build`, and `git diff --check` before committing.
+- Commit the verified changes with a descriptive message and push `codex/dashboard-prototype-v2` to `origin`.
+- Re-discover the Portainer environment and local stack immediately before deployment. Target only the stack named `homeassistant-wall-dashboard-v2`; do not mutate the V1 `homeassistant-wall-dashboard` stack.
+- Restart the V2 stack through Portainer by stopping and starting the discovered stack, preserving every existing stack environment variable.
+- Verify the V2 stack is active and check `http://192.168.1.50:3200/health` and `http://192.168.1.50:3200/` before reporting completion.
