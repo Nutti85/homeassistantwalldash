@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
-import { calendarEvents, conditionIcon, conditionLabel, currentTemperatureNumber, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
+import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
+import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
@@ -37,36 +38,30 @@ const roomDefinitions: Array<{ id: string; name: string; icon: string; type: Cli
   { id: 'bathroom', name: 'Bad', icon: 'bathroom', type: 'bathroom', values: [['Temperatur', 'temperature', 'roomFirstFloorBathroom', '°'], ['Fukt', 'humidity', 'roomFirstFloorBathroomHumidity', ' %']] },
 ];
 
-function Surface({ icon, eyebrow, title, className = '', onClick, children }: { icon: string; eyebrow?: string; title: string; className?: string; onClick?: () => void; children: ReactNode }) {
-  const content = <><header><span className="ppf-surface-icon"><Icon>{icon}</Icon></span><div>{eyebrow && <small>{eyebrow}</small>}<h2>{title}</h2></div>{onClick && <Icon>arrow_outward</Icon>}</header>{children}</>;
+function Surface({ icon, eyebrow, title, className = '', onClick, headerAction, children }: { icon: string; eyebrow?: string; title: string; className?: string; onClick?: () => void; headerAction?: () => void; children: ReactNode }) {
+  const content = <><header><span className="ppf-surface-icon"><Icon>{icon}</Icon></span><div>{eyebrow && <small>{eyebrow}</small>}<h2>{title}</h2></div>{headerAction ? <button type="button" className="ppf-surface-open" aria-label={`Vis detaljer for ${title}`} onClick={headerAction}><Icon>arrow_outward</Icon></button> : onClick && <Icon>arrow_outward</Icon>}</header>{children}</>;
   return onClick ? <button type="button" className={`ppf-surface ${className}`} onClick={onClick}>{content}</button> : <section className={`ppf-surface ${className}`}>{content}</section>;
 }
 
 function FutureHorizon({ period, setPeriod }: { period: Period; setPeriod: (value: Period) => void }) {
   const periods: Array<[Period, string]> = [['later', 'Resten av dagen'], ['tomorrow', 'I morgen'], ['week', '7 dager']];
-  return <div className="ppf-future-horizon"><small>Se fremover</small><div role="tablist" aria-label="Velg hvor langt frem kalenderen skal vise">{periods.map(([value, label]) => <button type="button" role="tab" aria-selected={period === value} className={period === value ? 'is-active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}</div></div>;
+  return <div className="ppf-future-horizon" role="tablist" aria-label="Velg hvor langt frem kalenderen skal vise">{periods.map(([value, label]) => <button type="button" role="tab" aria-selected={period === value} className={period === value ? 'is-active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}</div>;
 }
 
-function WeatherFocus({ states, period, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'> & { period: Period }) {
-  const hourly = forecastPoints(states.weatherHourly);
-  const daily = forecastPoints(states.weatherDaily);
+function WeatherFocus({ states, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'>) {
   const now = new Date();
-  const tomorrow = dayKey(new Date(now.getTime() + 86_400_000));
-  const point = period === 'now' ? hourly.find((item) => new Date(item.datetime) >= now) : period === 'tomorrow' ? daily.find((item) => dayKey(new Date(item.datetime)) === tomorrow) : period === 'week' ? daily[1] : hourly.find((item) => new Date(item.datetime).getHours() >= 15) ?? hourly[0];
-  const condition = point?.condition ?? stateValue(states.weatherDaily);
-  const temperature = period === 'now' ? currentTemperatureNumber(states.weatherDaily) ?? currentTemperatureNumber(states.outdoor) : point?.temperature;
-  const wind = point?.windSpeed ?? numberState(states.netatmoWindSpeed);
-  const gust = point?.windGustSpeed ?? numberState(states.netatmoWindGust);
+  const model = buildLiveBriefingViewModel(currentLiveBriefingMode(now), states, now);
+  const metric = (id: 'weather' | 'temperature' | 'wind' | 'rain' | 'clothing') => model.metrics.find((item) => item.id === id)!;
+  const weather = metric('weather'); const temperature = metric('temperature'); const wind = metric('wind'); const rain = metric('rain'); const clothing = metric('clothing');
   const direction = stateValue(states.netatmoWindDirection) ?? '—';
-  const rain = point?.precipitation;
-  const clothing = temperature === undefined ? 'Se ut før dere går' : temperature < 5 ? 'Varm jakke og lue' : temperature < 14 || (rain ?? 0) > .4 ? 'Jakke og regntøy' : 'Lett jakke eller genser';
-  return <Surface icon="partly_cloudy_day" eyebrow={period === 'now' ? 'Forhold akkurat nå' : 'Forhold i perioden'} title="Vær og forhold" className="ppf-weather" onClick={showWeather}>
+  const clothingIcons = [clothing.icon, ...(/regntøy|paraply/i.test(clothing.context) ? ['umbrella'] : []), ...(/vindtett/i.test(clothing.context) ? ['air'] : [])];
+  return <Surface icon="partly_cloudy_day" eyebrow={model.period.label} title="Vær og forhold" className="ppf-weather" onClick={showWeather}>
     <div className="ppf-weather-tiles">
-      <span><Icon>{conditionIcon(condition)}</Icon><small>Vær</small><b>{conditionLabel(condition)}</b><em>{period === 'now' ? 'nå' : 'prognose'}</em></span>
-      <span><Icon>thermostat</Icon><small>Temperatur</small><b>{reading(temperature, '°C')}</b><em>{point?.templow === undefined ? 'føles lokalt' : `lavest ${reading(point.templow, '°')}`}</em></span>
-      <span><Icon>air</Icon><small>Vind</small><b>{reading(wind, ' m/s')}</b><em>{direction} · kast {reading(gust, ' m/s')}</em></span>
-      <span><Icon>rainy</Icon><small>Regn</small><b>{reading(rain, ' mm')}</b><em>i perioden</em></span>
-      <span><Icon>checkroom</Icon><small>Klær</small><b>{clothing}</b><em>for perioden</em></span>
+      <span><Icon>{weather.icon}</Icon><small>Vær</small><b>{weather.value}</b><em>{weather.context}</em></span>
+      <span><Icon>thermostat</Icon><small>Temperatur</small><b>{temperature.value}</b><em>{temperature.context}</em></span>
+      <span><Icon>air</Icon><small>Vind</small><b>{wind.value}</b><em>{direction} · {wind.context}</em></span>
+      <span><Icon>rainy</Icon><small>Regn</small><b>{rain.value}</b><em>{rain.context}</em></span>
+      <span className="ppf-clothing-tile" role="img" aria-label={`${clothing.value}. ${clothing.context}`} title={`${clothing.value}. ${clothing.context}`}><small>Klær</small><b className="ppf-clothing-icons">{clothingIcons.map((icon, index) => <Icon key={`${icon}-${index}`}>{icon}</Icon>)}</b></span>
     </div>
   </Surface>;
 }
@@ -147,10 +142,12 @@ function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']
 function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {
   const now = new Date();
   const items = agendaItems(states, now);
-  const filtered = items.filter((item) => period === 'now' || period === 'later' ? dayKey(item.date) === dayKey(now) : period === 'tomorrow' ? dayKey(item.date) === dayKey(new Date(now.getTime() + 86_400_000)) : item.date.getTime() < now.getTime() + 7 * 86_400_000).slice(0, 7);
-  const grouped = Object.entries(filtered.reduce<Record<string, AgendaItem[]>>((days, item) => { (days[dayKey(item.date)] ??= []).push(item); return days; }, {}));
+  const filtered = items.filter((item) => period === 'now' || period === 'later' ? dayKey(item.date) === dayKey(now) : period === 'tomorrow' ? dayKey(item.date) === dayKey(new Date(now.getTime() + 86_400_000)) : item.date.getTime() < now.getTime() + 7 * 86_400_000);
+  const visible = filtered.slice(0, period === 'week' ? 1 : 2);
+  const grouped = Object.entries(visible.reduce<Record<string, AgendaItem[]>>((days, item) => { (days[dayKey(item.date)] ??= []).push(item); return days; }, {}));
+  const openAll = () => openDetail({ title: period === 'week' ? 'Dette skjer de neste 7 dagene' : period === 'tomorrow' ? 'Dette skjer i morgen' : 'Dette skjer resten av dagen', icon: 'calendar_month', body: <div className="ppf-agenda-modal-list">{filtered.map((item, index) => <div key={`${item.source}-${item.title}-${index}`}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><small>{dayLabel(item.date, now)} · {item.time || 'Hele dagen'}</small><strong>{item.title}</strong>{item.detail && <p>{item.detail}</p>}</span></div>)}</div> });
   return <Surface icon="calendar_month" eyebrow="Neste" title={period === 'week' ? 'Dette skjer denne uken' : 'Det familien må vite'} className="ppf-agenda">
-    <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => item.briefing && hasDepartureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{(item.briefing || (hasDepartureBriefing && /reise|tur/i.test(item.title))) && <em title="Reisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}</div>
+    <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => item.briefing && hasDepartureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{(item.briefing || (hasDepartureBriefing && /reise|tur/i.test(item.title))) && <em title="Reisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}{filtered.length > visible.length && <button type="button" className="ppf-agenda-more" onClick={openAll}>+{filtered.length - visible.length} flere <Icon>arrow_outward</Icon></button>}</div>
   </Surface>;
 }
 
@@ -168,16 +165,17 @@ function RoomExceptions({ states, openDetail }: { states: PrototypeProps['states
     return exceptions.length ? [{ ...room, readings, exceptions }] : [];
   });
   const visible = rooms.length ? rooms : [{ ...roomDefinitions[2], readings: [{ label: 'CO₂', metric: 'co2' as const, value: 1180, unit: ' ppm', status: 'high_warning' as const }], exceptions: [{ label: 'CO₂', metric: 'co2' as const, value: 1180, unit: ' ppm', status: 'high_warning' as const }] }];
-  return <Surface icon="home_health" eyebrow="Avvik først" title="Rom som trenger oppmerksomhet" className="ppf-rooms"><div className="ppf-room-list">{visible.slice(0, 3).map((room) => <button type="button" key={room.id} onClick={() => openDetail({ title: room.name, icon: room.icon, body: <div className="ppf-room-details">{room.readings.map((item) => <span key={item.label}><small>{item.label}</small><b>{reading(item.value, item.unit)}</b></span>)}</div> })}><Icon>{room.icon}</Icon><span><strong>{room.name}</strong><small>{room.exceptions.map((item) => `${item.label} ${reading(item.value, item.unit)}`).join(' · ')}</small></span><i/><Icon>chevron_right</Icon></button>)}</div></Surface>;
+  const roomSummary = <div className="ppf-room-summary">{visible.map((room) => <section key={room.id}><h3><Icon>{room.icon}</Icon>{room.name}</h3><div className="ppf-room-details">{room.readings.map((item) => <span key={item.label}><small>{item.label}</small><b>{reading(item.value, item.unit)}</b></span>)}</div></section>)}</div>;
+  return <Surface icon="home_health" eyebrow="Avvik først" title="Rom som trenger oppmerksomhet" className="ppf-rooms" headerAction={() => openDetail({ title: 'Rom som trenger oppmerksomhet', icon: 'home_health', body: roomSummary })}><div className="ppf-room-list">{visible.slice(0, 3).map((room) => <button type="button" key={room.id} onClick={() => openDetail({ title: room.name, icon: room.icon, body: <div className="ppf-room-details">{room.readings.map((item) => <span key={item.label}><small>{item.label}</small><b>{reading(item.value, item.unit)}</b></span>)}</div> })}><Icon>{room.icon}</Icon><span><strong>{room.name}</strong><small>{room.exceptions.map((item) => `${item.label} ${reading(item.value, item.unit)}`).join(' · ')}</small></span><i/><Icon>chevron_right</Icon></button>)}</div></Surface>;
 }
 
-function ContextNudges({ states, openVehicles }: Pick<PrototypeProps, 'states' | 'openVehicles'>) {
+function ContextNudges({ states, openVehicles, openDetail }: Pick<PrototypeProps, 'states' | 'openVehicles'> & { openDetail: (detail: Detail) => void }) {
   const now = new Date();
   const workdayMorning = now.getDay() >= 1 && now.getDay() <= 5 && now.getHours() < 10;
   const batteries = [{ name: 'Mercedes', value: numberState(states.carAndreasBattery) }, { name: 'Peugeot', value: numberState(states.carHegeBattery) }];
   const low = batteries.find((car) => car.value !== undefined && car.value < 30);
   const power = numberState(states.energyPower); const price = numberState(states.energyPrice);
-  return <div className="ppf-nudges">{workdayMorning && <button type="button" onClick={openVehicles}><Icon>route</Icon><span><small>Til jobb nå</small><b>{reading(numberState(states.andreasTravelTime), ' min')}</b></span></button>}{low && <button type="button" className="is-warning" onClick={openVehicles}><Icon>battery_alert</Icon><span><small>{low.name}</small><b>{reading(low.value, ' %')}</b></span></button>}<button type="button"><Icon>bolt</Icon><span><small>{price !== undefined && price < .8 ? 'Fint tidspunkt å bruke strøm' : 'Energi akkurat nå'}</small><b>{reading(power === undefined ? undefined : power / 1000, ' kW')} · {reading(price, ' kr')}</b></span></button></div>;
+  return <div className="ppf-nudges">{workdayMorning && <button type="button" onClick={openVehicles}><Icon>route</Icon><span><small>Til jobb nå</small><b>{reading(numberState(states.andreasTravelTime), ' min')}</b></span></button>}{low && <button type="button" className="is-warning" onClick={openVehicles}><Icon>battery_alert</Icon><span><small>{low.name}</small><b>{reading(low.value, ' %')}</b></span></button>}<button type="button" onClick={() => openDetail({ title: 'Strøm akkurat nå', icon: 'bolt', body: <><p>Huset bruker {reading(power === undefined ? undefined : power / 1000, ' kW')} akkurat nå. Strømprisen er {reading(price, ' kr/kWh')}.</p><dl className="ppf-detail-list"><div><dt>Effekt nå</dt><dd>{reading(power === undefined ? undefined : power / 1000, ' kW')}</dd></div><div><dt>Pris</dt><dd>{reading(price, ' kr/kWh')}</dd></div></dl></> })}><Icon>bolt</Icon><span><small>{price !== undefined && price < .8 ? 'Fint tidspunkt å bruke strøm' : 'Strøm akkurat nå'}</small><b>{reading(power === undefined ? undefined : power / 1000, ' kW')} · {reading(price, ' kr')}</b></span><Icon>arrow_outward</Icon></button></div>;
 }
 
 function BottomControls(props: PrototypeProps) {
@@ -198,7 +196,7 @@ function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
-  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'arrival') as Scenario }; };
+  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: import.meta.env.DEV || params.has('scenario') }; };
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
@@ -210,19 +208,19 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const isWorkday = now.getDay() >= 1 && now.getDay() <= 5;
   const common = { states: props.states, period, openDetail: setDetail };
   const header = <header className="ppf-v3-header"><div className="ppf-v3-brand"><span><Icon filled>auto_awesome</Icon></span><div><small>Klara AI</small><strong>Hjemmeoversikt</strong></div></div><time><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time><div className="ppf-v3-day"><i/><span><small>I dag</small><strong>{isWorkday ? 'Arbeidsdag' : 'Fridag'}</strong></span></div></header>;
-  const weather = <WeatherFocus states={props.states} period="now" showWeather={props.showWeather}/>;
+  const weather = <WeatherFocus states={props.states} showWeather={props.showWeather}/>;
   const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
   const past = <p className="ppf-stream-empty">Ingen hendelser som trenger oppmerksomhet.</p>;
   const cameras = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
-  const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles}/>;
+  const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
   const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
+    <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
-    <PrototypeSwitcher scenario={query.scenario}/>
+    {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
     {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
   </div>;

@@ -944,10 +944,11 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-v3-header>time span{margin-top:6px;color:#aeb8b2;font-size:11px;text-transform:capitalize}
 .ppf-v3-day{justify-self:end}
 .ppf-v3-day>i{width:8px;height:8px;border-radius:50%;background:#74c9a1;box-shadow:0 0 0 4px rgba(116,201,161,.12)}
-.ppf-future-horizon{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--ppf-line);border-radius:12px;background:rgba(255,255,255,.018)}
-.ppf-future-horizon>small{color:#929e98;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
-.ppf-future-horizon>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
-.ppf-future-horizon button{min-height:34px;padding:4px 7px;border-radius:8px;color:#9faaa4;font-size:10px;font-weight:650}
+.ppf-zone-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:0 4px}
+.ppf-zone-heading>h2{display:flex;align-items:center;gap:8px;flex:0 0 auto;color:#b9c5bf;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ppf-zone-heading>h2 .material-symbols-outlined{color:var(--ppf-warm);font-size:18px}
+.ppf-future-horizon{display:grid;grid-template-columns:repeat(3,minmax(0,auto));align-items:center;gap:3px;min-width:0}
+.ppf-future-horizon button{min-height:32px;padding:4px 8px;border-radius:8px;color:#9faaa4;font-size:9px;font-weight:650;white-space:nowrap}
 .ppf-future-horizon button.is-active{border:1px solid rgba(239,178,118,.35);background:rgba(239,178,118,.11);color:#f2c393}
 .ppf-departure-preview{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;min-height:76px;padding:10px 12px;border:1px solid rgba(142,226,178,.18);border-radius:13px;background:#182621;text-align:left}
 .ppf-departure-preview>span:nth-child(2){display:grid;min-width:0;gap:2px}
@@ -955,6 +956,18 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-departure-preview strong,.ppf-departure-preview em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ppf-departure-preview strong{font-size:13px}.ppf-departure-preview em{color:#a7b1ac;font-size:10px;font-style:normal}
 .ppf-camera-activity{border-color:rgba(244,177,123,.2);background:#1a2421}
+.ppf-clothing-tile{grid-template-rows:auto auto;align-content:center}
+.ppf-clothing-icons{display:flex;align-items:center;justify-content:center;gap:5px;color:var(--ppf-warm)}
+.ppf-clothing-icons .material-symbols-outlined{font-size:31px}
+.ppf-surface-open{display:grid;place-items:center;width:34px;min-width:34px;height:34px;min-height:34px;margin-left:auto;border-radius:9px;color:#8d9a94}
+.ppf-surface-open:hover,.ppf-surface-open:focus-visible{background:rgba(142,226,178,.09);color:#fff}
+.ppf-nudges button>.material-symbols-outlined:last-child{margin-left:auto;color:#718079;font-size:18px}
+.ppf-agenda-more{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:34px;margin-top:4px;border-top:1px solid var(--ppf-line);border-radius:0;color:#9fb0a8;font-size:10px;font-weight:700}
+.ppf-agenda-more .material-symbols-outlined{font-size:16px}
+.ppf-agenda-modal-list,.ppf-room-summary{display:grid;gap:10px}
+.ppf-agenda-modal-list>div{display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid var(--ppf-line)}
+.ppf-agenda-modal-list>div>span:last-child{display:grid;gap:3px}.ppf-agenda-modal-list small{color:var(--ppf-soft)}.ppf-agenda-modal-list p{margin:2px 0 0;color:#b9c4be;font-size:12px}
+.ppf-room-summary>section{padding-bottom:12px;border-bottom:1px solid var(--ppf-line)}.ppf-room-summary h3{display:flex;align-items:center;gap:8px;margin-bottom:8px}.ppf-room-summary h3 .material-symbols-outlined{color:var(--ppf-warm)}
 .ppf-bottom-controls{display:flex;grid-template-columns:none;gap:10px;padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
 .ppf-home-controls,.ppf-safety-controls{display:grid;padding:5px;border:1px solid rgba(213,236,225,.12);border-radius:13px;background:rgba(18,28,25,.96);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(18px)}
 .ppf-home-controls{grid-template-columns:repeat(6,minmax(0,1fr));min-width:0;flex:1}
