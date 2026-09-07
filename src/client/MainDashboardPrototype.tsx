@@ -1,5 +1,5 @@
 // PROTOTYPE V3: the selected time-zone direction, with scenario controls in ?scenario=.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DashboardAction, HomeAssistantState, JacobWeeklyPlanSnapshot, MyKidKindergartenItem, MyKidKindergartenSnapshot } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
@@ -214,11 +214,29 @@ const familyDetailTitle = (source: FamilySource, states: PrototypeProps['states'
   return week === undefined ? 'Jacobs skoleplan' : `Jacobs skoleplan – uke ${week}`;
 };
 
+function ScrollingMessageText({ children }: { children: string }) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const node = textRef.current;
+    if (!node) return;
+    const update = () => setOverflows(node.scrollWidth > node.clientWidth);
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [children]);
+
+  return <span ref={textRef} className={`ppf-message-marquee${overflows ? ' is-overflowing' : ''}`}>{overflows ? <span className="ppf-message-marquee-track"><span>{children}</span><span aria-hidden="true">{children}</span></span> : <span>{children}</span>}</span>;
+}
+
 function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']; openDetail: (detail: Detail) => void }) {
   const messages = familyMessages(states);
   const sources: Array<{ source: FamilySource; icon: string }> = [{ source: 'Jacob', icon: 'school' }, { source: 'Nicolai', icon: 'child_care' }];
   const openFamilyDetail = (source: FamilySource, icon: string) => openDetail({ title: familyDetailTitle(source, states), icon, body: <FamilyDetailBody source={source} states={states}/> });
-  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span><strong>{message.title}</strong><small>{message.body ?? 'Trykk for å lese hele beskjeden'}</small></span><Icon>chevron_right</Icon></button>;
+  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className="ppf-message-copy"><strong><ScrollingMessageText>{message.title}</ScrollingMessageText></strong><small><ScrollingMessageText>{message.body ?? 'Trykk for å lese hele beskjeden'}</ScrollingMessageText></small></span><Icon>chevron_right</Icon></button>;
   return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-sections">{sources.map(({ source, icon }) => { const sourceMessages = messages.filter((message) => message.source === source).slice(0, 3); return <section key={source} className="ppf-message-section" aria-label={`${source} beskjeder`}><h3 className="ppf-message-section-heading"><button type="button" aria-label={`Åpne full oversikt for ${source}`} onClick={() => openFamilyDetail(source, icon)}><span className={`ppf-source ppf-source-${source.toLowerCase()}`}>{source}</span><Icon>arrow_outward</Icon></button></h3>{sourceMessages.length ? <div className="ppf-message-list">{sourceMessages.map(renderMessage)}</div> : <p className="ppf-message-empty">Ingen beskjeder</p>}</section>; })}</div></Surface>;
 }
 
