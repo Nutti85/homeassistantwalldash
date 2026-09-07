@@ -1,6 +1,6 @@
 // PROTOTYPE V3: the selected time-zone direction, with scenario controls in ?scenario=.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
+import type { DashboardAction, HomeAssistantState, JacobWeeklyPlanSnapshot, MyKidKindergartenItem, MyKidKindergartenSnapshot } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
 import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
@@ -96,6 +96,7 @@ function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBrief
 
 type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
 type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string };
+type FamilySource = FamilyMessage['source'];
 const isMessageLike = (item: { title: string; details?: string }) => /god helg|i dag har vi|vi var |nyhetsbrev|brev|oppslag|referat|ukeplan|informasjon fra/i.test(item.title) || (item.details?.length ?? 0) > 140;
 const practicalKindergartenSignals = /\b(?:tur(?:dag)?|utflukt|skitur|ski(?:dag)?|svømm(?:ing)?|foreldremøte|foreldresamtale|planleggingsdag|dugnad|temadag|sommerfest|juleavslutning|avslutning|karneval|teater|konsert|fotografering|overnatting|sovedag|stengt|fridag|husk|ta med|medbring|lever(?:e|ing)?|hent(?:e|ing)?|påmelding|klær|utstyr|sekk|matpakke|regntøy|gummistøvler|badetøy)\b/i;
 const isPracticalKindergartenItem = (item: MyKidKindergartenItem) => practicalKindergartenSignals.test(`${item.title} ${item.details ?? ''}`);
@@ -133,12 +134,77 @@ function familyMessages(states: PrototypeProps['states']): FamilyMessage[] {
   const messages = [...new Map([...kindergartenMessages, ...schoolMessages]
     .map((message) => [`${message.source}:${message.title}:${message.body ?? ''}`, message])).values()]
     .sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
-  return messages.length ? messages : [{ source: 'Nicolai', title: 'God helg til dere alle! ❤️', body: 'Et lite brev fra barnehagen om uken som har gått.' }];
+  return messages;
 }
 
+const weekdayNames = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
+const planWeekNumber = (value: string | undefined): number | undefined => {
+  if (!value || Number.isNaN(Date.parse(value))) return undefined;
+  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+};
+const planItemWhen = (item: JacobWeeklyPlanSnapshot['events'][number]): string => {
+  const weekday = item.weekday?.toLocaleLowerCase('nb-NO').match(/søndag|mandag|tirsdag|onsdag|torsdag|fredag|lørdag/)?.[0];
+  if (weekday) return weekday;
+  if (!item.date || Number.isNaN(Date.parse(item.date))) return '';
+  return weekdayNames[new Date(`${item.date}T12:00:00`).getDay()];
+};
+const weekdayOrder = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag'];
+const chronologicalPlanItems = (items: JacobWeeklyPlanSnapshot['events']): JacobWeeklyPlanSnapshot['events'] => [...items].sort((left, right) => {
+  const leftOrder = weekdayOrder.indexOf(planItemWhen(left));
+  const rightOrder = weekdayOrder.indexOf(planItemWhen(right));
+  return (leftOrder === -1 ? weekdayOrder.length : leftOrder) - (rightOrder === -1 ? weekdayOrder.length : rightOrder);
+});
+const localDayKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const mykidDetailSections = (plan: MyKidKindergartenSnapshot) => {
+  const today = localDayKey(new Date());
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = localDayKey(tomorrow);
+  const dated = (date: string) => plan.events.filter((item) => item.date?.slice(0, 10) === date);
+  const newsletters = [...plan.newsletters].sort((left, right) => Date.parse(right.published_at ?? right.date ?? '') - Date.parse(left.published_at ?? left.date ?? ''));
+  return {
+    today: [...plan.today, ...dated(today)].filter((item, index, items) => items.findIndex((candidate) => `${candidate.date ?? ''}-${candidate.title}` === `${item.date ?? ''}-${item.title}`) === index),
+    tomorrow: dated(tomorrowKey),
+    upcoming: plan.events.filter((item) => item.date?.slice(0, 10) !== today && item.date?.slice(0, 10) !== tomorrowKey),
+    newsletters,
+  };
+};
+
+function FamilyDetailBody({ source, states }: { source: FamilySource; states: PrototypeProps['states'] }) {
+  const plan = source === 'Jacob' ? jacobWeeklyPlan(states.jacobWeeklyPlan) : mykidKindergarten(states.mykidKindergarten);
+  if (!plan) return <p className="ppf-family-detail-empty">Ingen {source === 'Jacob' ? 'skoleplan' : 'MyKid-informasjon'} er tilgjengelig ennå.</p>;
+
+  const renderJacobItems = (items: JacobWeeklyPlanSnapshot['events']) => items.length ? <ul className="ppf-family-detail-list">{chronologicalPlanItems(items).map((item, index) => <li key={`${item.date ?? item.weekday ?? 'item'}-${item.title}-${index}`}><span>{item.subject ?? planItemWhen(item)}</span><strong>{item.title}</strong>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen oppføringer.</p>;
+  const renderMyKidItems = (items: MyKidKindergartenSnapshot['events']) => items.length ? <ul className="ppf-family-detail-list">{items.map((item, index) => <li key={`${item.date ?? 'item'}-${item.title}-${index}`}><span>{item.date ?? item.time ?? ''}</span><strong>{item.title}</strong>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen oppføringer.</p>;
+
+  if (source === 'Jacob') {
+    const jacob = plan as JacobWeeklyPlanSnapshot;
+    return <div className="ppf-family-detail-body">{jacob.summary && <p className="ppf-family-detail-summary">{jacob.summary}</p>}<section><h3>Skoledager</h3>{jacob.school_schedule.length ? <ul className="ppf-family-detail-schedule">{jacob.school_schedule.map((item, index) => <li key={`${item.title}-${index}`}><strong>{weekdayNames[index + 1] ?? `Dag ${index + 1}`}</strong><span>{item.time ?? item.title}</span>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen timeplan.</p>}</section><section><h3>Hendelser</h3>{renderJacobItems(jacob.events)}</section><section><h3>Påminnelser</h3>{renderJacobItems(jacob.reminders)}</section><section><h3>Lekser</h3>{renderJacobItems(jacob.homework)}</section><section><h3>Temaer</h3>{jacob.topics.length ? <ul className="ppf-family-detail-notes">{jacob.topics.map((topic, index) => <li key={`${topic}-${index}`}>{topic}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen temaer.</p>}</section><section><h3>Meldinger til hjemmet</h3>{jacob.messages.length ? <ul className="ppf-family-detail-notes">{jacob.messages.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen meldinger.</p>}</section></div>;
+  }
+
+  const mykid = plan as MyKidKindergartenSnapshot;
+  const sections = mykidDetailSections(mykid);
+  return <div className="ppf-family-detail-body">{mykid.summary && <p className="ppf-family-detail-summary">{mykid.summary}</p>}<section><h3>I dag</h3>{renderMyKidItems(sections.today)}</section><section><h3>I morgen</h3>{renderMyKidItems(sections.tomorrow)}</section><section><h3>Oppslagstavle</h3>{renderMyKidItems(mykid.noticeboard)}</section><section><h3>Siste nyhetsbrev</h3>{renderMyKidItems(sections.newsletters)}</section><section><h3>Kommende hendelser</h3>{renderMyKidItems(sections.upcoming)}</section><section><h3>Ukeplaner</h3>{renderMyKidItems(mykid.weeklyPlans)}</section><section><h3>Bursdager</h3>{renderMyKidItems(mykid.birthdays)}</section></div>;
+}
+
+const familyDetailTitle = (source: FamilySource, states: PrototypeProps['states']): string => {
+  if (source === 'Nicolai') return 'MyKid · full oversikt';
+  const plan = jacobWeeklyPlan(states.jacobWeeklyPlan);
+  const firstDatedItem = plan && [...plan.events, ...plan.reminders, ...plan.homework].find((item) => item.date)?.date;
+  const week = planWeekNumber(plan?.week_start ?? firstDatedItem);
+  return week === undefined ? 'Jacobs skoleplan' : `Jacobs skoleplan – uke ${week}`;
+};
+
 function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']; openDetail: (detail: Detail) => void }) {
-  const messages = familyMessages(states).slice(0, 3);
-  return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-list">{messages.map((message, index) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><span><strong>{message.title}</strong><small>{message.body ?? 'Trykk for å lese hele beskjeden'}</small></span><Icon>chevron_right</Icon></button>)}</div></Surface>;
+  const messages = familyMessages(states);
+  const sources: Array<{ source: FamilySource; icon: string }> = [{ source: 'Jacob', icon: 'school' }, { source: 'Nicolai', icon: 'child_care' }];
+  const openFamilyDetail = (source: FamilySource, icon: string) => openDetail({ title: familyDetailTitle(source, states), icon, body: <FamilyDetailBody source={source} states={states}/> });
+  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><span><strong>{message.title}</strong><small>{message.body ?? 'Trykk for å lese hele beskjeden'}</small></span><Icon>chevron_right</Icon></button>;
+  return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-sections">{sources.map(({ source, icon }) => { const sourceMessages = messages.filter((message) => message.source === source).slice(0, 3); return <section key={source} className="ppf-message-section" aria-label={`${source} beskjeder`}><h3 className="ppf-message-section-heading"><button type="button" aria-label={`Åpne full oversikt for ${source}`} onClick={() => openFamilyDetail(source, icon)}><span className={`ppf-source ppf-source-${source.toLowerCase()}`}>{source}</span><Icon>arrow_outward</Icon></button></h3>{sourceMessages.length ? <div className="ppf-message-list">{sourceMessages.map(renderMessage)}</div> : <p className="ppf-message-empty">Ingen beskjeder</p>}</section>; })}</div></Surface>;
 }
 
 function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {

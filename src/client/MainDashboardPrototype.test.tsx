@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
@@ -7,6 +7,7 @@ const state = (entity_id: string, value: string, attributes: Record<string, unkn
 
 afterEach(() => {
   vi.useRealTimers();
+  cleanup();
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
@@ -50,5 +51,47 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.queryByText('Bursdags samling')).not.toBeInTheDocument();
     expect(screen.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
     expect(screen.queryByText('Bursdag Ada')).not.toBeInTheDocument();
+  });
+
+  it('shows Jacob before Nicolai with clickable headers and empty-state copy', () => {
+    render(<MainDashboardPrototype
+      states={{
+        mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
+          summary: 'MyKid er oppdatert.',
+          events: [], noticeboard: [], weekly_plans: [], newsletters: [], birthdays: [], today: [],
+        }),
+        jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 36', {
+          summary: 'Jacob har en rolig uke.', week_start: '2026-08-31', events: [], reminders: [], homework: [], school_schedule: [], topics: [], messages: [],
+        }),
+      }}
+      showWeather={() => {}}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={() => {}}
+      hasDepartureBriefing={false}
+      action={() => {}}
+    />);
+
+    const sections = screen.getAllByRole('region').map((section) => section.getAttribute('aria-label'));
+    expect(sections).toEqual(['Jacob beskjeder', 'Nicolai beskjeder']);
+    expect(screen.getAllByText('Ingen beskjeder')).toHaveLength(2);
+
+    const nicolaiHeader = screen.getByRole('button', { name: 'Åpne full oversikt for Nicolai' });
+    const jacobHeader = screen.getByRole('button', { name: 'Åpne full oversikt for Jacob' });
+    expect(nicolaiHeader).toBeInTheDocument();
+    expect(jacobHeader).toBeInTheDocument();
+
+    fireEvent.click(nicolaiHeader);
+    expect(screen.getByRole('dialog', { name: 'MyKid · full oversikt' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Siste nyhetsbrev' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lukk' }));
+
+    fireEvent.click(jacobHeader);
+    expect(screen.getByRole('dialog', { name: 'Jacobs skoleplan – uke 36' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Meldinger til hjemmet' })).toBeInTheDocument();
   });
 });
