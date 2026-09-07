@@ -61,7 +61,7 @@ function WeatherFocus({ states, showWeather }: Pick<PrototypeProps, 'states' | '
       <span><Icon>thermostat</Icon><small>Temperatur</small><b>{temperature.value}</b><em>{temperature.context}</em></span>
       <span><Icon>air</Icon><small>Vind</small><b>{wind.value}</b><em>{direction} · {wind.context}</em></span>
       <span><Icon>rainy</Icon><small>Regn</small><b>{rain.value}</b><em>{rain.context}</em></span>
-      <span className="ppf-clothing-tile" role="img" aria-label={`${clothing.value}. ${clothing.context}`} title={`${clothing.value}. ${clothing.context}`}><small>Klær</small><b className="ppf-clothing-icons">{clothingIcons.map((icon, index) => <Icon key={`${icon}-${index}`}>{icon}</Icon>)}</b></span>
+      <span className="ppf-clothing-tile" role="img" aria-label={`${clothing.value}. ${clothing.context}`} title={`${clothing.value}. ${clothing.context}`}><b className="ppf-clothing-icons">{clothingIcons.map((icon, index) => <Icon key={`${icon}-${index}`}>{icon}</Icon>)}</b><small>Klær</small><b>{clothing.value}</b><em>{clothing.context}</em></span>
     </div>
   </Surface>;
 }
@@ -311,7 +311,6 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const header = <header className="ppf-v3-header"><div className="ppf-v3-brand"><span><Icon filled>auto_awesome</Icon></span><div><small>Klara AI</small><strong>Hjemmeoversikt</strong></div></div><time><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time><div className="ppf-v3-day"><i/><span><small>I dag</small><strong>{isWorkday ? 'Arbeidsdag' : 'Fridag'}</strong></span></div></header>;
   const weather = <WeatherFocus states={props.states} showWeather={props.showWeather}/>;
   const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
-  const past = <p className="ppf-stream-empty">Ingen hendelser som trenger oppmerksomhet.</p>;
   const cameras = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
@@ -319,7 +318,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
+    <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 

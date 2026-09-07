@@ -79,6 +79,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     const sections = screen.getAllByRole('region').map((section) => section.getAttribute('aria-label'));
     expect(sections).toEqual(['Jacob beskjeder', 'Nicolai beskjeder']);
     expect(screen.getAllByText('Ingen beskjeder')).toHaveLength(2);
+    expect(screen.queryByText('Ingen hendelser som trenger oppmerksomhet.')).not.toBeInTheDocument();
 
     const nicolaiHeader = screen.getByRole('button', { name: 'Åpne full oversikt for Nicolai' });
     const jacobHeader = screen.getByRole('button', { name: 'Åpne full oversikt for Jacob' });
@@ -93,6 +94,27 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     fireEvent.click(jacobHeader);
     expect(screen.getByRole('dialog', { name: 'Jacobs skoleplan – uke 36' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Meldinger til hjemmet' })).toBeInTheDocument();
+  });
+
+  it('keeps the weather tile icons on a shared first row', () => {
+    render(<MainDashboardPrototype
+      states={{}}
+      showWeather={() => {}}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={() => {}}
+      hasDepartureBriefing={false}
+      action={() => {}}
+    />);
+
+    const tiles = document.querySelectorAll('.ppf-weather-tiles > span');
+    expect(tiles).toHaveLength(5);
+    expect(Array.from(tiles).slice(0, 4).every((tile) => tile.firstElementChild?.classList.contains('material-symbols-outlined'))).toBe(true);
+    expect(tiles[4]?.querySelector('.ppf-clothing-icons .material-symbols-outlined')).toBeTruthy();
   });
 
   it('removes a stale weekend greeting and keeps the source label in the section header', () => {
