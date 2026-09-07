@@ -220,7 +220,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
     <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{past}{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
-    {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>
+    {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
     {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
   </div>;
