@@ -1003,3 +1003,8 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-scene-controls{grid-template-columns:repeat(3,minmax(0,1fr));width:100%;min-width:0;flex:0 1 auto}
   .ppf-safety-controls{grid-column:1/-1;width:100%;flex:0 0 auto}
 }
+
+@media(min-width:1101px) and (min-height:700px){
+  .main-dashboard-prototype .ppf-bottom-controls{right:40px;width:min(1180px,calc(100vw - 80px))}
+  .main-dashboard-prototype .ppf-prototype-switcher{bottom:88px}
+}
