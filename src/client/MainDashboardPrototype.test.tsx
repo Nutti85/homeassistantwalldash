@@ -11,6 +11,25 @@ afterEach(() => {
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
+  it('labels the family agenda Hendelser', () => {
+    render(<MainDashboardPrototype
+      states={{}}
+      showWeather={() => {}}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={() => {}}
+      hasDepartureBriefing={false}
+      action={() => {}}
+    />);
+
+    expect(screen.getByRole('heading', { name: 'Hendelser' })).toBeInTheDocument();
+    expect(screen.queryByText('Det familien må vite')).not.toBeInTheDocument();
+  });
+
   it('shows only practical MyKid items in the family event calendar', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));

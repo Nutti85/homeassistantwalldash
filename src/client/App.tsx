@@ -1325,7 +1325,8 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const wasKlaraAiOpen = useRef(false);
   const wasDepartureOpen = useRef(false);
   const prototypeRoute = v2Build || new URLSearchParams(window.location.search).has('variant');
-  const departureDemo = useMemo(() => departureBriefingFixtureFromQuery(window.location.search) ?? (prototypeRoute ? departureBriefingDemoPayload('short') : undefined), [prototypeRoute]);
+  const canUseDepartureDemo = prototypeRoute && !v2Build;
+  const departureDemo = useMemo(() => canUseDepartureDemo ? departureBriefingFixtureFromQuery(window.location.search) ?? departureBriefingDemoPayload('short') : undefined, [canUseDepartureDemo]);
 
   useEffect(() => {
     setErrors((current) => {

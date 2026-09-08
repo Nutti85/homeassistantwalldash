@@ -18,9 +18,18 @@ const createApi = (overrides: Record<string, HomeAssistantState> = {}): Dashboar
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Kort oppsummert\n• Ta med paraply.\n## Anbefalinger\n• Kle deg varmt.\n## Senere i dag\n• Avtale kl. 17:30.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' })); fireEvent.click(await screen.findByRole('tab', { name })); };
-afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
+  it('keeps the test departure briefing out of V2 builds', async () => {
+    vi.stubEnv('VITE_DASHBOARD_VERSION', 'v2');
+
+    render(<App api={createApi()} />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.queryByText('Avreisebriefing klar')).not.toBeInTheDocument();
+  });
+
   it('shows Calendar first, switches to Jacob plan manually, and rotates after 3 seconds', async () => {
     vi.useFakeTimers();
     render(<App api={createApi({ calendar: state('calendar.family', 'on', { events: [] }), jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Prøve på tirsdag.', week_start: '2026-08-24', events: [{ date: '2026-08-25', title: 'Matteprøve' }], reminders: [{ weekday: 'fredag', title: 'Ta med gymtøy' }, { title: 'Bestill skolemelk' }] }) })} />);
