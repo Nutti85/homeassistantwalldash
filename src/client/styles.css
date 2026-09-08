@@ -934,12 +934,14 @@ body.prototype-active{min-width:0;background:#07100f}
   .main-dashboard-prototype .ppf-ai-note{margin-top:7px}
 }
 
-/* PROTOTYPE V3 — the current lane owns the clock and date. */
+/* PROTOTYPE V3 — the page owns the clock and date. */
+.main-dashboard-prototype{position:relative}
+.ppf-global-time{position:absolute;top:14px;left:50%;z-index:1;display:flex;align-items:baseline;gap:8px;transform:translateX(-50%);font-style:normal;font-variant-numeric:tabular-nums;line-height:1;text-align:center;white-space:nowrap}
+.ppf-global-time b{font-size:clamp(18px,2vw,24px);font-weight:650;letter-spacing:-.035em}
+.ppf-global-time span{color:#aeb8b2;font-size:10px;text-transform:capitalize}
+@media(max-width:700px){.ppf-global-time{position:static;justify-content:center;margin-bottom:12px;transform:none}}
+.ppf-zone>h2,.ppf-zone-heading{min-height:32px}
 .ppf-zone-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:0 4px}
-.ppf-now-heading{align-items:baseline}
-.ppf-now-time{display:flex;align-items:baseline;justify-content:flex-end;gap:8px;flex:0 0 auto;font-style:normal;font-variant-numeric:tabular-nums;line-height:1;text-align:right;white-space:nowrap}
-.ppf-now-time b{font-size:clamp(18px,2vw,24px);font-weight:650;letter-spacing:-.035em}
-.ppf-now-time span{color:#aeb8b2;font-size:10px;text-transform:capitalize}
 .ppf-zone-heading>h2{display:flex;align-items:center;gap:8px;flex:0 0 auto;color:#b9c5bf;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .ppf-zone-heading>h2 .material-symbols-outlined{color:var(--ppf-warm);font-size:18px}
 .ppf-future-horizon{display:grid;grid-template-columns:repeat(3,minmax(0,auto));align-items:center;gap:3px;min-width:0}

@@ -308,7 +308,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
   const common = { states: props.states, period, openDetail: setDetail };
-  const nowHeading = <div className="ppf-zone-heading ppf-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><time className="ppf-now-time" dateTime={now.toISOString()}><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time></div>;
+  const globalTime = <time className="ppf-global-time" dateTime={now.toISOString()}><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time>;
   const weather = <WeatherFocus states={props.states} showWeather={props.showWeather}/>;
   const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
   const cameras = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
@@ -317,8 +317,9 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
   const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
+    {globalTime}
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{messages}</section><section className="ppf-zone ppf-zone-now">{nowHeading}{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
+    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
