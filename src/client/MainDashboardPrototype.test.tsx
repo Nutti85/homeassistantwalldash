@@ -11,6 +11,32 @@ afterEach(() => {
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
+  it('moves the clock and date into the current lane without the top bar', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
+
+    render(<MainDashboardPrototype
+      states={{}}
+      showWeather={() => {}}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={() => {}}
+      hasDepartureBriefing={false}
+      action={() => {}}
+    />);
+
+    expect(screen.queryByText('Hjemmeoversikt')).not.toBeInTheDocument();
+    expect(document.querySelector('.ppf-c-head')).not.toBeInTheDocument();
+    const currentHeading = screen.getByRole('heading', { name: 'Akkurat nå' });
+    expect(currentHeading.parentElement).toHaveClass('ppf-now-heading');
+    expect(currentHeading.parentElement).toHaveTextContent('10:00');
+    expect(currentHeading.parentElement).toHaveTextContent('mandag 7. september');
+  });
+
   it('labels the family agenda Hendelser', () => {
     render(<MainDashboardPrototype
       states={{}}
