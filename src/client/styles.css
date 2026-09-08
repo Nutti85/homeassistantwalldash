@@ -1008,3 +1008,7 @@ body.prototype-active{min-width:0;background:#07100f}
   .main-dashboard-prototype .ppf-bottom-controls{right:40px;width:min(1180px,calc(100vw - 80px))}
   .main-dashboard-prototype .ppf-prototype-switcher{bottom:88px}
 }
+
+@media(min-width:701px){
+  .main-dashboard-prototype .ppf-bottom-controls{height:70px}
+}
