@@ -166,6 +166,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     const section = screen.getByRole('region', { name: 'Nicolai beskjeder' });
     expect(within(section).queryAllByText('God helg til dere alle! ❤️')).toHaveLength(0);
     expect(within(section).getByText('I dag har vi laget salatbuffé')).toBeInTheDocument();
+    expect(within(section).queryByText('I dag har vi laget salatbuffé og lekt med togbane.')).not.toBeInTheDocument();
     expect(within(section).getAllByText('Nicolai')).toHaveLength(1);
   });
 });
