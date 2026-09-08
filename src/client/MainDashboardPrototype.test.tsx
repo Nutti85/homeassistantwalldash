@@ -5,6 +5,20 @@ import { MainDashboardPrototype } from './MainDashboardPrototype';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 
+const renderPrototype = (states: Record<string, HomeAssistantState> = {}) => render(<MainDashboardPrototype
+  states={states}
+  showWeather={() => {}}
+  openLights={() => {}}
+  openHeatPump={() => {}}
+  openVacuum={() => {}}
+  openVehicles={() => {}}
+  openMode={() => {}}
+  openKlaraAi={() => {}}
+  openDeparture={() => {}}
+  hasDepartureBriefing={false}
+  action={() => {}}
+/>);
+
 afterEach(() => {
   vi.useRealTimers();
   cleanup();
@@ -95,6 +109,43 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.queryByText('Bursdags samling')).not.toBeInTheDocument();
     expect(screen.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
     expect(screen.queryByText('Bursdag Ada')).not.toBeInTheDocument();
+  });
+
+  it('shows tomorrow events when the rest of today is empty', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T18:00:00+02:00'));
+
+    renderPrototype({
+      calendar: state('calendar.family', 'on', {
+        events: [{ summary: 'Fotballtrening', start: '2026-09-08T17:00:00+02:00', end: '2026-09-08T18:00:00+02:00' }],
+      }),
+    });
+
+    expect(screen.getByText('Fotballtrening')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'I morgen' })).toBeInTheDocument();
+    expect(screen.queryByText('Ingenting planlagt i denne perioden.')).not.toBeInTheDocument();
+  });
+
+  it('shows at most five events by default and keeps the remaining events behind the more button', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
+
+    renderPrototype({
+      calendar: state('calendar.family', 'on', {
+        events: Array.from({ length: 6 }, (_, index) => ({
+          summary: `Hendelse ${index + 1}`,
+          start: `2026-09-07T${String(index + 11).padStart(2, '0')}:00:00+02:00`,
+          end: `2026-09-07T${String(index + 12).padStart(2, '0')}:00:00+02:00`,
+        })),
+      }),
+    });
+
+    for (let index = 1; index <= 5; index += 1) expect(screen.getByText(`Hendelse ${index}`)).toBeInTheDocument();
+    expect(screen.queryByText('Hendelse 6')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '+1 flere' }));
+    expect(screen.getByRole('dialog', { name: 'Dette skjer resten av dagen' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('Hendelse 6');
   });
 
   it('shows Jacob before Nicolai with clickable headers and empty-state copy', () => {
