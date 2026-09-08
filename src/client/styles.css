@@ -984,3 +984,22 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-bottom-controls{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:3px;background:#121c19}
   .ppf-home-controls{grid-template-columns:repeat(6,minmax(0,1fr))}.ppf-safety-controls{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
 }
+
+/* V1 scene actions remain available in the V2 bottom navigation. */
+.ppf-scene-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:0 0 294px;min-width:0;padding:5px;border:1px solid rgba(239,178,118,.22);border-radius:13px;background:rgba(31,29,24,.97);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(18px)}
+.ppf-scene-controls .scene-action{position:relative;min-width:0}
+.ppf-scene-controls .scene{display:grid;place-items:center;gap:2px;width:100%;min-width:0;min-height:55px;padding:5px;border-radius:11px;color:#b7c2bd}
+.ppf-scene-controls .scene+ .scene{border-left:1px solid rgba(239,178,118,.16);border-radius:0}
+.ppf-scene-controls .scene:hover,.ppf-scene-controls .scene[aria-expanded="true"]{background:rgba(239,178,118,.11);color:#fff}
+.ppf-scene-controls .scene .material-symbols-outlined{font-size:22px}
+.ppf-scene-controls .scene span{font-size:9px;font-weight:600;white-space:nowrap}
+.ppf-scene-controls .scene.morning .material-symbols-outlined{color:#f3c653}
+.ppf-scene-controls .scene.evening .material-symbols-outlined{color:#f4b17b}
+.ppf-scene-controls .scene.night .material-symbols-outlined{color:#b9a2ff}
+.ppf-scene-controls .scene-confirm-wrap{top:auto;bottom:calc(100% + 10px)}
+
+@media(max-width:700px){
+  .ppf-bottom-controls{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+  .ppf-scene-controls{grid-template-columns:repeat(3,minmax(0,1fr));width:100%;min-width:0;flex:0 1 auto}
+  .ppf-safety-controls{grid-column:1/-1;width:100%;flex:0 0 auto}
+}

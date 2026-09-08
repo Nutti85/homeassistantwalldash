@@ -5,7 +5,7 @@ import { MainDashboardPrototype } from './MainDashboardPrototype';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 
-const renderPrototype = (states: Record<string, HomeAssistantState> = {}) => render(<MainDashboardPrototype
+const renderPrototype = (states: Record<string, HomeAssistantState> = {}, action = vi.fn()) => render(<MainDashboardPrototype
   states={states}
   showWeather={() => {}}
   openLights={() => {}}
@@ -16,7 +16,7 @@ const renderPrototype = (states: Record<string, HomeAssistantState> = {}) => ren
   openKlaraAi={() => {}}
   openDeparture={() => {}}
   hasDepartureBriefing={false}
-  action={() => {}}
+  action={action}
 />);
 
 afterEach(() => {
@@ -25,6 +25,21 @@ afterEach(() => {
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
+  it('keeps the V1 scene controls in the bottom navigation', () => {
+    const action = vi.fn();
+    renderPrototype({}, action);
+
+    const scenes = screen.getByRole('group', { name: 'Scener' });
+    expect(within(scenes).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
+    expect(within(scenes).getByRole('button', { name: 'Kveld' })).toBeInTheDocument();
+    expect(within(scenes).getByRole('button', { name: 'Natt' })).toBeInTheDocument();
+
+    fireEvent.click(within(scenes).getByRole('button', { name: 'Morgen' }));
+    expect(action).not.toHaveBeenCalled();
+    fireEvent.click(within(scenes).getByRole('button', { name: 'Bekreft Morgen' }));
+    expect(action).toHaveBeenCalledWith('morning');
+  });
+
   it('centers the clock and date on the page without the top bar', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));

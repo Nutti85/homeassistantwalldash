@@ -29,6 +29,8 @@ type PrototypeProps = {
   hasDepartureBriefing: boolean;
   departureBriefings?: DepartureBriefingPayload;
   action: (key: DashboardAction) => void;
+  pending?: Record<string, boolean>;
+  errors?: Record<string, string>;
 };
 
 const roomDefinitions: Array<{ id: string; name: string; icon: string; type: ClimateRoomType; values: Array<[string, ClimateMetric, string, string]> }> = [
@@ -285,11 +287,37 @@ function ContextNudges({ states, openVehicles, openDetail }: Pick<PrototypeProps
   return <div className="ppf-nudges">{workdayMorning && <button type="button" onClick={openVehicles}><Icon>route</Icon><span><small>Til jobb nå</small><b>{reading(numberState(states.andreasTravelTime), ' min')}</b></span></button>}{low && <button type="button" className="is-warning" onClick={openVehicles}><Icon>battery_alert</Icon><span><small>{low.name}</small><b>{reading(low.value, ' %')}</b></span></button>}<button type="button" onClick={() => openDetail({ title: 'Strøm akkurat nå', icon: 'bolt', body: <><p>Huset bruker {reading(power === undefined ? undefined : power / 1000, ' kW')} akkurat nå. Strømprisen er {reading(price, ' kr/kWh')}.</p><dl className="ppf-detail-list"><div><dt>Effekt nå</dt><dd>{reading(power === undefined ? undefined : power / 1000, ' kW')}</dd></div><div><dt>Pris</dt><dd>{reading(price, ' kr/kWh')}</dd></div></dl></> })}><Icon>bolt</Icon><span><small>{price !== undefined && price < .8 ? 'Fint tidspunkt å bruke strøm' : 'Strøm akkurat nå'}</small><b>{reading(power === undefined ? undefined : power / 1000, ' kW')} · {reading(price, ' kr')}</b></span><Icon>arrow_outward</Icon></button></div>;
 }
 
+const sceneMeta = { morning: ['sunny', 'Morgen'], evening: ['wb_twilight', 'Kveld'], night: ['bedtime', 'Natt'] } as const;
+
+function SceneControls({ action, pending = {}, errors = {} }: Pick<PrototypeProps, 'action'> & Pick<PrototypeProps, 'pending' | 'errors'>) {
+  const [selected, setSelected] = useState<keyof typeof sceneMeta>();
+  const sceneControlsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+    const dismiss = (event: PointerEvent) => { if (!sceneControlsRef.current?.contains(event.target as Node)) setSelected(undefined); };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, [selected]);
+
+  return <div ref={sceneControlsRef} className="ppf-scene-controls" role="group" aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => {
+    const sceneKey = key as keyof typeof sceneMeta;
+    const open = selected === sceneKey;
+    return <div className={`scene-action${open ? ' confirm-open' : ''}`} key={key}>
+      <button type="button" className={`scene ${key}`} disabled={pending[key]} aria-expanded={open} onClick={() => setSelected(open ? undefined : sceneKey)}><Icon filled>{icon}</Icon><span>{label}</span></button>
+      <div className="scene-confirm-wrap" aria-hidden={!open}>
+        <button type="button" className="scene-confirm" aria-label={`Bekreft ${label}`} tabIndex={open ? 0 : -1} disabled={pending[key]} onClick={() => { setSelected(undefined); action(sceneKey); }}>Bekreft</button>
+      </div>
+      {errors[key] && <small role="alert">{errors[key]}</small>}
+    </div>;
+  })}</div>;
+}
+
 function BottomControls(props: PrototypeProps) {
   const locked = stateValue(props.states.frontDoorLock) === 'locked';
   const securityOn = Number(stateValue(props.states.securityMode)) > 0;
   const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi]];
-  return <nav className="ppf-bottom-controls" aria-label="Hjemkontroller"><div className="ppf-home-controls">{controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}</div><div className="ppf-safety-controls" aria-label="Sikkerhet"><button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button><button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button></div></nav>;
+  return <nav className="ppf-bottom-controls" aria-label="Hjemkontroller"><div className="ppf-home-controls">{controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}</div><SceneControls action={props.action} pending={props.pending} errors={props.errors}/><div className="ppf-safety-controls" aria-label="Sikkerhet"><button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button><button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button></div></nav>;
 }
 
 function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
