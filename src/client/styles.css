@@ -937,7 +937,7 @@ body.prototype-active{min-width:0;background:#07100f}
 /* PROTOTYPE V3 — the current lane owns the clock and date. */
 .ppf-zone-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:0 4px}
 .ppf-now-heading{align-items:baseline}
-.ppf-now-time{display:grid;justify-items:end;gap:2px;font-style:normal;font-variant-numeric:tabular-nums;line-height:1;text-align:right}
+.ppf-now-time{display:flex;align-items:baseline;justify-content:flex-end;gap:8px;flex:0 0 auto;font-style:normal;font-variant-numeric:tabular-nums;line-height:1;text-align:right;white-space:nowrap}
 .ppf-now-time b{font-size:clamp(18px,2vw,24px);font-weight:650;letter-spacing:-.035em}
 .ppf-now-time span{color:#aeb8b2;font-size:10px;text-transform:capitalize}
 .ppf-zone-heading>h2{display:flex;align-items:center;gap:8px;flex:0 0 auto;color:#b9c5bf;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
