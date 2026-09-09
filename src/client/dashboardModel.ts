@@ -22,6 +22,7 @@ const planItems = (value: unknown): JacobPlanItem[] => {
       title,
       ...(planText(row.details ?? row.description) ? { details: planText(row.details ?? row.description) } : {}),
       ...(planText(row.subject) ? { subject: planText(row.subject) } : {}),
+      ...(typeof row.include_in_agenda === 'boolean' ? { include_in_agenda: row.include_in_agenda } : {}),
     }];
   });
 };
@@ -51,6 +52,7 @@ const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value)
   title: item.title,
   ...(item.details ? { details: item.details } : {}),
   ...(item.published_at ? { published_at: item.published_at } : {}),
+  ...(typeof item.include_in_agenda === 'boolean' ? { include_in_agenda: item.include_in_agenda } : {}),
 }));
 
 export const mykidKindergarten = (state: HomeAssistantState | undefined): MyKidKindergartenSnapshot | undefined => {

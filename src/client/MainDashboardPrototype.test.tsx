@@ -84,7 +84,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.queryByText('Det familien må vite')).not.toBeInTheDocument();
   });
 
-  it('shows only practical MyKid items in the family event calendar', () => {
+  it('uses the upstream MyKid agenda classification', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
 
@@ -98,9 +98,10 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
             { title: 'Middag: fiskekaker', date: '2026-09-08' },
           ],
           events: [
-            { title: 'Turdag', date: '2026-09-08', details: 'Ta med sekk og klær etter været.' },
-            { title: 'Foreldremøte', date: '2026-09-08' },
-            { title: 'Bunny and tree project', date: '2026-09-08' },
+            { title: 'Turdag', date: '2026-09-08', details: 'Ta med sekk og klær etter været.', include_in_agenda: true },
+            { title: 'Foreldremøte', date: '2026-09-08', include_in_agenda: true },
+            { title: 'I dag har vi vært på tur', date: '2026-09-08', include_in_agenda: false },
+            { title: 'Bunny and tree project', date: '2026-09-08', include_in_agenda: false },
           ],
           birthdays: [{ title: 'Bursdag Ada', date: '2026-09-10' }],
         }),
@@ -122,6 +123,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.getByText('Turdag')).toBeInTheDocument();
     expect(screen.getByText('Foreldremøte')).toBeInTheDocument();
     expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText(/Linus, Balder, Arne, Yashvi/)).toHaveLength(0);
+    expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText('I dag har vi vært på tur')).toHaveLength(0);
     expect(screen.queryByText('Bunny and tree project')).not.toBeInTheDocument();
     expect(screen.queryByText('Bursdags samling')).not.toBeInTheDocument();
     expect(screen.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();

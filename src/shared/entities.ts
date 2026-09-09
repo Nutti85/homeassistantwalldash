@@ -37,6 +37,7 @@ export interface JacobPlanItem {
   title: string;
   details?: string;
   subject?: string;
+  include_in_agenda?: boolean;
 }
 
 export interface JacobWeeklyPlanSnapshot {
@@ -59,6 +60,7 @@ export interface MyKidKindergartenItem {
   title: string;
   details?: string;
   published_at?: string;
+  include_in_agenda?: boolean;
 }
 
 export interface MyKidKindergartenSnapshot {
