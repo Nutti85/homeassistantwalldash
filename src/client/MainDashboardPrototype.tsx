@@ -126,7 +126,7 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
   const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
   const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? []), ...(school?.homework ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kinderItems = [...(kindergarten?.today ?? []), ...(kindergarten?.events ?? [])].filter(isPracticalKindergartenItem).flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const kinderItems = (kindergarten?.events ?? []).filter(isPracticalKindergartenItem).flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const future = [...calendar, ...schoolItems, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
   return future.length ? future : [

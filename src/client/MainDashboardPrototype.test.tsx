@@ -92,12 +92,13 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       states={{
         mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
           today: [
-            { title: 'Turdag', date: '2026-09-08', details: 'Ta med sekk og klær etter været.' },
+            { title: 'Linus, Balder, Arne, Yashvi, Lena, Kaja, Adam, Nicolai, Maly og Tomine var på tur til Krokenløkka. Vi hadde', date: '2026-09-08', details: 'Linus, Balder, Arne, Yashvi, Lena, Kaja, Adam, Nicolai, Maly og Tomine var på tur til Krokenløkka. Vi hadde med sag for å finne en stor gren å henge i taket.' },
             { title: 'Bunny and tree project', date: '2026-09-08' },
             { title: 'Bursdags samling', date: '2026-09-08' },
             { title: 'Middag: fiskekaker', date: '2026-09-08' },
           ],
           events: [
+            { title: 'Turdag', date: '2026-09-08', details: 'Ta med sekk og klær etter været.' },
             { title: 'Foreldremøte', date: '2026-09-08' },
             { title: 'Bunny and tree project', date: '2026-09-08' },
           ],
@@ -120,6 +121,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     expect(screen.getByText('Turdag')).toBeInTheDocument();
     expect(screen.getByText('Foreldremøte')).toBeInTheDocument();
+    expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText(/Linus, Balder, Arne, Yashvi/)).toHaveLength(0);
     expect(screen.queryByText('Bunny and tree project')).not.toBeInTheDocument();
     expect(screen.queryByText('Bursdags samling')).not.toBeInTheDocument();
     expect(screen.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
