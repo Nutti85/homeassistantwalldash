@@ -25,6 +25,36 @@ afterEach(() => {
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
+  it('uses the V1 weather overview in the V2 now lane while retaining the V2 weather implementation', () => {
+    const showWeather = vi.fn();
+    render(<MainDashboardPrototype
+      states={{
+        weatherDaily: state('sensor.daily', 'rainy', { temperature: 17, forecast: [] }),
+        weatherHourly: state('sensor.hourly', 'rainy', { forecast: [{ datetime: '2026-09-09T10:00:00Z', temperature: 17, precipitation: 0, wind_speed: 2 }] }),
+        netatmoWindSpeed: state('sensor.wind', '2'),
+        netatmoWindGust: state('sensor.gust', '4'),
+        netatmoWindDirection: state('sensor.direction', 'N'),
+      }}
+      showWeather={showWeather}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={() => {}}
+      hasDepartureBriefing={false}
+      action={() => {}}
+    />);
+
+    const weather = screen.getByRole('button', { name: 'Åpne detaljert vær' });
+    expect(weather).toHaveClass('weather-regular');
+    expect(weather.querySelector('.weather-chart')).toBeInTheDocument();
+    expect(weather.querySelector('.ppf-weather-tiles')).not.toBeInTheDocument();
+    fireEvent.click(weather);
+    expect(showWeather).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the V1 scene controls in the bottom navigation', () => {
     const action = vi.fn();
     renderPrototype({}, action);
@@ -210,25 +240,31 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.getByRole('heading', { name: 'Meldinger til hjemmet' })).toBeInTheDocument();
   });
 
-  it('keeps the weather tile icons on a shared first row', () => {
-    render(<MainDashboardPrototype
-      states={{}}
-      showWeather={() => {}}
-      openLights={() => {}}
-      openHeatPump={() => {}}
-      openVacuum={() => {}}
-      openVehicles={() => {}}
-      openMode={() => {}}
-      openKlaraAi={() => {}}
-      openDeparture={() => {}}
-      hasDepartureBriefing={false}
-      action={() => {}}
-    />);
+  it('keeps the original V2 weather tile implementation available behind the test switch', () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', `${window.location.pathname}?weather-card=v2`);
+    try {
+      render(<MainDashboardPrototype
+        states={{}}
+        showWeather={() => {}}
+        openLights={() => {}}
+        openHeatPump={() => {}}
+        openVacuum={() => {}}
+        openVehicles={() => {}}
+        openMode={() => {}}
+        openKlaraAi={() => {}}
+        openDeparture={() => {}}
+        hasDepartureBriefing={false}
+        action={() => {}}
+      />);
 
-    const tiles = document.querySelectorAll('.ppf-weather-tiles > span');
-    expect(tiles).toHaveLength(5);
-    expect(Array.from(tiles).slice(0, 4).every((tile) => tile.firstElementChild?.classList.contains('material-symbols-outlined'))).toBe(true);
-    expect(tiles[4]?.querySelector('.ppf-clothing-icons .material-symbols-outlined')).toBeTruthy();
+      const tiles = document.querySelectorAll('.ppf-weather-tiles > span');
+      expect(tiles).toHaveLength(5);
+      expect(Array.from(tiles).slice(0, 4).every((tile) => tile.firstElementChild?.classList.contains('material-symbols-outlined'))).toBe(true);
+      expect(tiles[4]?.querySelector('.ppf-clothing-icons .material-symbols-outlined')).toBeTruthy();
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
   });
 
   it('removes a stale weekend greeting and keeps the source label in the section header', () => {

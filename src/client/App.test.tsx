@@ -4,6 +4,7 @@ import type { HomeAssistantState } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import App, { type DashboardApi } from './App';
 import { departureBriefingFixturePayload } from './departureBriefingFixtures';
+import { WeatherOverview } from './WeatherOverview';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 const baseStates: Record<string, HomeAssistantState> = {
@@ -21,6 +22,28 @@ const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); cleanup(); localStorage.clear(); });
 
 describe('redesigned dashboard', () => {
+  it('preserves the V1 weather overview contract as a reusable card', () => {
+    const onDetails = vi.fn();
+    render(<WeatherOverview
+      states={{
+        outdoor: state('sensor.outdoor', '17'),
+        weatherDaily: state('sensor.daily', 'rainy', { temperature: 17, forecast: [] }),
+        weatherHourly: state('sensor.hourly', 'rainy', { forecast: [{ datetime: '2026-09-09T10:00:00Z', temperature: 17, precipitation: 0, wind_speed: 2 }] }),
+        netatmoWindSpeed: state('sensor.wind', '2'),
+        netatmoWindGust: state('sensor.gust', '4'),
+        netatmoWindDirection: state('sensor.direction', 'N'),
+      }}
+      regular
+      onDetails={onDetails}
+    />);
+
+    const card = screen.getByRole('button', { name: 'Åpne detaljert vær' });
+    expect(card).toHaveClass('weather-regular');
+    expect(card.querySelector('.weather-chart')).toBeInTheDocument();
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(onDetails).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the test departure briefing out of V2 builds', async () => {
     vi.stubEnv('VITE_DASHBOARD_VERSION', 'v2');
 

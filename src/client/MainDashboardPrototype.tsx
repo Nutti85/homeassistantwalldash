@@ -5,6 +5,7 @@ import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
 import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
+import { WeatherOverview } from './WeatherOverview';
 
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const numberState = (state?: HomeAssistantState) => { const value = Number(stateValue(state)); return Number.isFinite(value) ? value : undefined; };
@@ -50,6 +51,8 @@ function FutureHorizon({ period, setPeriod }: { period: Period; setPeriod: (valu
   return <div className="ppf-future-horizon" role="tablist" aria-label="Velg hvor langt frem kalenderen skal vise">{periods.map(([value, label]) => <button type="button" role="tab" aria-selected={period === value} className={period === value ? 'is-active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}</div>;
 }
 
+// Retained V2 weather-card implementation. Use ?weather-card=v2 to compare it
+// with the temporary V1-card test currently shown by default.
 function WeatherFocus({ states, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'>) {
   const now = new Date();
   const model = buildLiveBriefingViewModel(currentLiveBriefingMode(now), states, now);
@@ -329,7 +332,7 @@ function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
-  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: import.meta.env.DEV || params.has('scenario') }; };
+  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: import.meta.env.DEV || params.has('scenario'), weatherCard: params.get('weather-card') === 'v2' ? 'v2' as const : 'v1' as const }; };
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
@@ -341,7 +344,9 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
   const common = { states: props.states, period, openDetail: setDetail };
   const globalTime = <time className="ppf-global-time" dateTime={now.toISOString()}><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time>;
-  const weather = <WeatherFocus states={props.states} showWeather={props.showWeather}/>;
+  const weather = query.weatherCard === 'v2'
+    ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
+    : <WeatherOverview states={props.states} regular onDetails={props.showWeather} className="ppf-weather-v1"/>;
   const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
   const cameras = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
