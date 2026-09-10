@@ -55,6 +55,7 @@ export interface JacobWeeklyPlanSnapshot {
 }
 
 export interface MyKidKindergartenItem {
+  id?: string;
   date?: string;
   time?: string;
   title: string;
