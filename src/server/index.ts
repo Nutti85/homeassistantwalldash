@@ -2,8 +2,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createApp } from './app';
-import { HomeAssistantClient } from './homeAssistant';
+import { HomeAssistantClient, type ActivityEntityConfig } from './homeAssistant';
 import { defaultDashboardEntityIds } from '../shared/entities';
+
+export const parseActivityEntityConfig = (
+  doorbellVisitorValue?: string,
+  frigateEventsValue?: string,
+): ActivityEntityConfig => {
+  const activityEntities = {
+    doorbellVisitor: doorbellVisitorValue?.trim() || '',
+    frigateEvents: (frigateEventsValue ?? '').split(',').map((entityId) => entityId.trim()).filter(Boolean),
+  };
+
+  if (activityEntities.frigateEvents.some((entityId) => !entityId.startsWith('image.'))) {
+    throw new Error('HA_FRIGATE_EVENT_ENTITY_IDS must contain only image.* entity IDs');
+  }
+
+  return activityEntities;
+};
 
 const haUrl = process.env.HA_URL;
 const haToken = process.env.HA_TOKEN;
@@ -11,14 +27,10 @@ const aiReportSecret = process.env.AI_REPORT_SECRET?.trim() || '';
 const aiReportSourceUrl = process.env.AI_REPORT_SOURCE_URL?.trim() || '';
 const aiReportRefreshUrl = process.env.N8N_AI_REPORT_REFRESH_URL?.trim() || '';
 const aiReportStorePath = process.env.AI_REPORT_STORE_PATH?.trim() || '';
-const activityEntities = {
-  doorbellVisitor: process.env.HA_DOORBELL_VISITOR_ENTITY_ID?.trim() || '',
-  frigateEvents: (process.env.HA_FRIGATE_EVENT_ENTITY_IDS ?? '').split(',').map((entityId) => entityId.trim()).filter(Boolean),
-};
-
-if (activityEntities.frigateEvents.some((entityId) => !entityId.startsWith('image.'))) {
-  throw new Error('HA_FRIGATE_EVENT_ENTITY_IDS must contain only image.* entity IDs');
-}
+const activityEntities = parseActivityEntityConfig(
+  process.env.HA_DOORBELL_VISITOR_ENTITY_ID,
+  process.env.HA_FRIGATE_EVENT_ENTITY_IDS,
+);
 
 if (!haUrl || !haToken) {
   throw new Error('HA_URL og HA_TOKEN må være satt');

@@ -221,7 +221,13 @@ export class HomeAssistantClient {
           ? firstFullRow.attributes.friendly_name
           : undefined;
         const points = series.flatMap((point) => {
-          if (!isRecord(point) || typeof point.state !== 'string' || !point.state.trim() || typeof point.last_changed !== 'string') {
+          if (
+            !isRecord(point)
+            || ('entity_id' in point && point.entity_id !== firstFullRow.entity_id)
+            || typeof point.state !== 'string'
+            || !point.state.trim()
+            || typeof point.last_changed !== 'string'
+          ) {
             return [] as HomeHistoryPoint[];
           }
           const changedAt = new Date(point.last_changed);

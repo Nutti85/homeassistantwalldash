@@ -84,6 +84,7 @@ describe('HomeAssistantClient', () => {
           attributes: { friendly_name: 'Hjemmestatus' },
         },
         { state: 'Hjemme', last_changed: '2026-09-10T14:53:00+02:00' },
+        { entity_id: 'sensor.not_allowlisted', state: 'on', last_changed: '2026-09-10T14:54:00+02:00' },
         { state: '', last_changed: '2026-09-10T15:00:00+02:00' },
         { state: 'Borte', last_changed: 'not-a-date' },
       ],
