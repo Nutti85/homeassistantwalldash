@@ -8,6 +8,7 @@ import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, typ
 import { classifyClimateValue, climateStatusColor, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import { BriefingOverview } from './BriefingOverview';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
+import { CameraCard } from './CameraCard';
 import { DepartureBriefingModal, DepartureBriefingStatus } from './DepartureBriefing';
 import { departureBriefingDemoPayload, departureBriefingFixtureFromQuery } from './departureBriefingFixtures';
 import { departureBriefingsDue, readDepartureDismissals, writeDepartureDismissals, type DepartureDismissal } from './departureBriefingLifecycle';
@@ -516,27 +517,6 @@ function DoorCard({ state, pending, action, error }: { state?: HomeAssistantStat
 function SecurityCard({ state, pending, action, error }: { state?: HomeAssistantState; pending: boolean; action: () => void; error?: string }) {
   const status = securityPresentation(state);
   return <button type="button" className={`card security-card ${status.tone}`} disabled={pending} onClick={action}><span><strong>Overvåkning</strong><small>{status.label}</small></span><span className="round-icon"><Icon>{status.icon}</Icon></span>{error && <small role="alert">{error}</small>}</button>;
-}
-
-function CameraCard({ title, available, streamPath }: { title: string; available: boolean; streamPath: string }) {
-  const [streamAttempt, setStreamAttempt] = useState(0);
-  const [fullscreen, setFullscreen] = useState(false);
-  const frameRef = useRef<HTMLDivElement>(null);
-  const retryTimer = useRef<number>();
-  useEffect(() => {
-    setStreamAttempt(0);
-    return () => { if (retryTimer.current) window.clearTimeout(retryTimer.current); };
-  }, [available]);
-  useEffect(() => { const syncFullscreen = () => setFullscreen(document.fullscreenElement === frameRef.current); document.addEventListener('fullscreenchange', syncFullscreen); return () => document.removeEventListener('fullscreenchange', syncFullscreen); }, []);
-  const cameraAvailable = available;
-  const imageSource = `${streamPath}?attempt=${streamAttempt}`;
-  const liveLabel = `Direktevideo fra ${title.toLocaleLowerCase('nb-NO')}`;
-  const reconnect = () => {
-    if (retryTimer.current) window.clearTimeout(retryTimer.current);
-    retryTimer.current = window.setTimeout(() => setStreamAttempt((current) => current + 1), 750);
-  };
-  const toggleFullscreen = async () => { if (document.fullscreenElement === frameRef.current) await document.exitFullscreen?.(); else await frameRef.current?.requestFullscreen?.(); };
-  return <section className="card doorbell-card" aria-label={title}><h2>{title}</h2><div ref={frameRef} className="camera-frame">{cameraAvailable ? <img src={imageSource} alt={liveLabel} onError={reconnect}/> : <div className="camera-unavailable"><Icon>videocam_off</Icon><span>— Kamera ikke tilgjengelig</span></div>}{cameraAvailable && <span className="live-badge">LIVE</span>}<div className="camera-controls"><button type="button" aria-label={fullscreen ? `Avslutt fullskjerm for ${title}` : `Vis ${title} i fullskjerm`} onClick={() => void toggleFullscreen()}><Icon>{fullscreen ? 'fullscreen_exit' : 'fullscreen'}</Icon></button></div></div></section>;
 }
 
 function HeatPumpModal({ states, pending, errors, action, adjust, close, closeButtonRef }: DashboardProps & { close: () => void; closeButtonRef: React.RefObject<HTMLButtonElement> }) {

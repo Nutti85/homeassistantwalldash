@@ -55,6 +55,21 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(showWeather).toHaveBeenCalledTimes(1);
   });
 
+  it('permanently shows the configured V1 cameras above weather in the now lane', () => {
+    renderPrototype({
+      doorbellCamera: state('camera.ringeklokke_fluent', 'idle'),
+      courtyardCamera: state('camera.gaardsplass_fluent_lens_0', 'idle'),
+    });
+
+    const nowLane = screen.getByRole('heading', { name: 'Akkurat nå' }).parentElement!;
+    const cameraPair = nowLane.querySelector('.ppf-camera-pair');
+
+    expect(cameraPair).toBeInTheDocument();
+    expect(within(cameraPair as HTMLElement).getByRole('region', { name: 'Ringeklokke' })).toBeInTheDocument();
+    expect(within(cameraPair as HTMLElement).getByRole('region', { name: 'Gårdsplassen' })).toBeInTheDocument();
+    expect(cameraPair?.nextElementSibling).toHaveClass('weather-card');
+  });
+
   it('keeps the V1 scene controls in the bottom navigation', () => {
     const action = vi.fn();
     renderPrototype({}, action);
@@ -220,7 +235,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       action={() => {}}
     />);
 
-    const sections = screen.getAllByRole('region').map((section) => section.getAttribute('aria-label'));
+    const sections = Array.from(document.querySelectorAll('.ppf-message-section')).map((section) => section.getAttribute('aria-label'));
     expect(sections).toEqual(['Jacob beskjeder', 'Nicolai beskjeder']);
     expect(screen.getAllByText('Ingen beskjeder')).toHaveLength(2);
     expect(screen.queryByText('Ingen hendelser som trenger oppmerksomhet.')).not.toBeInTheDocument();
