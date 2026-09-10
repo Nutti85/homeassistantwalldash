@@ -74,6 +74,80 @@ describe('HomeAssistantClient', () => {
     expect(defaultDashboardEntityIds.jacobWeeklyPlan).toBe('sensor.jacob_weekly_plan');
   });
 
+  it('reads bounded history only for configured activity entities and normalizes its valid rows', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify([
+      [
+        {
+          entity_id: 'input_select.home_state',
+          state: 'Borte',
+          last_changed: '2026-09-10T07:50:00+02:00',
+          attributes: { friendly_name: 'Hjemmestatus' },
+        },
+        { state: 'Hjemme', last_changed: '2026-09-10T14:53:00+02:00' },
+        { state: '', last_changed: '2026-09-10T15:00:00+02:00' },
+        { state: 'Borte', last_changed: 'not-a-date' },
+      ],
+      [
+        {
+          entity_id: 'image.driveway_person',
+          state: '2026-09-10T14:50:00+02:00',
+          last_changed: '2026-09-10T14:50:01+02:00',
+          attributes: { friendly_name: 'Innkjørsel person' },
+        },
+      ],
+      [{ entity_id: 'sensor.not_allowlisted', state: 'on', last_changed: '2026-09-10T15:00:00+02:00' }],
+      [{ entity_id: 12, state: 'on', last_changed: '2026-09-10T15:00:00+02:00' }],
+    ]), { status: 200 }));
+    const start = new Date('2026-09-10T00:00:00.000Z');
+    const end = new Date('2026-09-11T00:00:00.000Z');
+    const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, {
+      ...defaultDashboardEntityIds,
+      home: 'input_select.home_state',
+      frontDoorLock: 'lock.front_door',
+    }, undefined, {
+      doorbellVisitor: 'binary_sensor.ringeklokke_visitor',
+      frigateEvents: ['image.driveway_person'],
+    });
+
+    const history = await client.getActivityHistory(start, end);
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://ha:8123/api/history/period/2026-09-10T00:00:00.000Z?filter_entity_id=input_select.home_state%2Cbinary_sensor.ringeklokke_visitor%2Clock.front_door%2Cimage.driveway_person&end_time=2026-09-11T00%3A00%3A00.000Z&minimal_response=true&no_attributes=true',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+      }),
+    );
+    expect(history).toEqual({
+      'input_select.home_state': [
+        { entityId: 'input_select.home_state', state: 'Borte', changedAt: '2026-09-10T05:50:00.000Z', friendlyName: 'Hjemmestatus' },
+        { entityId: 'input_select.home_state', state: 'Hjemme', changedAt: '2026-09-10T12:53:00.000Z', friendlyName: 'Hjemmestatus' },
+      ],
+      'image.driveway_person': [
+        { entityId: 'image.driveway_person', state: '2026-09-10T14:50:00+02:00', changedAt: '2026-09-10T12:50:01.000Z', friendlyName: 'Innkjørsel person' },
+      ],
+    });
+  });
+
+  it('converts failed activity history requests to a generic error without secrets or upstream details', async () => {
+    const upstreamBody = 'upstream diagnostic fake-token-8675309';
+    const fetcher = vi.fn().mockResolvedValue(new Response(upstreamBody, { status: 500 }));
+    const client = new HomeAssistantClient('http://ha:8123', 'server-secret-token', fetcher);
+
+    try {
+      await client.getActivityHistory(
+        new Date('2026-09-10T00:00:00.000Z'),
+        new Date('2026-09-11T00:00:00.000Z'),
+      );
+      throw new Error('Expected Home Assistant history request to fail');
+    } catch (error) {
+      expect(error).toEqual(new Error('Kunne ikke kommunisere med Home Assistant'));
+      expect((error as Error).message).not.toContain('server-secret-token');
+      expect((error as Error).message).not.toContain(upstreamBody);
+    }
+  });
+
   it('sets an allowlisted light group brightness and returns its confirmed state', async () => {
     const fetcher = vi.fn().mockResolvedValue(stateResponse('light.cove', 'on', { brightness: 112 }));
     const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, defaultDashboardEntityIds);
