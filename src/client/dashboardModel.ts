@@ -8,7 +8,8 @@ export const stateValue = (state: HomeAssistantState | undefined): string | unde
 
 const planText = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const planScalar = (value: unknown): string | number | undefined => typeof value === 'string' && value.trim() ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-const planItems = (value: unknown): JacobPlanItem[] => {
+type ParsedPlanItem = JacobPlanItem & Pick<MyKidKindergartenItem, 'id'>;
+const planItems = (value: unknown): ParsedPlanItem[] => {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
@@ -16,9 +17,11 @@ const planItems = (value: unknown): JacobPlanItem[] => {
     const title = planText(row.title ?? row.name ?? row.summary ?? row.message ?? row.description);
     if (!title) return [];
     return [{
+      ...(planText(row.id) ? { id: planText(row.id) } : {}),
       ...(planText(row.date) ? { date: planText(row.date) } : {}),
       ...(planText(row.weekday) ? { weekday: planText(row.weekday) } : {}),
       ...(planText(row.time) ? { time: planText(row.time) } : {}),
+      ...(planText(row.published_at) ? { published_at: planText(row.published_at) } : {}),
       title,
       ...(planText(row.details ?? row.description) ? { details: planText(row.details ?? row.description) } : {}),
       ...(planText(row.subject) ? { subject: planText(row.subject) } : {}),
@@ -46,14 +49,17 @@ export const jacobWeeklyPlan = (state: HomeAssistantState | undefined): JacobWee
   };
 };
 
-const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value).map((item) => ({
-  ...(item.date ? { date: item.date } : {}),
-  ...(item.time ? { time: item.time } : {}),
-  title: item.title,
-  ...(item.details ? { details: item.details } : {}),
-  ...(item.published_at ? { published_at: item.published_at } : {}),
-  ...(typeof item.include_in_agenda === 'boolean' ? { include_in_agenda: item.include_in_agenda } : {}),
-}));
+const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value).map((item) => {
+  return {
+    ...(item.id ? { id: item.id } : {}),
+    ...(item.date ? { date: item.date } : {}),
+    ...(item.time ? { time: item.time } : {}),
+    title: item.title,
+    ...(item.details ? { details: item.details } : {}),
+    ...(item.published_at ? { published_at: item.published_at } : {}),
+    ...(typeof item.include_in_agenda === 'boolean' ? { include_in_agenda: item.include_in_agenda } : {}),
+  };
+});
 
 export const mykidKindergarten = (state: HomeAssistantState | undefined): MyKidKindergartenSnapshot | undefined => {
   if (!stateValue(state)) return undefined;

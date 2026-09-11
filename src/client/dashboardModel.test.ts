@@ -81,4 +81,13 @@ describe('dashboard state presentation', () => {
       today: [{ title: 'Dagens informasjon', details: 'Vi er ute før lunsj.' }],
     });
   });
+
+  it('preserves MyKid upstream item IDs for stable family-message identities', () => {
+    const snapshot = mykidKindergarten({ entity_id: 'sensor.mykid_kindergarten', state: 'Oppdatert', attributes: {
+      summary: '', health: 'ok', events: [], noticeboard: [{ id: 'mykid-notice-42', title: 'Husk klær', details: 'Ekstra skift.' }],
+      weekly_plans: [], newsletters: [], birthdays: [], today: [],
+    } });
+
+    expect(snapshot?.noticeboard).toEqual([{ id: 'mykid-notice-42', title: 'Husk klær', details: 'Ekstra skift.' }]);
+  });
 });
