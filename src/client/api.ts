@@ -1,5 +1,6 @@
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
+import type { ActivityEvent, ActivityPayload } from '../shared/activity';
 
 export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
@@ -69,6 +70,49 @@ const request = async (path: string, init?: RequestInit): Promise<DashboardRespo
 };
 
 export const getStates = async (): Promise<DashboardResponse> => request('/api/states');
+
+const isActivityDate = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value));
+const activityMediaPath = /^\/api\/activity\/review\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(preview|thumbnail)$/;
+const isActivityPath = (value: unknown, kind: 'preview' | 'thumbnail'): boolean => (
+  typeof value === 'string' && activityMediaPath.test(value) && value.endsWith(`/${kind}`)
+);
+const isActivityEvent = (value: unknown): value is ActivityEvent => (
+  isPlainObject(value)
+  && typeof value.id === 'string'
+  && typeof value.kind === 'string' && ['doorbell', 'lock', 'home', 'frigate'].includes(value.kind)
+  && isActivityDate(value.occurredAt)
+  && typeof value.title === 'string'
+  && typeof value.tone === 'string' && ['default', 'safe', 'notice'].includes(value.tone)
+  && (value.detail === undefined || typeof value.detail === 'string')
+  && (value.mediaPath === undefined || isActivityPath(value.mediaPath, 'preview'))
+);
+const isActivityPayload = (value: unknown): value is ActivityPayload => {
+  if (!isPlainObject(value) || !isActivityDate(value.generatedAt) || !isPlainObject(value.awayCapture)
+    || !Array.isArray(value.timeline) || !value.timeline.every(isActivityEvent)) return false;
+  const capture = value.awayCapture;
+  return typeof capture.status === 'string' && ['available', 'expired', 'none', 'unavailable'].includes(capture.status)
+    && (capture.awayStartedAt === undefined || isActivityDate(capture.awayStartedAt))
+    && (capture.homeReturnedAt === undefined || isActivityDate(capture.homeReturnedAt))
+    && (capture.event === undefined || isActivityEvent(capture.event))
+    && (capture.mediaPath === undefined || isActivityPath(capture.mediaPath, 'preview'))
+    && (capture.thumbnailPath === undefined || isActivityPath(capture.thumbnailPath, 'thumbnail'));
+};
+
+export const getActivity = async (): Promise<ActivityPayload> => {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch('/api/activity', { signal: controller.signal, cache: 'no-store' });
+    if (!response.ok) throw new Error(fallbackError);
+    const body: unknown = await response.json();
+    if (!isActivityPayload(body)) throw new Error(fallbackError);
+    return body;
+  } catch {
+    throw new Error(fallbackError);
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+};
 
 export const getAiReport = async (): Promise<AiReportResponse | undefined> => {
   const controller = new AbortController();

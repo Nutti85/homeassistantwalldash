@@ -87,7 +87,7 @@ const frigateUrl = process.env.FRIGATE_URL?.trim();
 export const activityService = new ActivityService(homeAssistant, frigateUrl ? new FrigateClient(frigateUrl) : undefined, {
   ...activityEntities, home: entities.home, frontDoorLock: entities.frontDoorLock,
 });
-const app = createApp(homeAssistant, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath);
+const app = createApp(homeAssistant, { activity: activityService, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath });
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {
