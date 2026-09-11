@@ -4,6 +4,8 @@ import express from 'express';
 import { createApp } from './app';
 import { HomeAssistantClient, type ActivityEntityConfig } from './homeAssistant';
 import { defaultDashboardEntityIds } from '../shared/entities';
+import { ActivityService } from './activity';
+import { FrigateClient } from './frigate';
 
 export const parseActivityEntityConfig = (
   doorbellVisitorValue?: string,
@@ -80,7 +82,12 @@ const entities = {
   repairHealth: process.env.HA_REPAIR_HEALTH_ENTITY_ID?.trim() || '',
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
-const app = createApp(new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId, activityEntities), aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath);
+const homeAssistant = new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId, activityEntities);
+const frigateUrl = process.env.FRIGATE_URL?.trim();
+export const activityService = new ActivityService(homeAssistant, frigateUrl ? new FrigateClient(frigateUrl) : undefined, {
+  ...activityEntities, home: entities.home, frontDoorLock: entities.frontDoorLock,
+});
+const app = createApp(homeAssistant, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath);
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {
