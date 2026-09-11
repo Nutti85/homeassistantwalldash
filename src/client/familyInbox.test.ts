@@ -145,6 +145,25 @@ describe('family read receipts', () => {
     expect(JSON.parse(storage.value(familyReceiptStorageKey)!)).toEqual([{ id: 'keep', readAt: '2025-09-10T12:00:00.000Z' }]);
   });
 
+  it('persists the exact canonical list after removing invalid and duplicate stored receipts', () => {
+    const expected = [
+      { id: 'keep', readAt: '2025-09-10T12:00:00.000Z' },
+      { id: 'duplicate', readAt: '2026-09-09T12:00:00.000Z' },
+    ];
+    const storage = memoryStorage({ [familyReceiptStorageKey]: JSON.stringify([
+      expected[0],
+      { id: 'duplicate', readAt: '2026-09-08T12:00:00.000Z' },
+      expected[1],
+      { id: 'expired', readAt: '2025-09-10T11:59:59.999Z' },
+      { id: 'invalid-time', readAt: 'not a timestamp' },
+      { id: 42, readAt: '2026-09-09T12:00:00.000Z' },
+      null,
+    ]) });
+
+    expect(readFamilyReceipts(storage, now)).toEqual(expected);
+    expect(storage.value(familyReceiptStorageKey)).toBe(JSON.stringify(expected));
+  });
+
   it('does not remove read messages from the complete normalized collection', () => {
     const messages = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
       ...emptyMyKid, noticeboard: [{ id: 'notice-42', title: 'Husk ull', published_at: '2026-09-07T08:30:00Z' }],
