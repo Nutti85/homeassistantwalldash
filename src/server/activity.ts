@@ -1,6 +1,7 @@
 import { completedAwayIntervals, selectAwayReview, type ActivityEvent, type ActivityPayload, type AwayCapture, type AwayInterval, type FrigateReviewItem, type HomeHistoryPoint } from '../shared/activity';
+import { randomUUID } from 'node:crypto';
 import { defaultDashboardEntityIds } from '../shared/entities';
-import { FrigateClient, FrigateCommunicationError, isFrigateReviewId } from './frigate';
+import { FrigateClient, FrigateCommunicationError } from './frigate';
 import type { ActivityEntityConfig, HomeAssistantClient } from './homeAssistant';
 
 export interface ActivityConfig extends ActivityEntityConfig {
@@ -9,12 +10,17 @@ export interface ActivityConfig extends ActivityEntityConfig {
 }
 
 interface ResolvedMedia {
+  id: string;
   review: FrigateReviewItem;
   start: number;
   end: number;
   source: 'preview' | 'clip';
   expiresAt: number;
+  available: boolean;
+  version: number;
 }
+
+export const isActivityMediaId = (id: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
 
 const dayMs = 24 * 60 * 60 * 1000;
 const unavailable = () => new Error('Aktivitet er ikke tilgjengelig');
@@ -34,7 +40,7 @@ const reviewEvent = (review: FrigateReviewItem): ActivityEvent => {
   const object = strings(review.data?.objects)[0] ?? '';
   const zone = strings(review.data?.zones)[0];
   return {
-    id: `frigate:${review.id}`, kind: 'frigate', occurredAt: new Date(review.start_time * 1000).toISOString(),
+    id: `frigate:${review.camera}:${review.start_time}`, kind: 'frigate', occurredAt: new Date(review.start_time * 1000).toISOString(),
     title: `${objectLabel(object)} registrert`,
     detail: [zone && displayName(zone), displayName(review.camera)].filter(Boolean).join(' · '), tone: 'default',
   };
@@ -43,7 +49,7 @@ const reviewEvent = (review: FrigateReviewItem): ActivityEvent => {
 /** Combines trusted recorder edges with media capabilities issued only for matched reviews. */
 export class ActivityService {
   private readonly resolvedMedia = new Map<string, ResolvedMedia>();
-  private readonly resolvedThumbnails = new Map<string, { camera: string; expiresAt: number }>();
+  private readonly resolvedThumbnails = new Map<string, { id: string; camera: string; expiresAt: number }>();
 
   public constructor(
     private readonly homeAssistant: Pick<HomeAssistantClient, 'getActivityHistory'>,
@@ -94,7 +100,7 @@ export class ActivityService {
             && strings(item.data?.objects).some((object) => normalizeName(object) === normalizeName(identity.object))
             && Math.abs(item.start_time * 1000 - Date.parse(event.occurredAt)) <= 30_000)
             .sort((left, right) => Math.abs(left.start_time * 1000 - Date.parse(event.occurredAt)) - Math.abs(right.start_time * 1000 - Date.parse(event.occurredAt)))[0];
-          if (matched && await this.probe(matched, now.getTime() / 1000, probes) === 'available') event.mediaPath = mediaPath(matched.id);
+          if (matched && await this.probe(matched, now.getTime() / 1000, probes) === 'available') event.mediaPath = this.issuedMediaPath(matched.id);
         }
       } catch { /* HA detections remain informative without Frigate. */ }
     }
@@ -103,20 +109,37 @@ export class ActivityService {
 
   /** Only server-issued IDs resolve; upstream coordinates never come from the browser. */
   public async getReviewMedia(id: string, signal?: AbortSignal): Promise<Response> {
-    const media = isFrigateReviewId(id) ? this.resolvedMedia.get(id) : undefined;
-    if (!media || media.expiresAt < Date.now() || !this.frigate) throw unavailable();
+    const media = isActivityMediaId(id) ? [...this.resolvedMedia.values()].find((entry) => entry.id === id) : undefined;
+    if (!media || media.expiresAt <= Date.now() || !media.available || !this.frigate) throw unavailable();
     try {
-      return media.source === 'preview'
-        ? await this.frigate.getReviewPreview(id, signal)
-        : await this.frigate.getRecordingClip(media.review.camera, media.start, media.end, signal);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const version = media.version;
+        const response = media.source === 'preview'
+          ? await this.frigate.getReviewPreview(media.review.id, signal)
+          : await this.frigate.getRecordingClip(media.review.camera, media.start, media.end, signal);
+        if (media.version === version && media.available && media.expiresAt > Date.now()) return response;
+        await response.body?.cancel();
+        if (!media.available || media.expiresAt <= Date.now()) break;
+      }
+      throw unavailable();
     } catch { throw unavailable(); }
   }
 
   public async getReviewThumbnail(id: string, signal?: AbortSignal): Promise<Response> {
-    const thumbnail = isFrigateReviewId(id) ? this.resolvedThumbnails.get(id) : undefined;
-    if (!thumbnail || thumbnail.expiresAt < Date.now() || !this.frigate) throw unavailable();
-    try { return await this.frigate.getReviewThumbnail(id, thumbnail.camera, signal); }
+    const entry = isActivityMediaId(id) ? [...this.resolvedThumbnails.entries()].find(([, thumbnail]) => thumbnail.id === id) : undefined;
+    if (!entry || entry[1].expiresAt <= Date.now() || !this.frigate) throw unavailable();
+    try {
+      const response = await this.frigate.getReviewThumbnail(entry[0], entry[1].camera, signal);
+      if (entry[1].expiresAt > Date.now()) return response;
+      await response.body?.cancel();
+      throw unavailable();
+    }
     catch { throw unavailable(); }
+  }
+
+  private issuedMediaPath(reviewId: string): string | undefined {
+    const media = this.resolvedMedia.get(reviewId);
+    return media?.available && media.expiresAt > Date.now() ? mediaPath(media.id) : undefined;
   }
 
   private latestAway(history: Record<string, HomeHistoryPoint[]>, now: Date): AwayInterval | undefined {
@@ -132,18 +155,21 @@ export class ActivityService {
       capture.event = reviewEvent(review);
       capture.status = await this.probe(review, Date.parse(interval.endedAt) / 1000, probes, Date.parse(interval.startedAt) / 1000);
       if (capture.status === 'available') {
-        capture.mediaPath = mediaPath(review.id);
+        capture.mediaPath = this.issuedMediaPath(review.id);
         capture.event.mediaPath = capture.mediaPath;
       }
-      this.resolvedThumbnails.delete(review.id);
       try {
         const thumbnail = await this.frigate!.getReviewThumbnail(review.id, review.camera);
         await thumbnail.body?.cancel();
         const now = Date.now();
-        for (const [id, entry] of this.resolvedThumbnails) if (entry.expiresAt < now) this.resolvedThumbnails.delete(id);
-        if (this.resolvedThumbnails.size >= 500) this.resolvedThumbnails.delete(this.resolvedThumbnails.keys().next().value!);
-        this.resolvedThumbnails.set(review.id, { camera: review.camera, expiresAt: now + 5 * 60 * 1000 });
-        capture.thumbnailPath = `/api/activity/review/${review.id}/thumbnail`;
+        for (const [id, entry] of this.resolvedThumbnails) if (entry.expiresAt <= now) this.resolvedThumbnails.delete(id);
+        let capability = this.resolvedThumbnails.get(review.id);
+        if (!capability) {
+          if (this.resolvedThumbnails.size >= 500) this.resolvedThumbnails.delete(this.resolvedThumbnails.keys().next().value!);
+          capability = { id: randomUUID(), camera: review.camera, expiresAt: now + 5 * 60 * 1000 };
+          this.resolvedThumbnails.set(review.id, capability);
+        }
+        capture.thumbnailPath = `/api/activity/review/${capability.id}/thumbnail`;
       } catch { /* A missing thumbnail does not hide known event metadata. */ }
     } catch { /* Keep the generic unavailable state. */ }
     return capture;
@@ -158,29 +184,55 @@ export class ActivityService {
   }
 
   private async resolveMedia(review: FrigateReviewItem, since: number, until: number): Promise<'available' | 'expired' | 'unavailable'> {
-    this.resolvedMedia.delete(review.id);
     const start = Math.max(since, review.start_time);
     const end = Math.min(until, review.end_time ?? review.start_time + 30, start + 300);
-    if (end <= start) return 'expired';
     // Frigate 0.17 adds eight seconds to review previews. Never cross the HA interval.
     const previewAllowed = review.end_time !== undefined && review.start_time - 8 >= since && review.end_time + 8 <= until && review.end_time - review.start_time + 16 <= 300;
+    const now = Date.now();
+    for (const [id, entry] of this.resolvedMedia) if (entry.expiresAt <= now) this.resolvedMedia.delete(id);
+    let media = this.resolvedMedia.get(review.id);
+    if (media) {
+      if (media.review.camera !== review.camera) return 'unavailable';
+      const nextStart = Math.max(media.start, start);
+      const nextEnd = Math.min(media.end, end);
+      const nextSource = media.source === 'clip' || !previewAllowed || nextStart !== media.start || nextEnd !== media.end ? 'clip' : 'preview';
+      if (nextStart !== media.start || nextEnd !== media.end || nextSource !== media.source) {
+        media.start = nextStart;
+        media.end = nextEnd;
+        media.source = nextSource;
+        media.version += 1;
+        media.available = false;
+      }
+    } else {
+      if (this.resolvedMedia.size >= 500) this.resolvedMedia.delete(this.resolvedMedia.keys().next().value!);
+      media = { id: randomUUID(), review, start, end, source: previewAllowed ? 'preview' : 'clip', expiresAt: now + 5 * 60 * 1000, available: false, version: 0 };
+      this.resolvedMedia.set(review.id, media);
+    }
+    // Commit restrictions before awaiting upstream: older in-flight probes cannot widen them.
+    if (media.end <= media.start) return 'expired';
     let failed = false;
-    for (const source of (previewAllowed ? ['preview', 'clip'] : ['clip']) as Array<'preview' | 'clip'>) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const version = media.version;
       try {
-        const response = source === 'preview'
+        const response = media.source === 'preview'
           ? await this.frigate!.getReviewPreview(review.id)
-          : await this.frigate!.getRecordingClip(review.camera, start, end);
+          : await this.frigate!.getRecordingClip(review.camera, media.start, media.end);
         await response.body?.cancel(); // Probe availability without buffering or persisting footage.
-        const now = Date.now();
-        for (const [id, media] of this.resolvedMedia) if (media.expiresAt < now) this.resolvedMedia.delete(id);
-        if (this.resolvedMedia.size >= 500) this.resolvedMedia.delete(this.resolvedMedia.keys().next().value!);
-        this.resolvedMedia.set(review.id, { review, start, end, source, expiresAt: now + 5 * 60 * 1000 });
+        if (this.resolvedMedia.get(review.id) !== media || media.expiresAt <= Date.now()) return 'unavailable';
+        if (media.version !== version) continue;
+        media.available = true;
         return 'available';
       } catch (error) {
+        if (this.resolvedMedia.get(review.id) !== media || media.expiresAt <= Date.now()) return 'unavailable';
+        if (media.version !== version) continue;
         if (!(error instanceof FrigateCommunicationError && error.mediaMissing)) failed = true;
+        media.available = false;
+        if (media.source === 'clip') return failed ? 'unavailable' : 'expired';
+        media.source = 'clip';
+        media.version += 1;
       }
     }
-    return failed ? 'unavailable' : 'expired';
+    return 'unavailable';
   }
 
   private timeline(history: Record<string, HomeHistoryPoint[]>, start: Date, end: Date): ActivityEvent[] {
@@ -197,6 +249,7 @@ export class ActivityService {
         if (!state || ['unavailable', 'unknown'].includes(state.toLowerCase())) continue;
         const prior = previous;
         previous = state;
+        if (point.baseline) continue;
         if (state === prior) continue;
         let occurred = Date.parse(point.changedAt);
         let event: Pick<ActivityEvent, 'kind' | 'title' | 'detail' | 'tone'> | undefined;

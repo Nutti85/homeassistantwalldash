@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { completedAwayIntervals, normalizeTimeline, selectAwayReview } from './activity';
 
 describe('completedAwayIntervals', () => {
+  it('does not treat baseline Borte or its repeated state as a departure edge', () => {
+    expect(completedAwayIntervals([
+      { state: 'Borte', changedAt: '2026-09-09T13:00:00Z', baseline: true },
+      { state: 'Borte', changedAt: '2026-09-09T14:00:00Z' },
+      { state: 'Hjemme', changedAt: '2026-09-10T12:53:00Z' },
+    ])).toEqual([]);
+  });
   it('returns the completed interval after a leading Hjemme state', () => {
     expect(completedAwayIntervals([
       { state: 'Hjemme', changedAt: '2026-09-10T06:00:00+02:00' },
@@ -57,6 +64,13 @@ describe('selectAwayReview', () => {
 });
 
 describe('normalizeTimeline', () => {
+  it('seeds previous state from baselines without emitting baseline or repeated rows', () => {
+    expect(normalizeTimeline([
+      { entityId: 'lock.front', state: 'locked', changedAt: '2026-09-09T13:00:00Z', baseline: true },
+      { entityId: 'lock.front', state: 'locked', changedAt: '2026-09-10T12:00:00Z' },
+      { entityId: 'lock.front', state: 'unlocked', changedAt: '2026-09-10T12:01:00Z' },
+    ])).toEqual([{ entityId: 'lock.front', state: 'unlocked', changedAt: '2026-09-10T12:01:00Z' }]);
+  });
   it('drops invalid, unavailable, and repeated transitions before sorting newest first', () => {
     expect(normalizeTimeline([
       { entityId: 'lock.front_door', state: 'locked', changedAt: '2026-09-10T07:50:00+02:00' },

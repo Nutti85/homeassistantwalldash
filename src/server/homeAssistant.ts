@@ -220,7 +220,7 @@ export class HomeAssistantClient {
         const friendlyName = isRecord(firstFullRow.attributes) && typeof firstFullRow.attributes.friendly_name === 'string'
           ? firstFullRow.attributes.friendly_name
           : undefined;
-        const points = series.flatMap((point) => {
+        const points = series.flatMap((point, index) => {
           if (
             !isRecord(point)
             || ('entity_id' in point && point.entity_id !== firstFullRow.entity_id)
@@ -236,6 +236,7 @@ export class HomeAssistantClient {
             entityId: firstFullRow.entity_id,
             state: point.state,
             changedAt: changedAt.toISOString(),
+            ...(index === 0 && changedAt.getTime() <= start.getTime() ? { baseline: true } : {}),
             ...(friendlyName ? { friendlyName } : {}),
           }];
         });

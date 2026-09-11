@@ -30,6 +30,8 @@ export interface HomeHistoryPoint {
   state: string;
   changedAt: string;
   friendlyName?: string;
+  /** Recorder state at query start, not a transition with a known occurrence time. */
+  baseline?: boolean;
 }
 
 export interface FrigateReviewItem {
@@ -59,9 +61,15 @@ export const completedAwayIntervals = (points: HomeHistoryPoint[]): AwayInterval
 
   const intervals: AwayInterval[] = [];
   let awayStartedAt: string | undefined;
+  let previous: string | undefined;
 
   for (const { point } of transitions) {
-    if (point.state === 'Borte' && !awayStartedAt) {
+    if (point.baseline) {
+      previous = point.state;
+      awayStartedAt = undefined;
+      continue;
+    }
+    if (point.state === 'Borte' && previous !== 'Borte' && !awayStartedAt) {
       awayStartedAt = point.changedAt;
     }
 
@@ -69,6 +77,7 @@ export const completedAwayIntervals = (points: HomeHistoryPoint[]): AwayInterval
       intervals.push({ startedAt: awayStartedAt, endedAt: point.changedAt });
       awayStartedAt = undefined;
     }
+    if (point.state === 'Borte' || point.state === 'Hjemme') previous = point.state;
   }
 
   return intervals.sort((left, right) => timestamp(right.startedAt)! - timestamp(left.startedAt)!);
@@ -109,6 +118,7 @@ export const normalizeTimeline = (points: HomeHistoryPoint[]): HomeHistoryPoint[
     const state = entry.point.state.trim().toLowerCase();
     if (previousStates.get(entityId) === state) continue;
     previousStates.set(entityId, state);
+    if (entry.point.baseline) continue;
     normalized.push(entry);
   }
 

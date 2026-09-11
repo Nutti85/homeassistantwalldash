@@ -149,6 +149,25 @@ describe('HomeAssistantClient', () => {
     }
   });
 
+  it('marks recorder query-start rows as baselines while preserving later first transitions', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json([
+      [{ entity_id: 'input_select.home_state', state: 'Borte', last_changed: '2026-09-09T13:00:00Z' },
+        { state: 'Hjemme', last_changed: '2026-09-10T12:53:00Z' }],
+      [{ entity_id: 'lock.front', state: 'locked', last_changed: '2026-09-08T12:00:00Z' }],
+      [{ entity_id: 'binary_sensor.visitor', state: 'on', last_changed: '2026-09-10T12:00:00Z' }],
+    ]));
+    const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher,
+      { ...defaultDashboardEntityIds, frontDoorLock: 'lock.front' }, undefined,
+      { doorbellVisitor: 'binary_sensor.visitor', frigateEvents: [] });
+    const history = await client.getActivityHistory(new Date('2026-09-09T13:00:00Z'), new Date('2026-09-10T13:00:00Z'));
+    expect(history['input_select.home_state']).toEqual([
+      { entityId: 'input_select.home_state', state: 'Borte', changedAt: '2026-09-09T13:00:00.000Z', baseline: true },
+      { entityId: 'input_select.home_state', state: 'Hjemme', changedAt: '2026-09-10T12:53:00.000Z' },
+    ]);
+    expect(history['lock.front'][0]).toMatchObject({ baseline: true });
+    expect(history['binary_sensor.visitor'][0]).not.toHaveProperty('baseline');
+  });
+
   it('sets an allowlisted light group brightness and returns its confirmed state', async () => {
     const fetcher = vi.fn().mockResolvedValue(stateResponse('light.cove', 'on', { brightness: 112 }));
     const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, defaultDashboardEntityIds);
