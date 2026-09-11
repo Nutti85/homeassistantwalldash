@@ -27,6 +27,30 @@ describe('familyMessages', () => {
     }]);
   });
 
+  it('uses a finite numeric MyKid upstream ID after canonical string conversion even when content changes', () => {
+    const original = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
+      ...emptyMyKid, noticeboard: [{ id: 42, title: 'Husk ull', details: 'Ekstra skift.' }],
+    }) });
+    const refreshed = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
+      ...emptyMyKid, noticeboard: [{ id: 42, title: 'Nytt oppslag', details: 'Endret innhold.' }],
+    }) });
+
+    expect(original[0]?.id).toBe('42');
+    expect(refreshed[0]?.id).toBe('42');
+  });
+
+  it('falls back to a derived ID when a MyKid upstream ID is non-finite or invalid', () => {
+    const messages = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
+      ...emptyMyKid, noticeboard: [
+        { id: Number.POSITIVE_INFINITY, title: 'Ugyldig tall' },
+        { id: Number.NaN, title: 'Ikke et tall' },
+        { id: true, title: 'Ugyldig type' },
+      ],
+    }) });
+
+    expect(messages.map((message) => message.id)).toEqual([expect.stringMatching(/^mykid-/), expect.stringMatching(/^mykid-/), expect.stringMatching(/^mykid-/)]);
+  });
+
   it('derives one deterministic MyKid fallback ID from the source fields', () => {
     const states = { mykidKindergarten: state('sensor.mykid_kindergarten', {
       ...emptyMyKid,
@@ -108,6 +132,16 @@ describe('family read receipts', () => {
       { id: 'discard', readAt: '2025-09-10T11:59:59.999Z' },
     ], storage, now);
 
+    expect(JSON.parse(storage.value(familyReceiptStorageKey)!)).toEqual([{ id: 'keep', readAt: '2025-09-10T12:00:00.000Z' }]);
+  });
+
+  it('writes the canonical receipt list after reading an expired stored receipt', () => {
+    const storage = memoryStorage({ [familyReceiptStorageKey]: JSON.stringify([
+      { id: 'keep', readAt: '2025-09-10T12:00:00.000Z' },
+      { id: 'expired', readAt: '2025-09-10T11:59:59.999Z' },
+    ]) });
+
+    expect(readFamilyReceipts(storage, now)).toEqual([{ id: 'keep', readAt: '2025-09-10T12:00:00.000Z' }]);
     expect(JSON.parse(storage.value(familyReceiptStorageKey)!)).toEqual([{ id: 'keep', readAt: '2025-09-10T12:00:00.000Z' }]);
   });
 

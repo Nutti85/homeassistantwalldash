@@ -7,6 +7,7 @@ export const stateValue = (state: HomeAssistantState | undefined): string | unde
   state && !unavailableStates.has(state.state.toLowerCase()) ? state.state : undefined;
 
 const planText = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+const planId = (value: unknown): string | undefined => planText(value) ?? (typeof value === 'number' && Number.isFinite(value) ? String(value) : undefined);
 const planScalar = (value: unknown): string | number | undefined => typeof value === 'string' && value.trim() ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 type ParsedPlanItem = JacobPlanItem & Pick<MyKidKindergartenItem, 'id'>;
 const planItems = (value: unknown): ParsedPlanItem[] => {
@@ -17,7 +18,7 @@ const planItems = (value: unknown): ParsedPlanItem[] => {
     const title = planText(row.title ?? row.name ?? row.summary ?? row.message ?? row.description);
     if (!title) return [];
     return [{
-      ...(planText(row.id) ? { id: planText(row.id) } : {}),
+      ...(planId(row.id) ? { id: planId(row.id) } : {}),
       ...(planText(row.date) ? { date: planText(row.date) } : {}),
       ...(planText(row.weekday) ? { weekday: planText(row.weekday) } : {}),
       ...(planText(row.time) ? { time: planText(row.time) } : {}),

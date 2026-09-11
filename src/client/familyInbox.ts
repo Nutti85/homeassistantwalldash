@@ -101,7 +101,13 @@ export const readFamilyReceipts = (storage: Storage | undefined = browserStorage
   if (!storage) return [];
   try {
     const value = storage.getItem(familyReceiptStorageKey);
-    return value ? cleanReceipts(JSON.parse(value), now) : [];
+    if (!value) return [];
+    const clean = cleanReceipts(JSON.parse(value), now);
+    const canonical = JSON.stringify(clean);
+    if (value !== canonical) {
+      try { storage.setItem(familyReceiptStorageKey, canonical); } catch { /* Reading remains available when device storage is full or disabled. */ }
+    }
+    return clean;
   } catch {
     return [];
   }
