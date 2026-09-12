@@ -1064,3 +1064,34 @@ body.prototype-active{min-width:0;background:#07100f}
   .main-dashboard-prototype .ppf-weather-v1 .weather-chart-wrap{margin-top:10px}
   .main-dashboard-prototype .ppf-weather-v1 .weather-chart{min-height:120px}
 }
+.ppf-family-modal{display:flex;flex-direction:column;width:min(1100px,100%);height:min(820px,calc(100dvh - 36px));overflow:hidden;color:#dce4df}
+.ppf-family-modal>header{flex:none}
+.ppf-family-modal button{min-width:48px;min-height:48px;color:inherit;cursor:pointer}
+.ppf-family-modal button:focus-visible,.ppf-family-modal [tabindex]:focus-visible{outline:3px solid #8ee2b2;outline-offset:-3px}
+.ppf-family-modal>.ppf-family-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:none;gap:8px;padding:12px 20px;border-bottom:1px solid var(--ppf-line)}
+.ppf-family-tabs button,.ppf-family-filters button{border:1px solid transparent;border-radius:10px;background:rgba(255,255,255,.035);font:inherit}
+.ppf-family-tabs button{display:grid;align-content:center;gap:1px;padding:8px 12px;font-weight:600}
+.ppf-family-tabs small{color:var(--ppf-soft);font-size:13px;font-weight:400}
+.ppf-family-tabs [aria-selected=true],.ppf-family-filters [aria-selected=true]{border-color:var(--ppf-warm);background:rgba(239,178,118,.12);text-decoration:underline;text-underline-offset:5px}
+.ppf-family-modal>.ppf-family-panel{flex:1;min-height:0;overflow:auto;padding:18px 20px;overscroll-behavior:contain}
+.ppf-family-modal [hidden]{display:none!important}
+.ppf-family-helper{margin:0 0 14px;color:var(--ppf-soft);font-size:15px}
+.ppf-family-filters{display:flex;gap:8px;margin-bottom:16px}
+.ppf-family-filters button{min-width:88px;padding:8px 16px}
+.ppf-family-inbox{display:grid;grid-template-columns:minmax(230px,.8fr) minmax(0,1.2fr);align-items:start;gap:20px;min-width:0}
+.ppf-family-message-list{display:grid;gap:8px;min-width:0;margin:0;padding:0;list-style:none}
+.ppf-family-message-list button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;width:100%;padding:14px;border:1px solid var(--ppf-line);border-radius:12px;background:rgba(255,255,255,.025);text-align:left}
+.ppf-family-message-list button[aria-pressed=true]{border-color:var(--ppf-warm);border-left-width:4px;background:rgba(239,178,118,.09)}
+.ppf-family-message-list .ppf-source{justify-self:start}
+.ppf-family-message-list strong{grid-column:1/-1;grid-row:2;display:-webkit-box;overflow:hidden;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere;font-size:17px;line-height:1.4}
+.ppf-family-read-status{grid-column:2;grid-row:1;align-self:center;color:var(--ppf-soft);font-size:13px}
+.ppf-family-message-detail{min-width:0;padding:18px;border-radius:12px;background:rgba(255,255,255,.035);overflow-wrap:anywhere}
+.ppf-family-message-detail h3{margin:14px 0 10px;font-size:21px;line-height:1.35}
+.ppf-family-message-detail p{margin:0 0 20px;white-space:pre-wrap;font-size:18px;line-height:1.6}
+.ppf-family-read-action{padding:10px 18px;border:1px solid var(--ppf-warm);border-radius:10px;background:rgba(239,178,118,.14);font:inherit;font-weight:600}
+.ppf-family-person-title{margin:0 0 18px;font-size:21px;font-weight:600}
+.ppf-family-modal .ppf-family-detail-body{gap:20px;overflow-wrap:anywhere}
+.ppf-family-modal .ppf-family-detail-body h3{font-size:20px}
+.ppf-family-modal .ppf-family-detail-summary,.ppf-family-modal .ppf-family-detail-notes li,.ppf-family-modal .ppf-family-detail-list li>strong{font-size:18px}
+.ppf-family-modal .ppf-family-detail-list li>span,.ppf-family-modal .ppf-family-detail-list li>p,.ppf-family-modal .ppf-family-detail-empty,.ppf-family-modal .ppf-family-detail-schedule li strong,.ppf-family-modal .ppf-family-detail-schedule li span,.ppf-family-modal .ppf-family-detail-schedule li p{font-size:16px}
+@media(max-width:700px){.ppf-family-modal{height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}.ppf-family-modal>.ppf-family-tabs,.ppf-family-modal>.ppf-family-panel{padding:12px}.ppf-family-inbox{grid-template-columns:minmax(0,1fr)}.ppf-family-modal .ppf-family-detail-list li{grid-template-columns:minmax(0,1fr)}.ppf-family-modal .ppf-family-detail-list li>p{grid-column:1}}
