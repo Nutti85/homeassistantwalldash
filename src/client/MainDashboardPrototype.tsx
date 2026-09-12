@@ -36,6 +36,7 @@ type PrototypeProps = {
   activity?: SinceLastProps['activity'];
   activityLoading?: boolean;
   activityStale?: boolean;
+  refreshActivity?: () => Promise<void>;
   action: (key: DashboardAction) => void;
   pending?: Record<string, boolean>;
   errors?: Record<string, string>;

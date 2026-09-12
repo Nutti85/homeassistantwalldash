@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActivityPayload } from '../shared/activity';
 import type { HomeAssistantState } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import App, { type DashboardApi } from './App';
@@ -19,7 +20,144 @@ const createApi = (overrides: Record<string, HomeAssistantState> = {}): Dashboar
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Kort oppsummert\n• Ta med paraply.\n## Anbefalinger\n• Kle deg varmt.\n## Senere i dag\n• Avtale kl. 17:30.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' })); fireEvent.click(await screen.findByRole('tab', { name })); };
-afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); cleanup(); localStorage.clear(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); localStorage.clear(); });
+
+describe('V2 activity lifecycle', () => {
+  const payload = (title = 'Døren ble låst'): ActivityPayload => ({
+    generatedAt: '2026-09-12T10:00:00Z',
+    awayCapture: { status: 'none' },
+    timeline: [{ id: title, kind: 'lock', occurredAt: '2026-09-12T09:59:00Z', title, tone: 'safe' }],
+  });
+  const activityApi = () => ({ ...createApi(), getActivity: vi.fn<[], Promise<ActivityPayload>>().mockResolvedValue(payload()) });
+  const settle = async () => { await act(async () => { await Promise.resolve(); }); };
+  const advance = async (milliseconds: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); }); };
+  const dispatch = async (target: Window | Document, event: string) => {
+    await act(async () => { target.dispatchEvent(new Event(event)); await Promise.resolve(); });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T10:00:00Z'));
+    vi.stubEnv('VITE_DASHBOARD_VERSION', 'v2');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  });
+
+  it('loads activity independently while confirmed family messages remain usable', async () => {
+    const api = activityApi();
+    let confirm!: (value: ActivityPayload) => void;
+    api.getActivity.mockReturnValue(new Promise((resolve) => { confirm = resolve; }));
+    vi.mocked(api.getStates).mockResolvedValue({ states: { ...baseStates,
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 37', { messages: ['Husk tursekk'] }),
+    } });
+    render(<App api={api}/>);
+    await settle();
+
+    expect(screen.getAllByText('Henter hendelser')).toHaveLength(2);
+    expect(screen.queryByText('Ingen nye hendelser')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Åpne beskjed: Husk tursekk/ }));
+    expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toHaveTextContent('Husk tursekk');
+    await act(async () => { confirm(payload()); });
+    expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+    expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('polls at exactly 30-second intervals while visible', async () => {
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockResolvedValue(payload('Døren ble åpnet'));
+    await advance(29_999);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+    await advance(1);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Døren ble åpnet')).toBeInTheDocument();
+    await advance(30_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(3);
+  });
+
+  it('skips hidden polling and refreshes immediately when visible again', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    visibility.mockReturnValue('hidden');
+    await dispatch(document, 'visibilitychange');
+    await advance(90_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    api.getActivity.mockResolvedValue(payload('Huset er hjemme'));
+    visibility.mockReturnValue('visible');
+    await dispatch(document, 'visibilitychange');
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Huset er hjemme')).toBeInTheDocument();
+  });
+
+  it.each(['focus', 'online'])('refreshes immediately on browser %s', async (event) => {
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockResolvedValue(payload('Ny bekreftet hendelse'));
+    await dispatch(window, event);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Ny bekreftet hendelse')).toBeInTheDocument();
+  });
+
+  it('preserves confirmed activity through failures, warns at three, and resets after success', async () => {
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockRejectedValue(new Error('offline'));
+    for (let failure = 1; failure <= 3; failure += 1) {
+      await advance(30_000);
+      expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
+      expect(screen.queryByText('Hendelsene kan være utdaterte') !== null).toBe(failure === 3);
+      expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
+    }
+    api.getActivity.mockResolvedValueOnce(payload('Ny bekreftet hendelse'));
+    await dispatch(window, 'online');
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+    expect(screen.getByText('Ny bekreftet hendelse')).toBeInTheDocument();
+    await advance(60_000);
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+    await advance(30_000);
+    expect(screen.getByRole('status')).toHaveTextContent('Hendelsene kan være utdaterte');
+  });
+
+  it('ends initial loading after a failure and keeps Home Assistant controls confirmed', async () => {
+    const api = activityApi();
+    api.getActivity.mockRejectedValue(new Error('offline'));
+    render(<App api={api}/>);
+    await settle();
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
+    expect(screen.getByText('Kunne ikke hente hendelser fra sist huset var borte')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
+    expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toBeInTheDocument();
+    expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
+  });
+
+  it('coalesces in-flight refreshes and removes polling and event handlers on unmount', async () => {
+    const api = activityApi();
+    let confirm!: (value: ActivityPayload) => void;
+    api.getActivity.mockReturnValue(new Promise((resolve) => { confirm = resolve; }));
+    const view = render(<App api={api}/>);
+    await settle();
+    await dispatch(window, 'focus');
+    await dispatch(window, 'online');
+    await advance(30_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    view.unmount();
+    await act(async () => { confirm(payload()); });
+    await dispatch(window, 'focus');
+    await dispatch(window, 'online');
+    await dispatch(document, 'visibilitychange');
+    await advance(60_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('redesigned dashboard', () => {
   it('preserves the V1 weather overview contract as a reusable card', () => {

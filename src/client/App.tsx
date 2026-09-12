@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import QRCode from 'qrcode';
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, JacobWeeklyPlanSnapshot, LightCommand, LightControlKey, MyKidKindergartenSnapshot } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
+import type { ActivityPayload } from '../shared/activity';
 import * as browserApi from './api';
 import type { AiReportRefreshMode, AiReportResponse } from './api';
 import { getMoonIllumination, getMoonPosition, getSunEvents, getSunPosition, type SkyPosition } from './astronomy';
@@ -22,6 +23,7 @@ import {
 
 export interface DashboardApi {
   getStates(): Promise<{ states: Record<string, HomeAssistantState>; departureBriefings?: DepartureBriefingPayload }>;
+  getActivity?(): Promise<ActivityPayload>;
   getAiReport?(): Promise<AiReportResponse | undefined>;
   requestAiReportRefresh?(mode?: AiReportRefreshMode): Promise<void>;
   runAction(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<{ states: Record<string, HomeAssistantState> }>;
@@ -1097,6 +1099,7 @@ function DetailedWeather({ states, close }: { states: Record<string, HomeAssista
 }
 
 const stateRefreshIntervalMs = 30_000;
+const activityRefreshIntervalMs = 30_000;
 const recentAiReportWindowMs = 12 * 60 * 60 * 1_000;
 const aiReportSeenStorageKey = 'walldash.klara-ai.last-seen-published-at';
 
@@ -1104,6 +1107,11 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const v2Build = import.meta.env.VITE_DASHBOARD_VERSION === 'v2';
   const prototypeRequested = v2Build || new URLSearchParams(window.location.search).has('variant');
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
+  const [{ activity, activityLoading, activityStale }, setActivityState] = useState<{
+    activity?: ActivityPayload; activityLoading: boolean; activityStale: boolean;
+  }>({ activityLoading: prototypeRequested && Boolean(api.getActivity), activityStale: false });
+  const refreshActivityRef = useRef<() => Promise<void>>(async () => {});
+  const refreshActivity = () => refreshActivityRef.current();
   const [mode, setMode] = useState<Mode>('regular');
   const [editing, setEditing] = useState(false);
   const [layouts, setLayouts] = useState<Record<Mode, GridLayouts>>(() => ({ regular: loadLayout('regular'), guest: loadLayout('guest'), child: loadLayout('child') }));
@@ -1217,6 +1225,45 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
       window.removeEventListener('online', refreshWhenOnline);
     };
   }, [api, departureDemo]);
+  useEffect(() => {
+    if (!prototypeRequested || !api.getActivity) return;
+    let active = true;
+    let requestInFlight = false;
+    let consecutiveFailures = 0;
+    setActivityState((current) => ({ ...current, activityLoading: !current.activity }));
+
+    const refresh = async () => {
+      if (!active || requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const confirmed = await api.getActivity!();
+        if (!active) return;
+        consecutiveFailures = 0;
+        setActivityState({ activity: confirmed, activityLoading: false, activityStale: false });
+      } catch {
+        if (!active) return;
+        consecutiveFailures += 1;
+        setActivityState((current) => ({ ...current, activityLoading: false, activityStale: consecutiveFailures >= 3 }));
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    refreshActivityRef.current = refresh;
+    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const refreshWhenAwake = () => { void refresh(); };
+    void refresh();
+    const timer = window.setInterval(refreshWhenVisible, activityRefreshIntervalMs);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenAwake);
+    window.addEventListener('online', refreshWhenAwake);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenAwake);
+      window.removeEventListener('online', refreshWhenAwake);
+    };
+  }, [api, prototypeRequested]);
   useEffect(() => { if (!repairOpen) return; closeButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setRepairOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [repairOpen]);
   useEffect(() => { if (!repairOpen && wasRepairOpen.current) repairButton.current?.focus(); wasRepairOpen.current = repairOpen; }, [repairOpen]);
   useEffect(() => { if (!lightsOpen) return; lightsCloseButton.current?.focus(); const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setLightsOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [lightsOpen]);
@@ -1345,5 +1392,5 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   };
   if (detailedWeather) return <DetailedWeather states={states} close={() => setDetailedWeather(false)}/>;
   const mainPrototype = mode === 'regular' && prototypeRoute;
-  return <main className={`dashboard${mainPrototype ? ' prototype-host' : ''}`}><Toast message={toast}/>{!mainPrototype && <DashboardHeader mode={mode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>} {errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mainPrototype ? <MainDashboardPrototype states={states} showWeather={() => setDetailedWeather(true)} openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openVehicles={() => setVehiclesOpen(true)} openMode={() => setModeOpen(true)} openKlaraAi={openAiReport} openDeparture={() => setDepartureOpen(true)} hasDepartureBriefing={Boolean(departureBriefings?.briefings.length)} departureBriefings={departureBriefings} action={action} pending={pending} errors={errors}/> : mode === 'regular' ? <RegularDashboard {...dashboardProps} aiReport={aiReport} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{!mainPrototype && <QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openVehicles={() => setVehiclesOpen(true)} openMode={() => setModeOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} vehiclesButtonRef={vehiclesButton} modeButtonRef={modeButton} klaraButtonRef={klaraButton}/>} {departureBriefings && !mainPrototype && <DepartureBriefingStatus briefings={departureBriefings.briefings} onOpen={() => setDepartureOpen(true)} buttonRef={departureStatusButton} now={departureNow}/>} {lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {vehiclesOpen && <VehicleModal states={states} close={() => setVehiclesOpen(false)} closeButtonRef={vehiclesCloseButton}/>} {modeOpen && <DashboardModeModal mode={mode} setMode={setMode} close={() => setModeOpen(false)} closeButtonRef={modeCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} states={states} loading={aiReportLoading} error={aiReportError} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {departureOpen && departureBriefings && <DepartureBriefingModal payload={departureBriefings} onClose={closeDepartureBriefing} closeButtonRef={departureCloseButton} now={departureNow}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
+  return <main className={`dashboard${mainPrototype ? ' prototype-host' : ''}`}><Toast message={toast}/>{!mainPrototype && <DashboardHeader mode={mode} repair={repair} openRepair={() => setRepairOpen(true)} repairRef={repairButton} editing={editing} setEditing={setEditing} resetLayout={resetLayout} saveDefaultLayout={saveDefaultLayout} action={action} pending={pending} errors={errors} states={states}/>} {errors.load && <p className="load-error" role="alert">{errors.load}</p>}<div className="dashboard-content">{mainPrototype ? <MainDashboardPrototype states={states} activity={activity} activityLoading={activityLoading} activityStale={activityStale} refreshActivity={refreshActivity} showWeather={() => setDetailedWeather(true)} openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openVehicles={() => setVehiclesOpen(true)} openMode={() => setModeOpen(true)} openKlaraAi={openAiReport} openDeparture={() => setDepartureOpen(true)} hasDepartureBriefing={Boolean(departureBriefings?.briefings.length)} departureBriefings={departureBriefings} action={action} pending={pending} errors={errors}/> : mode === 'regular' ? <RegularDashboard {...dashboardProps} aiReport={aiReport} showWeather={() => setDetailedWeather(true)} editing={editing} layout={layouts.regular} updateLayout={updateLayout}/> : mode === 'guest' ? <GuestDashboard {...dashboardProps} editing={editing} layout={layouts.guest} updateLayout={updateLayout}/> : <ChildDashboard {...dashboardProps} editing={editing} layout={layouts.child} updateLayout={updateLayout}/>}</div>{!mainPrototype && <QuickControls openLights={() => setLightsOpen(true)} openHeatPump={() => setHeatPumpOpen(true)} openVacuum={() => setVacuumOpen(true)} openVehicles={() => setVehiclesOpen(true)} openMode={() => setModeOpen(true)} openKlaraAi={openAiReport} lightsButtonRef={lightsButton} heatPumpButtonRef={heatPumpButton} vacuumButtonRef={vacuumButton} vehiclesButtonRef={vehiclesButton} modeButtonRef={modeButton} klaraButtonRef={klaraButton}/>} {departureBriefings && !mainPrototype && <DepartureBriefingStatus briefings={departureBriefings.briefings} onOpen={() => setDepartureOpen(true)} buttonRef={departureStatusButton} now={departureNow}/>} {lightsOpen && <LightsModal states={states} pending={pending} errors={errors} command={lightCommand} close={() => setLightsOpen(false)} closeButtonRef={lightsCloseButton}/>} {heatPumpOpen && <HeatPumpModal {...dashboardProps} close={() => setHeatPumpOpen(false)} closeButtonRef={heatPumpCloseButton}/>} {vacuumOpen && <VacuumModal states={states} pending={pending} errors={errors} action={vacuumAction} close={() => setVacuumOpen(false)} closeButtonRef={vacuumCloseButton}/>} {vehiclesOpen && <VehicleModal states={states} close={() => setVehiclesOpen(false)} closeButtonRef={vehiclesCloseButton}/>} {modeOpen && <DashboardModeModal mode={mode} setMode={setMode} close={() => setModeOpen(false)} closeButtonRef={modeCloseButton}/>} {klaraAiOpen && <KlaraAiModal report={aiReport} states={states} loading={aiReportLoading} error={aiReportError} close={() => setKlaraAiOpen(false)} closeButtonRef={klaraCloseButton}/>} {departureOpen && departureBriefings && <DepartureBriefingModal payload={departureBriefings} onClose={closeDepartureBriefing} closeButtonRef={departureCloseButton} now={departureNow}/>} {repairOpen && <div className="repair-backdrop"><section className="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-title"><header><h2 id="repair-title"><Icon>warning</Icon>Systemreparasjon (8080)</h2><button ref={closeButton} type="button" aria-label="Lukk" onClick={() => setRepairOpen(false)}><Icon>close</Icon></button></header><iframe title="Reparer smarthuset" src="http://192.168.1.127:8080/"/></section></div>}</main>;
 }
