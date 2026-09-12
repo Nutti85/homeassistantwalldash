@@ -1111,6 +1111,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     activity?: ActivityPayload; activityLoading: boolean; activityStale: boolean;
   }>({ activityLoading: prototypeRequested && Boolean(api.getActivity), activityStale: false });
   const refreshActivityRef = useRef<() => Promise<void>>(async () => {});
+  const activityFailures = useRef(0);
   const refreshActivity = () => refreshActivityRef.current();
   const [mode, setMode] = useState<Mode>('regular');
   const [editing, setEditing] = useState(false);
@@ -1229,7 +1230,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     if (!prototypeRequested || !api.getActivity) return;
     let active = true;
     let requestInFlight = false;
-    let consecutiveFailures = 0;
+    let timer: number | undefined;
     setActivityState((current) => ({ ...current, activityLoading: !current.activity }));
 
     const refresh = async () => {
@@ -1238,12 +1239,12 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
       try {
         const confirmed = await api.getActivity!();
         if (!active) return;
-        consecutiveFailures = 0;
+        activityFailures.current = 0;
         setActivityState({ activity: confirmed, activityLoading: false, activityStale: false });
       } catch {
         if (!active) return;
-        consecutiveFailures += 1;
-        setActivityState((current) => ({ ...current, activityLoading: false, activityStale: consecutiveFailures >= 3 }));
+        const stale = ++activityFailures.current >= 3;
+        setActivityState((current) => ({ ...current, activityLoading: false, activityStale: stale }));
       } finally {
         requestInFlight = false;
       }
@@ -1251,15 +1252,28 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     refreshActivityRef.current = refresh;
     const refreshWhenVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
     const refreshWhenAwake = () => { void refresh(); };
+    const stopPolling = () => {
+      if (timer !== undefined) window.clearInterval(timer);
+      timer = undefined;
+    };
+    const startPolling = () => {
+      if (timer === undefined) timer = window.setInterval(refreshWhenVisible, activityRefreshIntervalMs);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startPolling();
+        void refresh();
+      } else stopPolling();
+    };
     void refresh();
-    const timer = window.setInterval(refreshWhenVisible, activityRefreshIntervalMs);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
+    if (document.visibilityState === 'visible') startPolling();
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', refreshWhenAwake);
     window.addEventListener('online', refreshWhenAwake);
     return () => {
       active = false;
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', refreshWhenAwake);
       window.removeEventListener('online', refreshWhenAwake);
     };

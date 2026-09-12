@@ -103,6 +103,48 @@ describe('V2 activity lifecycle', () => {
     expect(screen.getByText('Ny bekreftet hendelse')).toBeInTheDocument();
   });
 
+  it('removes the activity timer while hidden and starts a fresh 30-second interval on return', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    await advance(15_000);
+    const visibleTimers = vi.getTimerCount();
+    visibility.mockReturnValue('hidden');
+    await dispatch(document, 'visibilitychange');
+    expect(vi.getTimerCount()).toBe(visibleTimers - 1);
+    await advance(60_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    await dispatch(document, 'visibilitychange');
+    expect(vi.getTimerCount()).toBe(visibleTimers);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    await advance(29_999);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    await advance(1);
+    expect(api.getActivity).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([2, 3])('preserves %i consecutive failures across API replacement until a successful response', async (failures) => {
+    const api = activityApi();
+    const view = render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockRejectedValue(new Error('offline'));
+    await advance(failures * 30_000);
+    const replacement = activityApi();
+    replacement.getActivity.mockRejectedValue(new Error('still offline'));
+    view.rerender(<App api={replacement}/>);
+    await settle();
+    expect(screen.getByText('Hendelsene kan være utdaterte')).toBeInTheDocument();
+    expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+    replacement.getActivity.mockResolvedValueOnce(payload('Oppdatert etter gjenoppretting'));
+    await dispatch(window, 'online');
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+    expect(screen.getByText('Oppdatert etter gjenoppretting')).toBeInTheDocument();
+    await advance(60_000);
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+  });
+
   it('preserves confirmed activity through failures, warns at three, and resets after success', async () => {
     const api = activityApi();
     render(<App api={api}/>);
