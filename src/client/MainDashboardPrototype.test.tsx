@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
+import { familyReceiptStorageKey } from './familyInbox';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 
@@ -22,6 +23,7 @@ const renderPrototype = (states: Record<string, HomeAssistantState> = {}, action
 afterEach(() => {
   vi.useRealTimers();
   cleanup();
+  localStorage.clear();
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
@@ -125,7 +127,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       action={() => {}}
     />);
 
-    expect(screen.getByRole('heading', { name: 'Hendelser' })).toBeInTheDocument();
+    expect(within(document.querySelector('.ppf-agenda') as HTMLElement).getByRole('heading', { name: 'Hendelser' })).toBeInTheDocument();
     expect(screen.queryByText('Det familien må vite')).not.toBeInTheDocument();
   });
 
@@ -169,10 +171,11 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.getByText('Foreldremøte')).toBeInTheDocument();
     expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText(/Linus, Balder, Arne, Yashvi/)).toHaveLength(0);
     expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText('I dag har vi vært på tur')).toHaveLength(0);
-    expect(screen.queryByText('Bunny and tree project')).not.toBeInTheDocument();
-    expect(screen.queryByText('Bursdags samling')).not.toBeInTheDocument();
-    expect(screen.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
-    expect(screen.queryByText('Bursdag Ada')).not.toBeInTheDocument();
+    const agenda = within(document.querySelector('.ppf-agenda') as HTMLElement);
+    expect(agenda.queryByText('Bunny and tree project')).not.toBeInTheDocument();
+    expect(agenda.queryByText('Bursdags samling')).not.toBeInTheDocument();
+    expect(agenda.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
+    expect(agenda.queryByText('Bursdag Ada')).not.toBeInTheDocument();
   });
 
   it('shows tomorrow events when the rest of today is empty', () => {
@@ -212,7 +215,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Hendelse 6');
   });
 
-  it('shows Jacob before Nicolai with clickable headers and empty-state copy', () => {
+  it('replaces the past lane with the three modules and keeps full person views reachable from the empty inbox', () => {
     render(<MainDashboardPrototype
       states={{
         mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
@@ -235,24 +238,24 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       action={() => {}}
     />);
 
-    const sections = Array.from(document.querySelectorAll('.ppf-message-section')).map((section) => section.getAttribute('aria-label'));
-    expect(sections).toEqual(['Jacob beskjeder', 'Nicolai beskjeder']);
-    expect(screen.getAllByText('Ingen beskjeder')).toHaveLength(2);
-    expect(screen.queryByText('Ingen hendelser som trenger oppmerksomhet.')).not.toBeInTheDocument();
-
-    const nicolaiHeader = screen.getByRole('button', { name: 'Åpne full oversikt for Nicolai' });
-    const jacobHeader = screen.getByRole('button', { name: 'Åpne full oversikt for Jacob' });
-    expect(nicolaiHeader).toBeInTheDocument();
-    expect(jacobHeader).toBeInTheDocument();
-
-    fireEvent.click(nicolaiHeader);
-    expect(screen.getByRole('dialog', { name: 'MyKid · full oversikt' })).toBeInTheDocument();
+    const past = screen.getByRole('region', { name: 'SIDEN SIST' });
+    expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'SIST MENS HUSET VAR BORTE', 'Beskjeder', 'Hendelser']);
+    expect(within(past).getByText('Ingen uleste beskjeder')).toBeInTheDocument();
+    expect(screen.queryByText('Det som har skjedd')).not.toBeInTheDocument();
+    const opener = screen.getByRole('button', { name: 'Se alle beskjeder' });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toBeInTheDocument();
+    expect(within(screen.getByRole('tablist', { name: 'Familie' })).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Beskjeder', 'JacobZokrates', 'NicolaiMyKid']);
+    fireEvent.click(screen.getByRole('tab', { name: 'Nicolai MyKid' }));
+    expect(screen.getByText('MyKid · full oversikt')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Siste nyhetsbrev' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Lukk' }));
-
-    fireEvent.click(jacobHeader);
-    expect(screen.getByRole('dialog', { name: 'Jacobs skoleplan – uke 36' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Jacob Zokrates' }));
+    expect(screen.getByText('Jacobs skoleplan – uke 36')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Meldinger til hjemmet' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
   });
 
   it('keeps the original V2 weather tile implementation available behind the test switch', () => {
@@ -282,7 +285,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     }
   });
 
-  it('removes a stale weekend greeting and keeps the source label in the section header', () => {
+  it('keeps stale weekend greetings excluded from the full Nicolai today overview', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
 
@@ -309,10 +312,38 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       action={() => {}}
     />);
 
-    const section = screen.getByRole('region', { name: 'Nicolai beskjeder' });
+    fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Nicolai MyKid' }));
+    const section = screen.getByRole('tabpanel', { name: 'Nicolai MyKid' });
     expect(within(section).queryAllByText('God helg til dere alle! ❤️')).toHaveLength(0);
     expect(within(section).getByText('I dag har vi laget salatbuffé')).toBeInTheDocument();
-    expect(within(section).queryByText('I dag har vi laget salatbuffé og lekt med togbane.')).not.toBeInTheDocument();
-    expect(within(section).getAllByText('Nicolai')).toHaveLength(1);
+    expect(within(section).getByText('I dag har vi laget salatbuffé og lekt med togbane.')).toBeInTheDocument();
   });
+});
+
+it('shares explicit read state between the dashboard and modal, persists it on reload, and restores unread messages', () => {
+  const states = { jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Oppdatert', { messages: ['Ta med gymtøy'], source_updated_at: '2026-09-10T10:00:00Z' }) };
+  const view = renderPrototype(states);
+  const past = screen.getByRole('region', { name: 'SIDEN SIST' });
+  fireEvent.click(within(past).getByRole('button', { name: 'Åpne beskjed: Ta med gymtøy · Jacob' }));
+  expect(within(past).getByText('Ta med gymtøy')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Marker som lest: Ta med gymtøy' }));
+  expect(within(past).queryByText('Ta med gymtøy')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Lukk' }));
+  expect(screen.getByRole('button', { name: 'Se alle beskjeder' })).toHaveFocus();
+  fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
+  expect(JSON.parse(localStorage.getItem(familyReceiptStorageKey)!)).toHaveLength(1);
+  fireEvent.click(screen.getByRole('tab', { name: 'Alle' }));
+  expect(screen.getByRole('button', { name: 'Åpne beskjed: Ta med gymtøy · Jacob · Lest' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Jacob Zokrates' }));
+  expect(within(screen.getByRole('tabpanel', { name: 'Jacob Zokrates' })).getByText('Ta med gymtøy')).toBeInTheDocument();
+  view.unmount();
+  renderPrototype(states);
+  const reloadedPast = screen.getByRole('region', { name: 'SIDEN SIST' });
+  expect(within(reloadedPast).queryByText('Ta med gymtøy')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Alle' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Åpne beskjed: Ta med gymtøy · Jacob · Lest' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Marker som ulest: Ta med gymtøy' }));
+  expect(within(reloadedPast).getByText('Ta med gymtøy')).toBeInTheDocument();
 });

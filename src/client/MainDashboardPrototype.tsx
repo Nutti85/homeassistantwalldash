@@ -7,7 +7,9 @@ import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingM
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import { WeatherOverview } from './WeatherOverview';
 import { CameraCard } from './CameraCard';
-import { FamilyDetailBody, familyDetailTitle, isStaleFamilyItem } from './FamilyInboxModal';
+import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
+import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
+import { SinceLast, type SinceLastProps } from './SinceLast';
 
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const numberState = (state?: HomeAssistantState) => { const value = Number(stateValue(state)); return Number.isFinite(value) ? value : undefined; };
@@ -31,6 +33,9 @@ type PrototypeProps = {
   openDeparture: () => void;
   hasDepartureBriefing: boolean;
   departureBriefings?: DepartureBriefingPayload;
+  activity?: SinceLastProps['activity'];
+  activityLoading?: boolean;
+  activityStale?: boolean;
   action: (key: DashboardAction) => void;
   pending?: Record<string, boolean>;
   errors?: Record<string, string>;
@@ -109,10 +114,6 @@ function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBrief
 }
 
 type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
-type FamilyMessageFreshness = 'today' | 'dated' | 'persistent';
-type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string; freshness: FamilyMessageFreshness };
-type FamilySource = FamilyMessage['source'];
-const isMessageLike = (item: { title: string; details?: string }) => /god helg|i dag har vi|vi var |nyhetsbrev|brev|oppslag|referat|ukeplan|informasjon fra/i.test(item.title) || (item.details?.length ?? 0) > 140;
 const planDate = (date: string, time?: string): Date => {
   if (time && !Number.isNaN(Date.parse(time))) return new Date(time);
   const match = time?.match(/^(\d{1,2}):(\d{2})/);
@@ -138,50 +139,6 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
   ];
 }
 
-function familyMessages(states: PrototypeProps['states'], now = new Date()): FamilyMessage[] {
-  const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kindergartenMessages = [
-    ...(kindergarten?.noticeboard ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
-    ...(kindergarten?.newsletters ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
-    ...(kindergarten?.weeklyPlans ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
-    ...(kindergarten?.today ?? []).filter(isMessageLike).map((item) => ({ item, freshness: 'today' as const })),
-    ...(kindergarten?.events ?? []).filter(isMessageLike).map((item) => ({ item, freshness: 'dated' as const })),
-  ].map(({ item, freshness }) => ({ source: 'Nicolai' as const, title: item.title, body: item.details, date: item.date ?? item.published_at, freshness }));
-  const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
-  const schoolMessages = (school?.messages ?? []).map((message) => ({ source: 'Jacob' as const, title: message.length > 54 ? `${message.slice(0, 51)}…` : message, body: message, date: school?.source_updated_at, freshness: 'persistent' as const }));
-  const messages = [...new Map([...kindergartenMessages, ...schoolMessages]
-    .map((message) => [`${message.source}:${message.title}:${message.body ?? ''}`, message])).values()]
-    .filter((message) => !isStaleFamilyItem(message, message.freshness, now))
-    .sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
-  return messages;
-}
-
-
-function ScrollingMessageText({ children }: { children: string }) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const [overflows, setOverflows] = useState(false);
-
-  useEffect(() => {
-    const node = textRef.current;
-    if (!node) return;
-    const update = () => setOverflows(node.scrollWidth > node.clientWidth);
-    update();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [children]);
-
-  return <span ref={textRef} className={`ppf-message-marquee${overflows ? ' is-overflowing' : ''}`}>{overflows ? <span className="ppf-message-marquee-track"><span>{children}</span><span aria-hidden="true">{children}</span></span> : <span>{children}</span>}</span>;
-}
-
-function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']; openDetail: (detail: Detail) => void }) {
-  const messages = familyMessages(states);
-  const sources: Array<{ source: FamilySource; icon: string }> = [{ source: 'Jacob', icon: 'school' }, { source: 'Nicolai', icon: 'child_care' }];
-  const openFamilyDetail = (source: FamilySource, icon: string) => openDetail({ title: familyDetailTitle(source, jacobWeeklyPlan(states.jacobWeeklyPlan)), icon, body: <FamilyDetailBody source={source} jacob={jacobWeeklyPlan(states.jacobWeeklyPlan)} nicolai={mykidKindergarten(states.mykidKindergarten)}/> });
-  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className="ppf-message-copy"><strong><ScrollingMessageText>{message.title}</ScrollingMessageText></strong></span><Icon>chevron_right</Icon></button>;
-  return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-sections">{sources.map(({ source, icon }) => { const sourceMessages = messages.filter((message) => message.source === source).slice(0, 3); return <section key={source} className={`ppf-message-section ppf-message-section-${source.toLowerCase()}`} aria-label={`${source} beskjeder`}><h3 className="ppf-message-section-heading"><button type="button" aria-label={`Åpne full oversikt for ${source}`} onClick={() => openFamilyDetail(source, icon)}><span className={`ppf-source ppf-source-${source.toLowerCase()}`}>{source}</span><Icon>arrow_outward</Icon></button></h3>{sourceMessages.length ? <div className="ppf-message-list">{sourceMessages.map(renderMessage)}</div> : <p className="ppf-message-empty">Ingen beskjeder</p>}</section>; })}</div></Surface>;
-}
 
 function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {
   const now = new Date();
@@ -276,6 +233,27 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
+  const [receipts, setReceipts] = useState(() => readFamilyReceipts());
+  const [familyOpen, setFamilyOpen] = useState(false);
+  const [familyTab, setFamilyTab] = useState<FamilyInboxTab>('messages');
+  const [messageFilter, setMessageFilter] = useState<FamilyMessageFilter>('unread');
+  const [selectedMessageId, setSelectedMessageId] = useState<string>();
+  const familyInvoker = useRef<HTMLElement>();
+  const familyFallback = useRef<HTMLDivElement>(null);
+  const messages = familyMessages(props.states);
+  const openFamily = (id?: string) => {
+    familyInvoker.current = document.activeElement instanceof HTMLElement && familyFallback.current?.contains(document.activeElement)
+      ? document.activeElement : familyFallback.current?.querySelector<HTMLButtonElement>('[aria-label="Se alle beskjeder"]') ?? undefined;
+    setFamilyTab('messages'); setMessageFilter('unread'); setSelectedMessageId(id); setFamilyOpen(true);
+  };
+  // A read message can disappear from the card while its modal is open.
+  // Restore focus to the durable inbox opener if that original row is gone.
+  useEffect(() => {
+    if (!familyOpen && familyInvoker.current) {
+      const target = familyInvoker.current.isConnected ? familyInvoker.current : familyFallback.current?.querySelector<HTMLButtonElement>('[aria-label="Se alle beskjeder"]');
+      target?.focus(); familyInvoker.current = undefined;
+    }
+  }, [familyOpen]);
   const [doorbellOpen, setDoorbellOpen] = useState(query.scenario === 'doorbell');
   useEffect(() => { document.documentElement.classList.add('prototype-active'); document.body.classList.add('prototype-active'); const sync = () => setQuery(readQuery()); window.addEventListener('popstate', sync); return () => { document.documentElement.classList.remove('prototype-active'); document.body.classList.remove('prototype-active'); window.removeEventListener('popstate', sync); }; }, []);
   useEffect(() => setDoorbellOpen(query.scenario === 'doorbell'), [query.scenario]);
@@ -293,14 +271,14 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
-  const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
     {globalTime}
     <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
+    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
+    {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}
     {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
   </div>;
 }
