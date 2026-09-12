@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityEvent, ActivityPayload, AwayCapture } from '../shared/activity';
 import type { FamilyMessage } from './familyInbox';
 import { ActivityTimeline, AwayCaptureCard, FamilyInboxCard, SinceLast } from './SinceLast';
@@ -15,7 +15,39 @@ const messages: FamilyMessage[] = [
   { id: 'new', source: 'Nicolai', title: 'Ny beskjed', body: 'Hele den nye beskjeden', publishedAt: '2026-09-11T23:50:00+02:00' },
   { id: 'middle', source: 'Jacob', title: 'Husk gymtøy', body: 'Ta med gymtøy', publishedAt: '2026-09-08T23:00:00+02:00' },
 ];
-afterEach(cleanup);
+beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+describe.each(['away', 'timeline'] as const)('%s recording activation', (surface) => {
+  const show = () => render(surface === 'away' ? <AwayCaptureCard capture={available}/> : <ActivityTimeline events={[event]}/>);
+
+  it('starts the issued recording only after the user presses play', () => {
+    const { container } = show();
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    expect(play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Spill av opptak fra/ }));
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.instances[0]).toBe(container.querySelector('video'));
+    expect(container.querySelector('video')).toHaveAttribute('src', mediaPath);
+    expect(container.querySelector('video')).toHaveFocus();
+  });
+
+  it.each(['reject', 'throw'] as const)('keeps native playback controls usable when play fails via %s', async (mode) => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    if (mode === 'reject') play.mockRejectedValueOnce(new DOMException('User activation required', 'NotAllowedError'));
+    else play.mockImplementationOnce(() => { throw new DOMException('Playback interrupted', 'AbortError'); });
+    const { container } = show();
+    fireEvent.click(screen.getByRole('button', { name: /Spill av opptak fra/ }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Avspillingen startet ikke. Prøv avspillingsknappen i videoen.'));
+    const video = container.querySelector('video')!;
+    expect(video).toHaveAttribute('controls');
+    expect(video).toHaveAttribute('src', mediaPath);
+    expect(video).toHaveFocus();
+    expect(screen.queryByText('Opptaket er ikke lenger tilgjengelig')).not.toBeInTheDocument();
+    fireEvent.play(video);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
 
 describe('AwayCaptureCard', () => {
   it('shows event context in Oslo time and plays only the issued same-origin media after activation', () => {
@@ -156,4 +188,35 @@ it('keeps family messages usable independently of failed activity and preserves 
   expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['SIST MENS HUSET VAR BORTE', 'Beskjeder', 'Hendelser']);
   expect(screen.getByText('Kunne ikke hente hendelser fra sist huset var borte')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Se alle beskjeder' })).toBeEnabled();
+});
+
+it('shows loading in all three modules until initial activity resolves without flashing empty family copy', () => {
+  const props = { messages: [], receipts: [], onOpenFamily: () => {}, now };
+  const { rerender } = render(<SinceLast {...props} activityLoading/>);
+  const regions = screen.getAllByRole('region');
+  expect(regions).toHaveLength(3);
+  for (const region of regions) {
+    expect(region).toHaveAttribute('aria-busy', 'true');
+    expect(within(region).getByRole('status')).toBeInTheDocument();
+  }
+  expect(screen.queryByText('Ingen uleste beskjeder')).not.toBeInTheDocument();
+  expect(screen.queryByText('0 uleste')).not.toBeInTheDocument();
+  rerender(<SinceLast {...props} activityLoading={false} activity={{ generatedAt: now.toISOString(), awayCapture: { status: 'none' }, timeline: [] }}/>);
+  expect(screen.getByText('Ingen uleste beskjeder')).toBeInTheDocument();
+  expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
+  for (const region of screen.getAllByRole('region')) expect(region).toHaveAttribute('aria-busy', 'false');
+});
+
+it('keeps confirmed unread messages actionable while the initial activity request is loading', () => {
+  const onOpenFamily = vi.fn();
+  const props = { messages: [messages[2]], receipts: [], onOpenFamily, now };
+  const { rerender } = render(<SinceLast {...props} activityLoading/>);
+  const family = screen.getByRole('region', { name: 'Beskjeder' });
+  expect(family).toHaveAttribute('aria-busy', 'true');
+  expect(within(family).getByText('1 ulest')).toBeInTheDocument();
+  fireEvent.click(within(family).getByRole('button', { name: 'Åpne beskjed: Ny beskjed · Nicolai' }));
+  expect(onOpenFamily).toHaveBeenCalledWith('new');
+  rerender(<SinceLast {...props} activityLoading={false}/>);
+  expect(family).toHaveAttribute('aria-busy', 'false');
+  expect(within(family).getByText('Ny beskjed')).toBeInTheDocument();
 });

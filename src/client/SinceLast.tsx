@@ -26,23 +26,34 @@ function Module({ title, icon, children, loading = false, action, className = ''
   </section>;
 }
 
-function Loading({ rows = 1 }: { rows?: number }) {
-  return <div className="ppf-since-loading" role="status"><span className="sr-only">Henter hendelser</span>{Array.from({ length: rows }, (_, index) => <span className="ppf-since-skeleton" aria-hidden="true" key={index}/>)}</div>;
+function Loading({ rows = 1, label = 'Henter hendelser' }: { rows?: number; label?: string }) {
+  return <div className="ppf-since-loading" role="status"><span className="sr-only">{label}</span>{Array.from({ length: rows }, (_, index) => <span className="ppf-since-skeleton" aria-hidden="true" key={index}/>)}</div>;
 }
 
 function Recording({ path, thumbnail, label }: { path: string; thumbnail?: string; label: string }) {
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const failure = useRef<HTMLParagraphElement>(null);
   const recoverFocus = useRef(false);
-  useLayoutEffect(() => { if (playing) video.current?.focus(); }, [playing]);
+  useLayoutEffect(() => {
+    if (!playing || !video.current) return;
+    video.current.focus();
+    let active = true;
+    const cannotStart = () => { if (active) setPlaybackBlocked(true); };
+    // The player is mounted by the explicit play action. Keep native controls
+    // available if the browser rejects that initial playback request.
+    try { void video.current.play()?.catch(cannotStart); } catch { cannotStart(); }
+    return () => { active = false; };
+  }, [playing]);
   useLayoutEffect(() => { if (failed && recoverFocus.current) failure.current?.focus(); }, [failed]);
   if (failed) return <p ref={failure} tabIndex={-1} className="ppf-since-state" role="status">{expiredCopy}</p>;
   return <div className={`ppf-recording${thumbnail ? ' ppf-recording-preview' : ''}`}>
-    {playing ? <video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onError={() => { recoverFocus.current = document.activeElement === video.current; setFailed(true); }}/>
+    {playing ? <video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onPlay={() => setPlaybackBlocked(false)} onError={() => { recoverFocus.current = document.activeElement === video.current; setFailed(true); }}/>
       : <>{thumbnail && !thumbnailFailed && <img src={thumbnail} alt={`Siste registrering: ${label}`} onError={() => setThumbnailFailed(true)}/>}<button type="button" className="ppf-recording-play" aria-label={`Spill av opptak fra ${label}`} onClick={() => setPlaying(true)}><Icon>play_arrow</Icon><span>Spill av</span></button></>}
+    {playbackBlocked && <p className="ppf-since-state" role="status">Avspillingen startet ikke. Prøv avspillingsknappen i videoen.</p>}
   </div>;
 }
 
@@ -66,14 +77,17 @@ interface FamilyInboxCardProps {
   receipts: FamilyReadReceipt[];
   onOpen: (id?: string) => void;
   now?: Date;
+  loading?: boolean;
 }
 
-export function FamilyInboxCard({ messages, receipts, onOpen, now = new Date() }: FamilyInboxCardProps) {
+export function FamilyInboxCard({ messages, receipts, onOpen, now = new Date(), loading = false }: FamilyInboxCardProps) {
   const readIds = new Set(receipts.map(({ id }) => id));
   const unread = messages.filter(({ id }) => !readIds.has(id)).sort((left, right) => (validTime(right.publishedAt) ?? 0) - (validTime(left.publishedAt) ?? 0));
-  return <Module title="Beskjeder" icon="mark_email_unread" className="ppf-inbox-card" action={<button type="button" className="ppf-since-more" aria-label="Se alle beskjeder" onClick={() => onOpen()}>Se alle</button>}>
+  return <Module title="Beskjeder" icon="mark_email_unread" className="ppf-inbox-card" loading={loading} action={<button type="button" className="ppf-since-more" aria-label="Se alle beskjeder" onClick={() => onOpen()}>Se alle</button>}>
+    {loading && !unread.length ? <Loading rows={2} label="Henter beskjeder"/> : <>
     <p className="ppf-unread-count" aria-live="polite">{unread.length} {unread.length === 1 ? 'ulest' : 'uleste'}</p>
     {unread.length ? <ol className="ppf-inbox-preview" aria-label="Uleste beskjeder">{unread.slice(0, 2).map((message) => <li key={message.id}><button type="button" aria-label={`Åpne beskjed: ${message.title} · ${message.source}`} onClick={() => onOpen(message.id)}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><strong>{message.title}</strong><time dateTime={validTime(message.publishedAt) === undefined ? undefined : message.publishedAt}>{relativeAge(message.publishedAt, now)}</time><Icon>chevron_right</Icon></button></li>)}</ol> : <p className="ppf-since-state">Ingen uleste beskjeder</p>}
+    </>}
   </Module>;
 }
 
@@ -128,5 +142,5 @@ export interface SinceLastProps {
 }
 
 export function SinceLast({ activity, activityLoading = false, activityStale = false, messages, receipts, onOpenFamily, now }: SinceLastProps) {
-  return <div className="ppf-since-last"><AwayCaptureCard capture={activity?.awayCapture} loading={activityLoading}/><FamilyInboxCard messages={messages} receipts={receipts} onOpen={onOpenFamily} now={now}/><ActivityTimeline events={activity?.timeline ?? []} loading={activityLoading && !activity}/>{activityStale && <p className="ppf-since-stale" role="status">Hendelsene kan være utdaterte</p>}</div>;
+  return <div className="ppf-since-last"><AwayCaptureCard capture={activity?.awayCapture} loading={activityLoading}/><FamilyInboxCard messages={messages} receipts={receipts} onOpen={onOpenFamily} now={now} loading={activityLoading && !activity}/><ActivityTimeline events={activity?.timeline ?? []} loading={activityLoading && !activity}/>{activityStale && <p className="ppf-since-stale" role="status">Hendelsene kan være utdaterte</p>}</div>;
 }
