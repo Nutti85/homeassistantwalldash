@@ -124,13 +124,13 @@ function TimelineDialog({ events, onClose }: { events: ActivityEvent[]; onClose:
     document.addEventListener('keydown', keydown, true);
     return () => { document.removeEventListener('focusin', contain); document.removeEventListener('keydown', keydown, true); if (invoker?.isConnected) invoker.focus(); };
   }, []);
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={ref} className="ppf-modal ppf-activity-modal" role="dialog" aria-modal="true" aria-labelledby={id}><header><span><Icon>history</Icon></span><h2 id={id}>Hendelser</h2><button ref={closeRef} type="button" aria-label="Lukk" onClick={onClose}><Icon>close</Icon></button></header><div className="ppf-activity-modal-body" tabIndex={0}><TimelineRows events={events}/></div></section></div>;
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={ref} className="ppf-modal ppf-activity-modal" role="dialog" aria-modal="true" aria-labelledby={id}><header><span><Icon>history</Icon></span><h2 id={id}>Tidslinje</h2><button ref={closeRef} type="button" aria-label="Lukk" onClick={onClose}><Icon>close</Icon></button></header><div className="ppf-activity-modal-body" tabIndex={0}><TimelineRows events={events}/></div></section></div>;
 }
 
 export function ActivityTimeline({ events, loading = false }: { events: ActivityEvent[]; loading?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const sorted = [...events].sort((left, right) => (validTime(right.occurredAt) ?? 0) - (validTime(left.occurredAt) ?? 0));
-  return <><Module title="Hendelser" icon="format_list_bulleted" className="ppf-activity-card" loading={loading} action={sorted.length > 5 && <button type="button" className="ppf-since-more" aria-label="Se alle hendelser" onClick={() => setExpanded(true)}>Se alle</button>}>
+  return <><Module title="Tidslinje" icon="format_list_bulleted" className="ppf-activity-card" loading={loading} action={sorted.length > 5 && <button type="button" className="ppf-since-more" aria-label="Se alle hendelser" onClick={() => setExpanded(true)}>Se alle</button>}>
     {loading && !events.length ? <Loading rows={3}/> : sorted.length ? <TimelineRows events={sorted.slice(0, 5)}/> : <p className="ppf-since-state">Ingen nye hendelser</p>}
   </Module>{expanded && <TimelineDialog events={sorted} onClose={() => setExpanded(false)}/>}</>;
 }
