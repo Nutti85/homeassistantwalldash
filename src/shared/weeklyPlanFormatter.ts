@@ -31,8 +31,9 @@ const item = (row: PlanRow, title: unknown, dateValue: unknown, weekday: unknown
   };
 };
 
-export const formatJacobWeeklyPlan = (input: WeeklyPlanDatabaseRows): { state: string; attributes: JacobWeeklyPlanSnapshot } => {
-  const plan = input.plan ?? {};
+export const formatJacobWeeklyPlan = (input: WeeklyPlanDatabaseRows): { state: string; attributes: JacobWeeklyPlanSnapshot } | undefined => {
+  const plan = input.plan;
+  if (!plan || (typeof plan.weekly_plan_id !== 'string' && typeof plan.weekly_plan_id !== 'number')) return undefined;
   const events = (input.events ?? []).flatMap((row) => { const value = item(row, row.title, row.event_date, row.date_text, row.details, undefined, row.start_time); return value ? [value] : []; }).sort(sortRows);
   const reminders = (input.reminders ?? []).flatMap((row) => { const value = item(row, row.reminder, row.reminder_date, row.date_text, row.evidence_text); return value ? [value] : []; }).sort(sortRows);
   const homework = (input.homework ?? []).flatMap((row) => { const value = item(row, row.task, row.due_date, row.due_date_text, row.evidence_text, row.subject); return value ? [value] : []; }).sort(sortRows);

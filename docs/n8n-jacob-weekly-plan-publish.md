@@ -2,7 +2,7 @@
 
 Workflow file: `n8n/klara-publish-jacob-weekly-plan.json`
 
-The workflow reads the latest processed plan for `people.external_key = 'jacob'`, formats a compact Norwegian summary plus the complete structured snapshot, and writes it to Home Assistant as `sensor.jacob_weekly_plan`.
+The workflow runs every 15 minutes, reads the latest processed plan for `people.external_key = 'jacob'`, formats a compact Norwegian summary plus the complete structured snapshot, and writes it to Home Assistant as `sensor.jacob_weekly_plan`. If no processed plan is returned, it emits no item and deliberately leaves the last confirmed Home Assistant state untouched.
 
 ## Setup
 
@@ -10,7 +10,7 @@ The workflow reads the latest processed plan for `people.external_key = 'jacob'`
 2. Select the restricted Klara PostgreSQL read credential on `Load latest Jacob plan`.
 3. Select the existing restricted Home Assistant credential on `Publish to Home Assistant`.
 4. Set the Home Assistant base URL in n8n’s environment as `HA_URL` if it is not already available to the n8n instance.
-5. Run manually once, inspect the Home Assistant entity, then activate the 15-minute schedule.
+5. Run manually once, inspect the Home Assistant entity, then confirm the 15-minute schedule remains active.
 
 The workflow does not insert or update Klara rows, so rerunning it cannot duplicate plans or child records. The source PDF and large extracted text remain in Klara’s private database/object storage.
 
