@@ -112,7 +112,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.getByRole('heading', { name: 'Akkurat nå' })).toBeInTheDocument();
   });
 
-  it('labels the family agenda Hendelser', () => {
+  it('labels the family agenda Tidslinje', () => {
     render(<MainDashboardPrototype
       states={{}}
       showWeather={() => {}}
@@ -127,7 +127,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       action={() => {}}
     />);
 
-    expect(within(document.querySelector('.ppf-agenda') as HTMLElement).getByRole('heading', { name: 'Hendelser' })).toBeInTheDocument();
+    expect(within(document.querySelector('.ppf-agenda') as HTMLElement).getByRole('heading', { name: 'Tidslinje' })).toBeInTheDocument();
     expect(screen.queryByText('Det familien må vite')).not.toBeInTheDocument();
   });
 
