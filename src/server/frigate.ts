@@ -23,13 +23,13 @@ export class FrigateClient {
     } catch { throw new FrigateCommunicationError(); }
   }
 
-  public async getReviewItems(after: Date, before: Date): Promise<FrigateReviewItem[]> {
+  public async getReviewItems(after: Date, before: Date, signal?: AbortSignal): Promise<FrigateReviewItem[]> {
     try {
       const start = after.getTime() / 1000;
       const end = before.getTime() / 1000;
       if (!validTimestamp(start) || !validTimestamp(end) || end <= start) throw new FrigateCommunicationError();
       const query = new URLSearchParams({ after: String(start), before: String(end), limit: '500' });
-      const response = await this.request(`/api/review?${query}`);
+      const response = await this.request(`/api/review?${query}`, signal);
       const payload: unknown = await response.json();
       if (!Array.isArray(payload) || payload.length > 500) throw new FrigateCommunicationError();
       return payload.map((item) => {

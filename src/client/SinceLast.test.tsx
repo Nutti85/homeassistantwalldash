@@ -70,11 +70,30 @@ describe('AwayCaptureCard', () => {
     ['none', 'Ingen registrerte hendelser mens huset var borte'],
     ['unavailable', 'Kunne ikke hente hendelser fra sist huset var borte'],
   ] as const)('explains %s without a media request or play control', (status, copy) => {
-    const { container } = render(<AwayCaptureCard capture={{ ...available, status }}/>);
+    const { container } = render(<AwayCaptureCard capture={{ ...available, status, thumbnailPath: undefined }}/>);
     expect(screen.getByText(copy)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Spill av/ })).not.toBeInTheDocument();
     expect(container.querySelector('video, img')).toBeNull();
     if (status === 'expired') expect(screen.getByText('Bil registrert')).toBeInTheDocument();
+  });
+
+  it('keeps the safe thumbnail and event context when the recording has expired', () => {
+    const { container } = render(<AwayCaptureCard capture={{ ...available, status: 'expired', mediaPath: undefined }}/>);
+    expect(screen.getByRole('img')).toHaveAttribute('src', thumbnailPath);
+    expect(screen.getByText('Bil registrert')).toBeInTheDocument();
+    expect(container.querySelector('time')).toHaveTextContent('14:50');
+    expect(screen.getByText('Opptaket er ikke lenger tilgjengelig')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Spill av/ })).not.toBeInTheDocument();
+    expect(container.querySelector('video')).toBeNull();
+    fireEvent.error(screen.getByRole('img'));
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText('Opptaket er ikke lenger tilgjengelig')).toBeInTheDocument();
+  });
+
+  it.each(['https://camera.invalid/thumbnail', '//camera.invalid/thumbnail', `${thumbnailPath}?url=secret`])('rejects unsafe expired thumbnails: %s', (path) => {
+    render(<AwayCaptureCard capture={{ ...available, status: 'expired', mediaPath: undefined, thumbnailPath: path }}/>);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText('Opptaket er ikke lenger tilgjengelig')).toBeInTheDocument();
   });
 
   it('reserves loading geometry without flashing empty or unavailable copy', () => {

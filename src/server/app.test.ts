@@ -47,6 +47,20 @@ const mediaRoutes = [
 ] as const;
 
 describe('activity API', () => {
+  it('distinguishes failed initial history from a confirmed empty activity response', async () => {
+    let failed = true;
+    const activity = new ActivityService({ getActivityHistory: async () => {
+      if (failed) throw new Error('http://private:8123 token=secret');
+      return {};
+    } });
+    const app = createApp(createClient(), { activity });
+    await request(app).get('/api/activity').expect(502, activityError);
+    failed = false;
+    const response = await request(app).get('/api/activity').expect(200);
+    expect(response.body.timeline).toEqual([]);
+    expect(response.body.awayCapture.status).toBe('unavailable');
+  });
+
   it('returns the typed activity payload without caching personal activity', async () => {
     const activity = emptyActivity();
     const payload: ActivityPayload = {

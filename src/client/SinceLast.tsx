@@ -58,8 +58,9 @@ function Recording({ path, thumbnail, label }: { path: string; thumbnail?: strin
 }
 
 export function AwayCaptureCard({ capture, loading = false }: { capture?: AwayCapture; loading?: boolean }) {
+  const [failedThumbnail, setFailedThumbnail] = useState<string>();
   const media = capture?.status === 'available' ? safeMediaPath(capture.mediaPath, 'preview') : undefined;
-  const thumbnail = media ? safeMediaPath(capture?.thumbnailPath, 'thumbnail') : undefined;
+  const thumbnail = media || capture?.status === 'expired' ? safeMediaPath(capture?.thumbnailPath, 'thumbnail') : undefined;
   const event = capture?.event;
   const hasContext = event && (capture.status === 'available' || capture.status === 'expired');
   const copy = capture?.status === 'none' ? 'Ingen registrerte hendelser mens huset var borte'
@@ -67,7 +68,10 @@ export function AwayCaptureCard({ capture, loading = false }: { capture?: AwayCa
   return <Module title="SIST MENS HUSET VAR BORTE" icon="history" className="ppf-away-capture" loading={loading && !capture}>
     {loading && !capture ? <Loading/> : <>
       {hasContext && <div className="ppf-away-context"><strong>{event.title}</strong>{event.detail && <span>{event.detail}</span>}<time dateTime={event.occurredAt}>{localDate(event.occurredAt)}</time></div>}
-      {media && event ? <Recording key={media} path={media} thumbnail={thumbnail} label={`${event.detail ?? event.title} · ${localDate(event.occurredAt)}`}/> : <p className="ppf-since-state">{copy}</p>}
+      {media && event ? <Recording key={media} path={media} thumbnail={thumbnail} label={`${event.detail ?? event.title} · ${localDate(event.occurredAt)}`}/> : <>
+        {thumbnail && thumbnail !== failedThumbnail && event && <div className="ppf-recording ppf-recording-preview"><img src={thumbnail} alt={`Siste registrering: ${event.detail ?? event.title} · ${localDate(event.occurredAt)}`} onError={() => setFailedThumbnail(thumbnail)}/></div>}
+        <p className="ppf-since-state">{copy}</p>
+      </>}
     </>}
   </Module>;
 }

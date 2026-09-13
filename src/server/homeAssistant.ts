@@ -186,7 +186,7 @@ export class HomeAssistantClient {
     private readonly activityEntities: ActivityEntityConfig = { doorbellVisitor: '', frigateEvents: [] },
   ) {}
 
-  public async getActivityHistory(start: Date, end: Date): Promise<Record<string, HomeHistoryPoint[]>> {
+  public async getActivityHistory(start: Date, end: Date, signal?: AbortSignal): Promise<Record<string, HomeHistoryPoint[]>> {
     try {
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
         throw communicationError();
@@ -206,6 +206,7 @@ export class HomeAssistantClient {
       const response = await this.fetchWithTimeout(`${this.baseUrl}/api/history/period/${start.toISOString()}?${query}`, {
         method: 'GET',
         headers: this.headers(),
+        signal,
       });
       if (!response.ok) throw communicationError();
       const payload: unknown = await response.json();
@@ -709,8 +710,9 @@ export class HomeAssistantClient {
   private async fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
     try {
-      return await this.fetcher(input, { ...init, signal: controller.signal });
+      return await this.fetcher(input, { ...init, signal });
     } finally {
       clearTimeout(timeout);
     }

@@ -23,6 +23,7 @@ interface ResolvedMedia {
 export const isActivityMediaId = (id: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
 
 const dayMs = 24 * 60 * 60 * 1000;
+const activityBudgetMs = 8_000;
 const unavailable = () => new Error('Aktivitet er ikke tilgjengelig');
 const normalizeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 const displayName = (value: string) => value.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
@@ -58,18 +59,28 @@ export class ActivityService {
   ) {}
 
   public async getActivity(now = new Date()): Promise<ActivityPayload> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), activityBudgetMs);
+    try {
+      return await this.getActivityWithSignal(now, controller.signal);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async getActivityWithSignal(now: Date, activitySignal: AbortSignal): Promise<ActivityPayload> {
     if (!Number.isFinite(now.getTime())) throw unavailable();
     const payload: ActivityPayload = { generatedAt: now.toISOString(), awayCapture: { status: 'unavailable' }, timeline: [] };
     let timelineStart = new Date(now.getTime() - dayMs);
     let history: Record<string, HomeHistoryPoint[]>;
-    try { history = await this.homeAssistant.getActivityHistory(timelineStart, now); }
-    catch { return payload; }
+    try { history = await this.homeAssistant.getActivityHistory(timelineStart, now, activitySignal); }
+    catch { throw unavailable(); }
 
     payload.timeline = this.timeline(history, timelineStart, now);
     if (payload.timeline.length < 3) {
       const weekStart = new Date(now.getTime() - 7 * dayMs);
       try {
-        history = await this.homeAssistant.getActivityHistory(weekStart, now);
+        history = await this.homeAssistant.getActivityHistory(weekStart, now, activitySignal);
         timelineStart = weekStart;
         payload.timeline = this.timeline(history, timelineStart, now);
       } catch { /* Keep the confirmed 24-hour timeline. */ }
@@ -80,28 +91,33 @@ export class ActivityService {
     if (!interval) {
       try {
         // Away capture has an independent bounded lookback, beyond the recent timeline.
-        interval = this.latestAway(await this.homeAssistant.getActivityHistory(new Date(now.getTime() - 30 * dayMs), now), now);
+        interval = this.latestAway(await this.homeAssistant.getActivityHistory(new Date(now.getTime() - 30 * dayMs), now, activitySignal), now);
       } catch { awayHistoryAvailable = false; }
     }
     const probes = new Map<string, Promise<'available' | 'expired' | 'unavailable'>>();
     if (this.frigate && awayHistoryAvailable) {
-      payload.awayCapture = interval ? await this.awayCapture(interval, probes) : { status: 'none' };
+      payload.awayCapture = interval ? await this.awayCapture(interval, probes, activitySignal) : { status: 'none' };
     }
 
     const detections = payload.timeline.filter((event) => event.kind === 'frigate');
     if (this.frigate && detections.length) {
       try {
-        const reviews = await this.frigate.getReviewItems(new Date(timelineStart.getTime() - 30_000), now);
-        for (const event of detections) {
-          const entity = this.config.frigateEvents.find((candidate) => event.id.startsWith(`${candidate}:`));
-          if (!entity) continue;
-          const identity = detectionIdentity(entity);
-          const matched = reviews.filter((item) => normalizeName(item.camera) === normalizeName(identity.camera)
-            && strings(item.data?.objects).some((object) => normalizeName(object) === normalizeName(identity.object))
-            && Math.abs(item.start_time * 1000 - Date.parse(event.occurredAt)) <= 30_000)
-            .sort((left, right) => Math.abs(left.start_time * 1000 - Date.parse(event.occurredAt)) - Math.abs(right.start_time * 1000 - Date.parse(event.occurredAt)))[0];
-          if (matched && await this.probe(matched, now.getTime() / 1000, probes) === 'available') event.mediaPath = this.issuedMediaPath(matched.id);
-        }
+        const reviews = await this.frigate.getReviewItems(new Date(timelineStart.getTime() - 30_000), now, activitySignal);
+        // Share a bounded queue so media latency does not accumulate per event.
+        // Away resolves first, retaining the stricter interval for shared reviews.
+        const remaining = detections.values();
+        await Promise.all(Array.from({ length: Math.min(4, detections.length) }, async () => {
+          for (const event of remaining) {
+            const entity = this.config.frigateEvents.find((candidate) => event.id.startsWith(`${candidate}:`));
+            if (!entity) continue;
+            const identity = detectionIdentity(entity);
+            const matched = reviews.filter((item) => normalizeName(item.camera) === normalizeName(identity.camera)
+              && strings(item.data?.objects).some((object) => normalizeName(object) === normalizeName(identity.object))
+              && Math.abs(item.start_time * 1000 - Date.parse(event.occurredAt)) <= 30_000)
+              .sort((left, right) => Math.abs(left.start_time * 1000 - Date.parse(event.occurredAt)) - Math.abs(right.start_time * 1000 - Date.parse(event.occurredAt)))[0];
+            if (matched && await this.probe(matched, now.getTime() / 1000, probes, 0, activitySignal) === 'available') event.mediaPath = this.issuedMediaPath(matched.id);
+          }
+        }));
       } catch { /* HA detections remain informative without Frigate. */ }
     }
     return payload;
@@ -146,20 +162,20 @@ export class ActivityService {
     return completedAwayIntervals((history[this.config.home] ?? []).filter((point) => Date.parse(point.changedAt) <= now.getTime()))[0];
   }
 
-  private async awayCapture(interval: AwayInterval, probes: Map<string, Promise<'available' | 'expired' | 'unavailable'>>): Promise<AwayCapture> {
+  private async awayCapture(interval: AwayInterval, probes: Map<string, Promise<'available' | 'expired' | 'unavailable'>>, signal: AbortSignal): Promise<AwayCapture> {
     const capture: AwayCapture = { status: 'unavailable', awayStartedAt: interval.startedAt, homeReturnedAt: interval.endedAt };
     try {
-      const reviews = await this.frigate!.getReviewItems(new Date(interval.startedAt), new Date(interval.endedAt));
+      const reviews = await this.frigate!.getReviewItems(new Date(interval.startedAt), new Date(interval.endedAt), signal);
       const review = selectAwayReview(reviews, interval);
       if (!review) return { ...capture, status: 'none' };
       capture.event = reviewEvent(review);
-      capture.status = await this.probe(review, Date.parse(interval.endedAt) / 1000, probes, Date.parse(interval.startedAt) / 1000);
+      capture.status = await this.probe(review, Date.parse(interval.endedAt) / 1000, probes, Date.parse(interval.startedAt) / 1000, signal);
       if (capture.status === 'available') {
         capture.mediaPath = this.issuedMediaPath(review.id);
         capture.event.mediaPath = capture.mediaPath;
       }
       try {
-        const thumbnail = await this.frigate!.getReviewThumbnail(review.id, review.camera);
+        const thumbnail = await this.frigate!.getReviewThumbnail(review.id, review.camera, signal);
         await thumbnail.body?.cancel();
         const now = Date.now();
         for (const [id, entry] of this.resolvedThumbnails) if (entry.expiresAt <= now) this.resolvedThumbnails.delete(id);
@@ -175,15 +191,15 @@ export class ActivityService {
     return capture;
   }
 
-  private probe(review: FrigateReviewItem, until: number, probes: Map<string, Promise<'available' | 'expired' | 'unavailable'>>, since = 0): Promise<'available' | 'expired' | 'unavailable'> {
+  private probe(review: FrigateReviewItem, until: number, probes: Map<string, Promise<'available' | 'expired' | 'unavailable'>>, since = 0, signal?: AbortSignal): Promise<'available' | 'expired' | 'unavailable'> {
     const existing = probes.get(review.id);
     if (existing) return existing;
-    const pending = this.resolveMedia(review, since, until);
+    const pending = this.resolveMedia(review, since, until, signal);
     probes.set(review.id, pending);
     return pending;
   }
 
-  private async resolveMedia(review: FrigateReviewItem, since: number, until: number): Promise<'available' | 'expired' | 'unavailable'> {
+  private async resolveMedia(review: FrigateReviewItem, since: number, until: number, signal?: AbortSignal): Promise<'available' | 'expired' | 'unavailable'> {
     const start = Math.max(since, review.start_time);
     const end = Math.min(until, review.end_time ?? review.start_time + 30, start + 300);
     // Frigate 0.17 adds eight seconds to review previews. Never cross the HA interval.
@@ -215,8 +231,8 @@ export class ActivityService {
       const version = media.version;
       try {
         const response = media.source === 'preview'
-          ? await this.frigate!.getReviewPreview(review.id)
-          : await this.frigate!.getRecordingClip(review.camera, media.start, media.end);
+          ? await this.frigate!.getReviewPreview(review.id, signal)
+          : await this.frigate!.getRecordingClip(review.camera, media.start, media.end, signal);
         await response.body?.cancel(); // Probe availability without buffering or persisting footage.
         if (this.resolvedMedia.get(review.id) !== media || media.expiresAt <= Date.now()) return 'unavailable';
         if (media.version !== version) continue;

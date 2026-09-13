@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityService } from './activity';
 import { FrigateClient } from './frigate';
-import type { FrigateReviewItem, HomeHistoryPoint } from '../shared/activity';
+import type { ActivityPayload, FrigateReviewItem, HomeHistoryPoint } from '../shared/activity';
 
 const config = { home: 'input_select.home_state', frontDoorLock: 'lock.front', doorbellVisitor: 'binary_sensor.visitor', frigateEvents: ['image.gaardsplassen_wide_car', 'image.bod_person'] };
 const now = new Date('2026-08-28T15:00:00+02:00');
@@ -34,6 +34,71 @@ function setup(history: Record<string, HomeHistoryPoint[]> = awayHistory, review
 }
 
 describe('ActivityService', () => {
+  it('resolves twelve delayed recording matches before the client deadline with bounded upstream concurrency', async () => {
+    vi.useFakeTimers();
+    try {
+      const reviews = Array.from({ length: 12 }, (_, index) => ({ ...review,
+        id: `${start - index * 60}.123456-abc123`, start_time: start - index * 60, end_time: start - index * 60 + 20,
+      }));
+      const history = { [config.frigateEvents[0]]: reviews.map((item) => ({ state: new Date(item.start_time * 1000).toISOString(), changedAt: new Date(item.start_time * 1000).toISOString() })) };
+      const { service, fetcher } = setup(history, reviews);
+      const original = fetcher.getMockImplementation()!;
+      let active = 0;
+      let peak = 0;
+      fetcher.mockImplementation(async (input, init) => {
+        if (new URL(String(input)).pathname.endsWith('/preview')) {
+          active += 1;
+          peak = Math.max(peak, active);
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          active -= 1;
+        }
+        return original(input, init);
+      });
+      let payload: ActivityPayload | undefined;
+      const pending = service.getActivity(now).then((result) => { payload = result; });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(payload, 'all matches should resolve within three seconds, below the ten-second client deadline').toBeDefined();
+      expect(payload!.timeline).toHaveLength(12);
+      expect(new Set(payload!.timeline.map((event) => mediaId(event.mediaPath))).size).toBe(12);
+      expect(peak).toBeLessThanOrEqual(4);
+      await pending;
+    } finally {
+      await vi.runAllTimersAsync();
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns trusted timeline metadata when a long media queue exhausts its activity budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const reviews = Array.from({ length: 48 }, (_, index) => ({ ...review,
+        id: `${start - index * 60}.123456-abc123`, start_time: start - index * 60, end_time: start - index * 60 + 20,
+      }));
+      const history = { [config.frigateEvents[0]]: reviews.map((item) => ({ state: new Date(item.start_time * 1000).toISOString(), changedAt: new Date(item.start_time * 1000).toISOString() })) };
+      const { service, fetcher } = setup(history, reviews);
+      const original = fetcher.getMockImplementation()!;
+      fetcher.mockImplementation(async (input, init) => {
+        if (new URL(String(input)).pathname.endsWith('/preview')) await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 900);
+          const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+          if (init?.signal?.aborted) abort();
+          else init?.signal?.addEventListener('abort', abort, { once: true });
+        });
+        return original(input, init);
+      });
+      let payload: ActivityPayload | undefined;
+      const pending = service.getActivity(now).then((result) => { payload = result; });
+      await vi.advanceTimersByTimeAsync(8_500);
+      expect(payload, 'optional media probes must not hold the activity response past its budget').toBeDefined();
+      expect(payload!.timeline).toHaveLength(48);
+      expect(payload!.timeline.some((event) => event.mediaPath)).toBe(true);
+      await pending;
+    } finally {
+      await vi.runAllTimersAsync();
+      vi.useRealTimers();
+    }
+  });
+
   it('renews expired generations with different URLs without reviving old media or thumbnail IDs', async () => {
     const clock = vi.spyOn(Date, 'now');
     const epoch = Date.now();
@@ -206,7 +271,7 @@ describe('ActivityService', () => {
   it('does not infer Away or timeline events when HA history fails', async () => {
     const { service, historySource, fetcher } = setup();
     historySource.getActivityHistory.mockRejectedValue(new Error('private HA token'));
-    expect(await service.getActivity(now)).toEqual({ generatedAt: now.toISOString(), awayCapture: { status: 'unavailable' }, timeline: [] });
+    await expect(service.getActivity(now)).rejects.toThrow('Aktivitet er ikke tilgjengelig');
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -228,8 +293,6 @@ describe('ActivityService', () => {
 
   it('keeps confirmed recent events if the extended history query fails', async () => {
     const { service, historySource } = setup({ [config.frontDoorLock]: [point('locked', '14:00')] });
-    historySource.getActivityHistory.mockRejectedValueOnce(new Error('initial failure'));
-    expect((await service.getActivity(now)).timeline).toEqual([]);
     historySource.getActivityHistory.mockResolvedValueOnce({ [config.frontDoorLock]: [point('locked', '14:00')] }).mockRejectedValue(new Error('extended failure'));
     const payload = await service.getActivity(now);
     expect(payload.timeline.map((event) => event.title)).toEqual(['Døren er låst']);
