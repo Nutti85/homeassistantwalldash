@@ -201,6 +201,18 @@ describe('ActivityService', () => {
     expect(payload.awayCapture.status).toBe('none');
   });
 
+  it('records a doorbell event when history starts with an actual on state', async () => {
+    const { service } = setup({
+      [config.doorbellVisitor]: [point('on', '14:10'), point('off', '14:11')],
+    });
+
+    const timeline = (await service.getActivity(now)).timeline;
+
+    expect(timeline.filter((event) => event.kind === 'doorbell')).toEqual([
+      expect.objectContaining({ title: 'Noen ringte på', occurredAt: '2026-08-28T12:10:00.000Z' }),
+    ]);
+  });
+
   it('finds a real multi-day departure in the longer lookup rather than using baseline Borte', async () => {
     const { service, historySource } = setup();
     const departure = '2026-08-18T07:50:00+02:00';
@@ -308,9 +320,9 @@ describe('ActivityService', () => {
       'image.unconfigured_person': [point(at('14:10'), '14:10')],
     });
     const timeline = (await service.getActivity(now)).timeline;
-    expect(timeline.map((row) => row.kind)).toEqual(['home', 'doorbell', 'lock', 'lock', 'home', 'home']);
+    expect(timeline.map((row) => row.kind)).toEqual(['home', 'doorbell', 'doorbell', 'lock', 'lock', 'home', 'home']);
     expect(timeline.filter((row) => row.tone === 'safe').map((row) => row.title)).toEqual(['Døren er låst']);
-    expect(timeline.filter((row) => row.kind === 'doorbell').map((row) => row.occurredAt)).toEqual(['2026-08-28T11:12:00.000Z']);
+    expect(timeline.filter((row) => row.kind === 'doorbell').map((row) => row.occurredAt)).toEqual(['2026-08-28T11:12:00.000Z', '2026-08-28T11:10:00.000Z']);
   });
 
   it('matches detection timestamps to nearest same-camera/object review within 30 seconds', async () => {

@@ -273,7 +273,7 @@ export class ActivityService {
           event = { kind: 'home', title: state === 'Hjemme' ? 'Huset er hjemme' : 'Huset er borte', tone: 'default' };
         } else if (entity === this.config.frontDoorLock && ['locked', 'unlocked'].includes(state)) {
           event = { kind: 'lock', title: state === 'locked' ? 'Døren er låst' : 'Døren er låst opp', tone: state === 'locked' ? 'safe' : 'default' };
-        } else if (entity === this.config.doorbellVisitor && prior === 'off' && state === 'on') {
+        } else if (entity === this.config.doorbellVisitor && state === 'on' && prior !== 'on') {
           event = { kind: 'doorbell', title: 'Noen ringte på', tone: 'default' };
         } else if (this.config.frigateEvents.includes(entity) && /^\d{4}-\d{2}-\d{2}T/.test(state)) {
           occurred = Date.parse(state);
