@@ -130,9 +130,9 @@ describe('FamilyInboxCard', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('Nicolai');
     expect(rows[0]).toHaveTextContent('Ny beskjed');
-    expect(rows[0]).toHaveTextContent('i går');
+    expect(rows[0]).toHaveTextContent('11. sep. 2026, 23:50');
     expect(rows[1]).toHaveTextContent('Husk gymtøy');
-    expect(rows[1]).toHaveTextContent('4 dager');
+    expect(rows[1]).toHaveTextContent('8. sep. 2026, 23:00');
     expect(screen.getByText('3 uleste')).toBeInTheDocument();
     expect(screen.queryByText('Allerede lest')).not.toBeInTheDocument();
     expect(screen.queryByText('Eldre beskjed')).not.toBeInTheDocument();
@@ -150,10 +150,10 @@ describe('FamilyInboxCard', () => {
   });
 
   it.each([
-    ['2026-03-30T00:10:00+02:00', '2026-03-28T23:50:00+01:00', 'i forgårs'],
-    ['2026-10-26T00:10:00+01:00', '2026-10-25T00:05:00+02:00', 'i går'],
+    ['2026-03-30T00:10:00+02:00', '2026-03-28T23:50:00+01:00', '28. mars 2026, 23:50'],
+    ['2026-10-26T00:10:00+01:00', '2026-10-25T00:05:00+02:00', '25. okt. 2026, 00:05'],
     ['2026-09-12T00:10:00+02:00', 'invalid', 'Ukjent dato'],
-  ])('uses Oslo calendar days across DST and tolerates missing dates (%s)', (current, publishedAt, expected) => {
+  ])('shows an explicit publication date and tolerates missing dates (%s)', (current, publishedAt, expected) => {
     render(<FamilyInboxCard messages={[{ ...messages[0], publishedAt }]} receipts={[]} onOpen={() => {}} now={new Date(current)}/>);
     expect(screen.getByText(expected)).toBeInTheDocument();
   });

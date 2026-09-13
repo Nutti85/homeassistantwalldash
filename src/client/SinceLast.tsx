@@ -1,20 +1,10 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { ActivityEvent, ActivityPayload, AwayCapture } from '../shared/activity';
-import type { FamilyMessage, FamilyReadReceipt } from './familyInbox';
+import { formatFamilyMessageDate, type FamilyMessage, type FamilyReadReceipt } from './familyInbox';
 
 const Icon = ({ children }: { children: string }) => <span className="material-symbols-outlined" aria-hidden="true">{children}</span>;
 const validTime = (value?: string) => value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : undefined;
 const localDate = (value: string) => validTime(value) === undefined ? 'Ukjent dato' : new Intl.DateTimeFormat('nb-NO', { timeZone: 'Europe/Oslo', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-const osloDay = (date: Date) => {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
-  const part = (type: string) => Number(parts.find((entry) => entry.type === type)!.value);
-  return Date.UTC(part('year'), part('month') - 1, part('day')) / 86_400_000;
-};
-const relativeAge = (value: string | undefined, now: Date) => {
-  if (validTime(value) === undefined) return 'Ukjent dato';
-  const days = osloDay(new Date(value!)) - osloDay(now);
-  return new Intl.RelativeTimeFormat('nb-NO', { numeric: 'auto' }).format(days, 'day').replace('døgn', 'dager');
-};
 // Only server-issued capabilities are ever handed to the browser media elements.
 const safeMediaPath = (value: string | undefined, type: 'preview' | 'thumbnail') => value && new RegExp(`^/api/activity/review/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/${type}$`).test(value) ? value : undefined;
 const expiredCopy = 'Opptaket er ikke lenger tilgjengelig';
@@ -84,13 +74,13 @@ interface FamilyInboxCardProps {
   loading?: boolean;
 }
 
-export function FamilyInboxCard({ messages, receipts, onOpen, now = new Date(), loading = false }: FamilyInboxCardProps) {
+export function FamilyInboxCard({ messages, receipts, onOpen, loading = false }: FamilyInboxCardProps) {
   const readIds = new Set(receipts.map(({ id }) => id));
   const unread = messages.filter(({ id }) => !readIds.has(id)).sort((left, right) => (validTime(right.publishedAt) ?? 0) - (validTime(left.publishedAt) ?? 0));
   return <Module title="Beskjeder" icon="mark_email_unread" className="ppf-inbox-card" loading={loading} action={<button type="button" className="ppf-since-more" aria-label="Se alle beskjeder" onClick={() => onOpen()}>Se alle</button>}>
     {loading && !unread.length ? <Loading rows={2} label="Henter beskjeder"/> : <>
     <p className="ppf-unread-count" aria-live="polite">{unread.length} {unread.length === 1 ? 'ulest' : 'uleste'}</p>
-    {unread.length ? <ol className="ppf-inbox-preview" aria-label="Uleste beskjeder">{unread.slice(0, 2).map((message) => <li key={message.id}><button type="button" aria-label={`Åpne beskjed: ${message.title} · ${message.source}`} onClick={() => onOpen(message.id)}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><strong>{message.title}</strong><time dateTime={validTime(message.publishedAt) === undefined ? undefined : message.publishedAt}>{relativeAge(message.publishedAt, now)}</time><Icon>chevron_right</Icon></button></li>)}</ol> : <p className="ppf-since-state">Ingen uleste beskjeder</p>}
+    {unread.length ? <ol className="ppf-inbox-preview" aria-label="Uleste beskjeder">{unread.slice(0, 2).map((message) => <li key={message.id}><button type="button" aria-label={`Åpne beskjed: ${message.title} · ${message.source}`} onClick={() => onOpen(message.id)}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><strong>{message.title}</strong><time dateTime={validTime(message.publishedAt) === undefined ? undefined : message.publishedAt}>{formatFamilyMessageDate(message.publishedAt)}</time><Icon>chevron_right</Icon></button></li>)}</ol> : <p className="ppf-since-state">Ingen uleste beskjeder</p>}
     </>}
   </Module>;
 }

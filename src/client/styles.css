@@ -1083,7 +1083,7 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-family-message-list button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;width:100%;padding:14px;border:1px solid var(--ppf-line);border-radius:12px;background:rgba(255,255,255,.025);text-align:left}
 .ppf-family-message-list button[aria-pressed=true]{border-color:var(--ppf-warm);border-left-width:4px;background:rgba(239,178,118,.09)}
 .ppf-family-message-list .ppf-source{justify-self:start}
-.ppf-family-message-list strong{grid-column:1/-1;grid-row:2;display:-webkit-box;overflow:hidden;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere;font-size:17px;line-height:1.4}
+.ppf-family-message-list strong{grid-column:1/-1;grid-row:2;display:-webkit-box;overflow:hidden;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere;font-size:17px;line-height:1.4}.ppf-family-message-date{grid-column:1;grid-row:3;color:var(--ppf-soft);font-size:11px}.ppf-family-message-detail-date{display:block;margin:-3px 0 12px;color:var(--ppf-soft);font-size:12px}
 .ppf-family-read-status{grid-column:2;grid-row:1;align-self:center;color:var(--ppf-soft);font-size:13px}
 .ppf-family-message-detail{min-width:0;padding:18px;border-radius:12px;background:rgba(255,255,255,.035);overflow-wrap:anywhere}
 .ppf-family-message-detail h3{margin:14px 0 10px;font-size:21px;line-height:1.35}

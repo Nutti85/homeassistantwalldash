@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
-import { familyMessages, familyReceiptStorageKey, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
+import { familyMessages, familyReceiptStorageKey, formatFamilyMessageDate, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
 
 const state = (entity_id: string, attributes: Record<string, unknown>): HomeAssistantState => ({ entity_id, state: 'Oppdatert', attributes });
 
@@ -16,6 +16,12 @@ const memoryStorage = (initial: Record<string, string> = {}) => {
 };
 
 describe('familyMessages', () => {
+  it('formats timestamp and date-only publication values as explicit Oslo dates', () => {
+    expect(formatFamilyMessageDate('2026-09-10T08:00:00Z')).toBe('10. sep. 2026, 10:00');
+    expect(formatFamilyMessageDate('2026-09-10')).toBe('10. sep. 2026');
+    expect(formatFamilyMessageDate('invalid')).toBe('Ukjent dato');
+  });
+
   it('retains MyKid upstream IDs and the source publication date', () => {
     const messages = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
       ...emptyMyKid,

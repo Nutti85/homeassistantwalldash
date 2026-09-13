@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, type KeyboardEvent } from 'react';
 import type { JacobWeeklyPlanSnapshot, MyKidKindergartenSnapshot } from '../shared/entities';
-import type { FamilyMessage, FamilyMessageSource, FamilyReadReceipt } from './familyInbox';
+import { formatFamilyMessageDate, type FamilyMessage, type FamilyMessageSource, type FamilyReadReceipt } from './familyInbox';
 const dayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Oslo' });
 type FamilyMessageFreshness = 'today' | 'dated' | 'persistent';
 const osloWeekday = (date: Date): string => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', weekday: 'short' }).format(date);
@@ -180,11 +180,11 @@ export function FamilyInboxModal({ messages, receipts, jacob, nicolai, openTab, 
             {messageFilter === filter.value && <>
               {visibleMessages.length ? <ul className="ppf-family-message-list" aria-label="Beskjeder">{visibleMessages.map((message) => <li key={message.id}><button type="button" aria-label={`Åpne beskjed: ${message.title} · ${message.source} · ${readIds.has(message.id) ? 'Lest' : 'Ulest'}`} aria-pressed={selected?.id === message.id} onClick={() => onSelectMessage(message.id)}>
                 <span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span>
-                <strong>{message.title}</strong><span className="ppf-family-read-status">{readIds.has(message.id) ? 'Lest' : 'Ulest'}</span>
+                <strong>{message.title}</strong><time className="ppf-family-message-date" dateTime={message.publishedAt}>{formatFamilyMessageDate(message.publishedAt)}</time><span className="ppf-family-read-status">{readIds.has(message.id) ? 'Lest' : 'Ulest'}</span>
               </button></li>)}</ul> : <p className="ppf-family-detail-empty" role="status">{messageFilter === 'unread' ? 'Ingen uleste beskjeder' : 'Ingen beskjeder er tilgjengelige ennå'}</p>}
               {selected && <article className="ppf-family-message-detail" aria-labelledby={`${id}-subject`}>
                 <span className={`ppf-source ppf-source-${selected.source.toLowerCase()}`}>{selected.source}</span>
-                <h3 id={`${id}-subject`}>{selected.title}</h3><p>{selected.body}</p>
+                <h3 id={`${id}-subject`}>{selected.title}</h3><time className="ppf-family-message-detail-date" dateTime={selected.publishedAt}>{formatFamilyMessageDate(selected.publishedAt)}</time><p>{selected.body}</p>
                 <button type="button" className="ppf-family-read-action" aria-label={`${readIds.has(selected.id) ? 'Marker som ulest' : 'Marker som lest'}: ${selected.title}`} onClick={() => onReadChange(selected.id, !readIds.has(selected.id))}>{readIds.has(selected.id) ? 'Marker som ulest' : 'Marker som lest'}</button>
               </article>}
             </>}

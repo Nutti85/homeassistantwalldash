@@ -62,8 +62,11 @@ describe('FamilyInboxModal', () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(['Beskjeder', 'JacobZokrates', 'NicolaiMyKid']);
     expect(screen.getByRole('tab', { name: 'Ulest' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Leste meldinger fjernes fra forsiden, men er fortsatt tilgjengelige her.')).toBeInTheDocument();
+    expect(screen.getByText('10. sep. 2026, 10:00')).toBeInTheDocument();
+    expect(screen.getByText('9. sep. 2026, 10:00')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Åpne beskjed: Husk innesko/ }));
     expect(screen.getByText(messages[0].body)).toBeInTheDocument();
+    expect(screen.getAllByText('10. sep. 2026, 10:00')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Marker som lest: Husk innesko' })).toHaveTextContent('Marker som lest');
     fireEvent.click(screen.getByRole('tab', { name: 'Alle' }));
     expect(screen.queryByText('Lest', { exact: true })).not.toBeInTheDocument();
