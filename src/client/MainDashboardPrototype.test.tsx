@@ -215,7 +215,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Hendelse 6');
   });
 
-  it('replaces the past lane with the three modules and keeps full person views reachable from the empty inbox', () => {
+  it('keeps the past lane focused on messages and timeline while keeping full person views reachable from the empty inbox', () => {
     render(<MainDashboardPrototype
       states={{
         mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
@@ -239,7 +239,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     />);
 
     const past = screen.getByRole('region', { name: 'SIDEN SIST' });
-    expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'KAMERAHENDELSER', 'Beskjeder', 'Hendelser']);
+    expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'Beskjeder', 'Hendelser']);
     expect(within(past).getByText('Ingen uleste beskjeder')).toBeInTheDocument();
     expect(screen.queryByText('Det som har skjedd')).not.toBeInTheDocument();
     const opener = screen.getByRole('button', { name: 'Se alle beskjeder' });

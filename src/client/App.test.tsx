@@ -53,7 +53,7 @@ describe('V2 activity lifecycle', () => {
     render(<App api={api}/>);
     await settle();
 
-    expect(screen.getAllByText('Henter hendelser')).toHaveLength(2);
+    expect(screen.getAllByText('Henter hendelser')).toHaveLength(1);
     expect(screen.queryByText('Ingen nye hendelser')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Åpne beskjed: Husk tursekk/ }));
     expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toHaveTextContent('Husk tursekk');
@@ -175,7 +175,7 @@ describe('V2 activity lifecycle', () => {
     await settle();
     expect(api.getActivity).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
-    expect(screen.getByText('Kunne ikke hente kamerahendelser.')).toBeInTheDocument();
+    expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
     expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toBeInTheDocument();

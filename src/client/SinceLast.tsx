@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActivityEvent, ActivityPayload, AwayCapture, CameraEventFeed, CameraEventGroup, CameraReview } from '../shared/activity';
+import type { ActivityEvent, ActivityPayload, AwayCapture } from '../shared/activity';
 import { formatFamilyMessageDate, type FamilyMessage, type FamilyReadReceipt } from './familyInbox';
 
 const Icon = ({ children }: { children: string }) => <span className="material-symbols-outlined" aria-hidden="true">{children}</span>;
@@ -20,7 +20,7 @@ function Loading({ rows = 1, label = 'Henter hendelser' }: { rows?: number; labe
   return <div className="ppf-since-loading" role="status"><span className="sr-only">{label}</span>{Array.from({ length: rows }, (_, index) => <span className="ppf-since-skeleton" aria-hidden="true" key={index}/>)}</div>;
 }
 
-function Recording({ path, thumbnail, label, actionLabel = 'Spill av' }: { path: string; thumbnail?: string; label: string; actionLabel?: string }) {
+function Recording({ path, thumbnail, label }: { path: string; thumbnail?: string; label: string }) {
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
@@ -42,71 +42,9 @@ function Recording({ path, thumbnail, label, actionLabel = 'Spill av' }: { path:
   if (failed) return <p ref={failure} tabIndex={-1} className="ppf-since-state" role="status">{expiredCopy}</p>;
   return <div className={`ppf-recording${thumbnail ? ' ppf-recording-preview' : ''}`}>
     {playing ? <video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onPlay={() => setPlaybackBlocked(false)} onError={() => { recoverFocus.current = document.activeElement === video.current; setFailed(true); }}/>
-      : <>{thumbnail && !thumbnailFailed && <img src={thumbnail} alt={`Siste registrering: ${label}`} onError={() => setThumbnailFailed(true)}/>}<button type="button" className="ppf-recording-play" aria-label={`${actionLabel === 'Spill av' ? 'Spill av opptak' : actionLabel} fra ${label}`} onClick={() => setPlaying(true)}><Icon>play_arrow</Icon><span>{actionLabel}</span></button></>}
+      : <>{thumbnail && !thumbnailFailed && <img src={thumbnail} alt={`Siste registrering: ${label}`} onError={() => setThumbnailFailed(true)}/>}<button type="button" className="ppf-recording-play" aria-label={`Spill av opptak fra ${label}`} onClick={() => setPlaying(true)}><Icon>play_arrow</Icon><span>Spill av</span></button></>}
     {playbackBlocked && <p className="ppf-since-state" role="status">Avspillingen startet ikke. Prøv avspillingsknappen i videoen.</p>}
   </div>;
-}
-
-const cameraObjectLabels: Record<CameraReview['objects'][number], string> = { person: 'Person', car: 'Bil', dog: 'Hund' };
-const cameraObjectCopy = (objects: CameraReview['objects']) => objects.map((object, index) => index === 0 ? cameraObjectLabels[object] : cameraObjectLabels[object].toLowerCase()).join(' og ');
-const cameraName = (value: string) => value.replace(/^Gaardsplassen_Wide$/i, 'Gårdsplassen').replace(/_/g, ' ');
-const cameraContext = (group: CameraEventGroup) => [group.zone, cameraName(group.camera)].filter(Boolean).join(' · ');
-
-function CameraEventDialog({ group, onClose }: { group: CameraEventGroup; onClose: () => void }) {
-  const id = useId();
-  const ref = useRef<HTMLElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const [selectedId, setSelectedId] = useState(group.latestReviewId);
-  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(() => new Set());
-  const selected = group.reviews.find((review) => review.id === selectedId) ?? group.reviews[0];
-  const media = safeMediaPath(selected?.mediaPath, 'preview');
-  const thumbnail = safeMediaPath(selected?.thumbnailPath, 'thumbnail');
-  const close = useRef(onClose);
-  close.current = onClose;
-  useLayoutEffect(() => {
-    const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-    closeRef.current?.focus();
-    const contain = (event: FocusEvent) => { if (!ref.current?.contains(event.target as Node)) closeRef.current?.focus(); };
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); return; }
-      if (event.key !== 'Tab') return;
-      const stops = [...(ref.current?.querySelectorAll<HTMLElement>('button, video[controls], [tabindex="0"]') ?? [])];
-      const first = stops[0]; const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first || !event.shiftKey && document.activeElement === last) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); }
-    };
-    document.addEventListener('focusin', contain);
-    document.addEventListener('keydown', keydown, true);
-    return () => { document.removeEventListener('focusin', contain); document.removeEventListener('keydown', keydown, true); if (invoker?.isConnected) invoker.focus(); };
-  }, []);
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={ref} className="ppf-modal ppf-activity-modal ppf-camera-event-modal" role="dialog" aria-modal="true" aria-labelledby={id}>
-    <header><span><Icon>videocam</Icon></span><h2 id={id}>Kamerahendelse</h2><button ref={closeRef} type="button" aria-label="Lukk" onClick={onClose}><Icon>close</Icon></button></header>
-    <div className="ppf-activity-modal-body">
-      <p className="ppf-camera-detail-context"><strong>{cameraContext(group)}</strong><time dateTime={selected?.occurredAt}>{selected ? localDate(selected.occurredAt) : 'Ukjent dato'}</time><span>{selected ? cameraObjectCopy(selected.objects) : 'Ukjent objekt'}</span></p>
-      {selected && <p className="ppf-camera-monitoring-mode">{selected.monitoringMode === 'armed' ? 'Armert' : 'Notifikasjoner'}</p>}
-      <div className="ppf-camera-gallery" role="list" aria-label="Registreringer i hendelsen">{group.reviews.map((review) => {
-        const reviewThumbnail = safeMediaPath(review.thumbnailPath, 'thumbnail');
-        return <div key={review.id} role="listitem"><button type="button" aria-label={`Velg registrering: ${localDate(review.occurredAt)}`} aria-pressed={review.id === selected?.id} onClick={() => setSelectedId(review.id)}>{reviewThumbnail && !failedThumbnails.has(review.id) ? <img src={reviewThumbnail} alt={`Registrering ${localDate(review.occurredAt)}`} onError={() => setFailedThumbnails((current) => new Set(current).add(review.id))} /> : <span><Icon>image_not_supported</Icon><small>Bilde utilgjengelig</small></span>}<time dateTime={review.occurredAt}>{localDate(review.occurredAt)}</time></button></div>;
-      })}</div>
-      {media ? <Recording key={media} path={media} thumbnail={thumbnail} label={`${cameraContext(group)} · ${localDate(selected.occurredAt)}`} actionLabel="Spill klipp"/> : <p className="ppf-since-state" role="status">Klippet er ikke lenger tilgjengelig.</p>}
-    </div>
-  </section></div>;
-}
-
-export function CameraEventsCard({ feed, loading = false }: { feed?: CameraEventFeed; loading?: boolean }) {
-  const [selectedGroup, setSelectedGroup] = useState<CameraEventGroup>();
-  const [thumbnailFailures, setThumbnailFailures] = useState<Set<string>>(() => new Set());
-  const groups = feed?.groups ?? [];
-  const statusCopy = feed?.status === 'inactive' ? 'Overvåkning er ikke aktiv.' : feed?.status === 'none' ? 'Ingen kamerahendelser de siste sju dagene.' : feed?.status === 'unavailable' || !feed ? 'Kunne ikke hente kamerahendelser.' : feed.status === 'expired' && !groups.length ? 'Kamerabildene er ikke lenger tilgjengelige.' : undefined;
-  return <><Module title="KAMERAHENDELSER" icon="videocam" className="ppf-camera-events" loading={loading && !feed}>
-    {loading && !feed ? <Loading rows={2}/> : groups.length ? <ol className="ppf-camera-event-list" aria-label="Kamerahendelser">{groups.map((group) => {
-      const latest = group.reviews.find((review) => review.id === group.latestReviewId) ?? group.reviews[0];
-      const image = latest ? safeMediaPath(latest.thumbnailPath, 'thumbnail') : undefined;
-      return <li key={group.id}><button type="button" className="ppf-camera-event-card" aria-label={`Åpne kamerahendelse: ${cameraContext(group)} · ${localDate(group.occurredAt)}`} onClick={() => setSelectedGroup(group)}>
-        {image && !thumbnailFailures.has(image) ? <img src={image} alt={`Siste registrering: ${cameraContext(group)}`} onError={() => setThumbnailFailures((current) => new Set(current).add(image))}/> : <span className="ppf-camera-event-placeholder"><Icon>image_not_supported</Icon><span>Bilde utilgjengelig</span></span>}
-        <span className="ppf-camera-event-copy"><strong>{cameraContext(group)}</strong><span>{cameraObjectCopy(group.objects)}</span><time dateTime={group.occurredAt}>{localDate(group.occurredAt)}</time></span><span className="ppf-camera-event-count" aria-label={`${group.reviewCount} registreringer`}>{group.reviewCount}</span>
-      </button></li>;
-    })}</ol> : <p className="ppf-since-state">{statusCopy}</p>}
-  </Module>{selectedGroup && <CameraEventDialog group={selectedGroup} onClose={() => setSelectedGroup(undefined)}/>}</>;
 }
 
 export function AwayCaptureCard({ capture, loading = false }: { capture?: AwayCapture; loading?: boolean }) {
@@ -198,5 +136,5 @@ export interface SinceLastProps {
 }
 
 export function SinceLast({ activity, activityLoading = false, activityStale = false, messages, receipts, onOpenFamily, now }: SinceLastProps) {
-  return <div className="ppf-since-last"><CameraEventsCard feed={activity?.cameraEvents} loading={activityLoading}/><FamilyInboxCard messages={messages} receipts={receipts} onOpen={onOpenFamily} now={now} loading={activityLoading && !activity}/><ActivityTimeline events={activity?.timeline ?? []} loading={activityLoading && !activity}/>{activityStale && <p className="ppf-since-stale" role="status">Hendelsene kan være utdaterte</p>}</div>;
+  return <div className="ppf-since-last"><FamilyInboxCard messages={messages} receipts={receipts} onOpen={onOpenFamily} now={now} loading={activityLoading && !activity}/><ActivityTimeline events={activity?.timeline ?? []} loading={activityLoading && !activity}/>{activityStale && <p className="ppf-since-stale" role="status">Hendelsene kan være utdaterte</p>}</div>;
 }
