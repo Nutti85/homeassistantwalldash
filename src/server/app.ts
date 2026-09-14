@@ -30,6 +30,7 @@ export interface AiReport {
 
 export interface AppServices {
   activity?: ActivityService;
+  activityUpdates?: { subscribe(listener: () => void): () => void };
   aiReportSecret?: string;
   aiReportSourceUrl?: string;
   aiReportRefreshUrl?: string;
@@ -185,7 +186,7 @@ const proxyActivityMedia = async (
 };
 
 export const createApp = (client: DashboardClient, services: AppServices = {}): Express => {
-  const { activity, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '' } = services;
+  const { activity, activityUpdates, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '' } = services;
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   let aiReport: AiReport | undefined = aiReportStorePath ? loadAiReport(aiReportStorePath) : undefined;
@@ -199,6 +200,32 @@ export const createApp = (client: DashboardClient, services: AppServices = {}): 
     if (!activity) { sendActivityError(response, 503); return; }
     try { response.set('Cache-Control', 'no-store').json(await activity.getActivity()); }
     catch { sendActivityError(response, 502); }
+  });
+
+  app.get('/api/activity/updates', (request: Request, response: Response) => {
+    if (!activityUpdates) { sendActivityError(response, 503); return; }
+    response.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    response.flushHeaders();
+    let closed = false;
+    const unsubscribe = activityUpdates.subscribe(() => {
+      if (!closed && !response.destroyed) response.write('event: activity\ndata: {}\n\n');
+    });
+    const heartbeat = setInterval(() => {
+      if (!closed && !response.destroyed) response.write(': heartbeat\n\n');
+    }, 25_000);
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+    };
+    request.once('close', cleanup);
+    response.once('close', cleanup);
   });
 
   for (const { route, method, contentType } of [

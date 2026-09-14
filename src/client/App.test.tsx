@@ -25,6 +25,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreA
 describe('V2 activity lifecycle', () => {
   const payload = (title = 'Døren ble låst'): ActivityPayload => ({
     generatedAt: '2026-09-12T10:00:00Z',
+    cameraEvents: { status: 'none', groups: [] },
     awayCapture: { status: 'none' },
     timeline: [{ id: title, kind: 'lock', occurredAt: '2026-09-12T09:59:00Z', title, tone: 'safe' }],
   });
@@ -174,7 +175,7 @@ describe('V2 activity lifecycle', () => {
     await settle();
     expect(api.getActivity).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
-    expect(screen.getByText('Kunne ikke hente hendelser fra sist huset var borte')).toBeInTheDocument();
+    expect(screen.getByText('Kunne ikke hente kamerahendelser.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
     expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toBeInTheDocument();
@@ -198,6 +199,26 @@ describe('V2 activity lifecycle', () => {
     await dispatch(document, 'visibilitychange');
     await advance(60_000);
     expect(api.getActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes once for a burst of camera notifications and disconnects the stream when hidden', async () => {
+    const api = activityApi();
+    let notify!: () => void;
+    const unsubscribe = vi.fn();
+    api.subscribeToActivityUpdates = vi.fn((listener: () => void) => { notify = listener; return unsubscribe; });
+    render(<App api={api}/>);
+    await settle();
+    notify();
+    notify();
+    await settle();
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await dispatch(document, 'visibilitychange');
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    await dispatch(document, 'visibilitychange');
+    expect(api.subscribeToActivityUpdates).toHaveBeenCalledTimes(2);
   });
 });
 

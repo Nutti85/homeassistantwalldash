@@ -131,6 +131,21 @@ describe('HomeAssistantClient', () => {
     });
   });
 
+  it('includes the configured security mode entity in recorder history', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json([
+      [{ entity_id: 'input_number.monitoring_mode', state: '2', last_changed: '2026-09-10T00:00:00.000Z' }],
+    ]));
+    const client = new HomeAssistantClient('http://ha:8123', 'test-token', fetcher, defaultDashboardEntityIds, undefined, {
+      doorbellVisitor: '', frigateEvents: [], securityMode: 'input_number.monitoring_mode',
+    });
+
+    const history = await client.getActivityHistory(new Date('2026-09-10T00:00:00.000Z'), new Date('2026-09-11T00:00:00.000Z'));
+
+    const historyUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
+    expect(historyUrl.searchParams.get('filter_entity_id')?.split(',')).toContain('input_number.monitoring_mode');
+    expect(history).toHaveProperty('input_number.monitoring_mode');
+  });
+
   it('converts failed activity history requests to a generic error without secrets or upstream details', async () => {
     const upstreamBody = 'upstream diagnostic fake-token-8675309';
     const fetcher = vi.fn().mockResolvedValue(new Response(upstreamBody, { status: 500 }));

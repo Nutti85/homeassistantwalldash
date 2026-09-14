@@ -24,6 +24,7 @@ import {
 export interface DashboardApi {
   getStates(): Promise<{ states: Record<string, HomeAssistantState>; departureBriefings?: DepartureBriefingPayload }>;
   getActivity?(): Promise<ActivityPayload>;
+  subscribeToActivityUpdates?(onActivity: () => void): () => void;
   getAiReport?(): Promise<AiReportResponse | undefined>;
   requestAiReportRefresh?(mode?: AiReportRefreshMode): Promise<void>;
   runAction(action: DashboardAction, option?: 'Hjemme' | 'Borte' | HeatPumpMode | FanSpeed): Promise<{ states: Record<string, HomeAssistantState> }>;
@@ -1231,6 +1232,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
     let active = true;
     let requestInFlight = false;
     let timer: number | undefined;
+    let stopUpdates: (() => void) | undefined;
     setActivityState((current) => ({ ...current, activityLoading: !current.activity }));
 
     const refresh = async () => {
@@ -1256,23 +1258,41 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
       if (timer !== undefined) window.clearInterval(timer);
       timer = undefined;
     };
+    const stopActivityUpdates = () => {
+      stopUpdates?.();
+      stopUpdates = undefined;
+    };
+    const startActivityUpdates = () => {
+      if (stopUpdates || !api.subscribeToActivityUpdates) return;
+      stopUpdates = api.subscribeToActivityUpdates(() => {
+        if (document.visibilityState === 'visible') void refresh();
+      });
+    };
     const startPolling = () => {
       if (timer === undefined) timer = window.setInterval(refreshWhenVisible, activityRefreshIntervalMs);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         startPolling();
+        startActivityUpdates();
         void refresh();
-      } else stopPolling();
+      } else {
+        stopPolling();
+        stopActivityUpdates();
+      }
     };
     void refresh();
-    if (document.visibilityState === 'visible') startPolling();
+    if (document.visibilityState === 'visible') {
+      startPolling();
+      startActivityUpdates();
+    }
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', refreshWhenAwake);
     window.addEventListener('online', refreshWhenAwake);
     return () => {
       active = false;
       stopPolling();
+      stopActivityUpdates();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', refreshWhenAwake);
       window.removeEventListener('online', refreshWhenAwake);

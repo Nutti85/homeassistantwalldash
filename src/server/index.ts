@@ -6,18 +6,24 @@ import { HomeAssistantClient, type ActivityEntityConfig } from './homeAssistant'
 import { defaultDashboardEntityIds } from '../shared/entities';
 import { ActivityService } from './activity';
 import { FrigateClient } from './frigate';
+import { FrigateUpdateService, parseFrigateUpdateConfig } from './frigateUpdates';
 
 export const parseActivityEntityConfig = (
   doorbellVisitorValue?: string,
   frigateEventsValue?: string,
+  securityModeValue?: string,
 ): ActivityEntityConfig => {
   const activityEntities = {
     doorbellVisitor: doorbellVisitorValue?.trim() || '',
     frigateEvents: (frigateEventsValue ?? '').split(',').map((entityId) => entityId.trim()).filter(Boolean),
+    securityMode: securityModeValue?.trim() || defaultDashboardEntityIds.securityMode,
   };
 
   if (activityEntities.frigateEvents.some((entityId) => !entityId.startsWith('image.'))) {
     throw new Error('HA_FRIGATE_EVENT_ENTITY_IDS must contain only image.* entity IDs');
+  }
+  if (!activityEntities.securityMode.startsWith('input_number.')) {
+    throw new Error('HA_SECURITY_MODE_ENTITY_ID must contain an input_number.* entity ID');
   }
 
   return activityEntities;
@@ -32,6 +38,7 @@ const aiReportStorePath = process.env.AI_REPORT_STORE_PATH?.trim() || '';
 const activityEntities = parseActivityEntityConfig(
   process.env.HA_DOORBELL_VISITOR_ENTITY_ID,
   process.env.HA_FRIGATE_EVENT_ENTITY_IDS,
+  process.env.HA_SECURITY_MODE_ENTITY_ID,
 );
 
 if (!haUrl || !haToken) {
@@ -84,10 +91,17 @@ const entities = {
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
 const homeAssistant = new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId, activityEntities);
 const frigateUrl = process.env.FRIGATE_URL?.trim();
+const frigateUpdateConfig = parseFrigateUpdateConfig(
+  process.env.FRIGATE_MQTT_URL,
+  process.env.FRIGATE_MQTT_USERNAME,
+  process.env.FRIGATE_MQTT_PASSWORD,
+  process.env.FRIGATE_MQTT_TOPIC,
+);
+const frigateUpdates = new FrigateUpdateService(frigateUpdateConfig);
 export const activityService = new ActivityService(homeAssistant, frigateUrl ? new FrigateClient(frigateUrl) : undefined, {
   ...activityEntities, home: entities.home, frontDoorLock: entities.frontDoorLock,
 });
-const app = createApp(homeAssistant, { activity: activityService, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath });
+const app = createApp(homeAssistant, { activity: activityService, activityUpdates: frigateUpdateConfig ? frigateUpdates : undefined, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath });
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

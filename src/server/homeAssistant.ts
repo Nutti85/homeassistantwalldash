@@ -8,6 +8,7 @@ export type VacuumAction = 'start' | 'pause' | 'dock' | 'locate' | 'full' | 'gan
 export interface ActivityEntityConfig {
   doorbellVisitor: string;
   frigateEvents: string[];
+  securityMode?: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -195,6 +196,7 @@ export class HomeAssistantClient {
         this.entities.home,
         this.activityEntities.doorbellVisitor,
         this.entities.frontDoorLock,
+        this.activityEntities.securityMode,
         ...this.activityEntities.frigateEvents,
       ].filter(Boolean))];
       const query = new URLSearchParams({

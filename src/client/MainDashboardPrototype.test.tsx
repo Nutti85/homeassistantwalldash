@@ -239,7 +239,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     />);
 
     const past = screen.getByRole('region', { name: 'SIDEN SIST' });
-    expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'SIST MENS HUSET VAR BORTE', 'Beskjeder', 'Tidslinje']);
+    expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'KAMERAHENDELSER', 'Beskjeder', 'Hendelser']);
     expect(within(past).getByText('Ingen uleste beskjeder')).toBeInTheDocument();
     expect(screen.queryByText('Det som har skjedd')).not.toBeInTheDocument();
     const opener = screen.getByRole('button', { name: 'Se alle beskjeder' });

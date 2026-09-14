@@ -1,5 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { completedAwayIntervals, normalizeTimeline, selectAwayReview } from './activity';
+import { completedAwayIntervals, normalizeTimeline, selectAwayReview, type ActivityPayload } from './activity';
+
+const cameraFeed: ActivityPayload['cameraEvents'] = {
+  status: 'available',
+  groups: [{
+    id: 'camera-event:bod:parkering:1',
+    occurredAt: '2026-09-10T12:00:00.000Z',
+    camera: 'Bod',
+    zone: 'Parkering',
+    objects: ['person', 'car'],
+    reviewCount: 2,
+    latestReviewId: '1787914200.123456-abc123',
+    reviews: [{
+      id: '1787914200.123456-abc123',
+      occurredAt: '2026-09-10T12:00:00.000Z',
+      objects: ['person'],
+      camera: 'Bod',
+      zone: 'Parkering',
+      monitoringMode: 'armed',
+      thumbnailPath: '/api/activity/review/4e654ee5-63e2-40e0-94b1-9d80ce7b3573/thumbnail',
+      mediaPath: '/api/activity/review/4e654ee5-63e2-40e0-94b1-9d80ce7b3572/preview',
+    }],
+  }],
+};
+
+describe('camera event contract', () => {
+  it('represents available, expired, none, unavailable, and inactive camera feeds', () => {
+    const statuses: ActivityPayload['cameraEvents']['status'][] = ['available', 'expired', 'none', 'unavailable', 'inactive'];
+    expect(statuses).toEqual(['available', 'expired', 'none', 'unavailable', 'inactive']);
+    expect(cameraFeed.groups[0].reviews[0]).toMatchObject({ objects: ['person'], monitoringMode: 'armed' });
+  });
+});
 
 describe('completedAwayIntervals', () => {
   it('does not treat baseline Borte or its repeated state as a departure edge', () => {

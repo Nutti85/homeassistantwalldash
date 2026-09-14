@@ -47,6 +47,39 @@ const mediaRoutes = [
 ] as const;
 
 describe('activity API', () => {
+  it('serves payload-free named SSE activity invalidations and removes the listener on disconnect', async () => {
+    let notify: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const updates = { subscribe: vi.fn((listener: () => void) => { notify = listener; return unsubscribe; }) };
+    const server = createApp(createClient(), { activityUpdates: updates }).listen(0);
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing test server port');
+      await new Promise<void>((resolve, reject) => {
+        const browser = httpGet(`http://127.0.0.1:${address.port}/api/activity/updates`, (response) => {
+          try {
+            expect(response.statusCode).toBe(200);
+            expect(response.headers['content-type']).toContain('text/event-stream');
+            expect(response.headers['cache-control']).toBe('no-store');
+            notify?.();
+            response.once('data', (chunk) => {
+              expect(String(chunk)).toBe('event: activity\ndata: {}\n\n');
+              expect(String(chunk)).not.toContain('finished-review');
+              browser.destroy();
+              resolve();
+            });
+          } catch (error) { reject(error); }
+        });
+        browser.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'ECONNRESET') reject(error); });
+      });
+      await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledOnce());
+      expect(updates.subscribe).toHaveBeenCalledOnce();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('distinguishes failed initial history from a confirmed empty activity response', async () => {
     let failed = true;
     const activity = new ActivityService({ getActivityHistory: async () => {
@@ -64,7 +97,7 @@ describe('activity API', () => {
   it('returns the typed activity payload without caching personal activity', async () => {
     const activity = emptyActivity();
     const payload: ActivityPayload = {
-      generatedAt: '2026-09-10T12:00:00.000Z', awayCapture: { status: 'none' },
+      generatedAt: '2026-09-10T12:00:00.000Z', cameraEvents: { status: 'none', groups: [] }, awayCapture: { status: 'none' },
       timeline: [{ id: 'lock:1', kind: 'lock', occurredAt: '2026-09-10T11:00:00.000Z', title: 'Døren er låst', tone: 'safe' }],
     };
     vi.spyOn(activity, 'getActivity').mockResolvedValue(payload);

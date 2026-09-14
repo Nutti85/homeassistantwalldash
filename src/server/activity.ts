@@ -1,4 +1,4 @@
-import { completedAwayIntervals, selectAwayReview, type ActivityEvent, type ActivityPayload, type AwayCapture, type AwayInterval, type FrigateReviewItem, type HomeHistoryPoint } from '../shared/activity';
+import { completedAwayIntervals, selectAwayReview, type ActivityEvent, type ActivityPayload, type AwayCapture, type AwayInterval, type CameraEventFeed, type CameraEventGroup, type CameraObject, type CameraReview, type FrigateReviewItem, type HomeHistoryPoint } from '../shared/activity';
 import { randomUUID } from 'node:crypto';
 import { defaultDashboardEntityIds } from '../shared/entities';
 import { FrigateClient, FrigateCommunicationError } from './frigate';
@@ -20,6 +20,101 @@ interface ResolvedMedia {
   version: number;
 }
 
+type MonitoringMode = CameraReview['monitoringMode'];
+type CameraReviewMediaStatus = 'available' | 'expired' | 'unavailable';
+const cameraObjectOrder: CameraObject[] = ['person', 'car', 'dog'];
+const supportedCameraNames = new Set(['bakside', 'bod', 'gaardsplassenwide', 'hagen']);
+const monitoringMode = (state: string): 1 | 2 | 3 | undefined => {
+  const value = Number(state.trim());
+  return value === 1 || value === 2 || value === 3 ? value : undefined;
+};
+const cameraObjects = (review: FrigateReviewItem, allowed: Map<string, Set<CameraObject>>): CameraObject[] => {
+  const configured = allowed.get(normalizeName(review.camera));
+  if (!configured || !supportedCameraNames.has(normalizeName(review.camera))) return [];
+  const values = strings(review.data?.objects).map((value) => value.toLowerCase());
+  return cameraObjectOrder.filter((object) => configured.has(object) && values.includes(object));
+};
+const cameraZone = (review: FrigateReviewItem): string | undefined => {
+  const zones = [...new Set(strings(review.data?.zones))].sort((left, right) => normalizeName(left).localeCompare(normalizeName(right)));
+  return zones.length ? zones.join(', ') : undefined;
+};
+const cameraMonitoringMode = (points: HomeHistoryPoint[], at: number): MonitoringMode | undefined => {
+  let state: 1 | 2 | 3 | undefined;
+  for (const point of [...points].sort((left, right) => Date.parse(left.changedAt) - Date.parse(right.changedAt))) {
+    const changedAt = Date.parse(point.changedAt);
+    if (!Number.isFinite(changedAt) || changedAt > at) continue;
+    state = monitoringMode(point.state);
+  }
+  return state === 1 ? 'armed' : state === 2 ? 'notifications' : undefined;
+};
+const currentMonitoringMode = (points: HomeHistoryPoint[], at: number): 1 | 2 | 3 | undefined => {
+  let state: 1 | 2 | 3 | undefined;
+  let hasKnownState = false;
+  for (const point of [...points].sort((left, right) => Date.parse(left.changedAt) - Date.parse(right.changedAt))) {
+    const changedAt = Date.parse(point.changedAt);
+    if (!Number.isFinite(changedAt) || changedAt > at) continue;
+    const next = monitoringMode(point.state);
+    state = next;
+    hasKnownState = next !== undefined;
+  }
+  return hasKnownState ? state : undefined;
+};
+const configuredCameraObjects = (entities: string[]): Map<string, Set<CameraObject>> => {
+  const allowed = new Map<string, Set<CameraObject>>();
+  for (const entity of entities) {
+    const identity = detectionIdentity(entity);
+    if (!identity.object || !cameraObjectOrder.includes(identity.object as CameraObject)) continue;
+    const camera = normalizeName(identity.camera);
+    if (!camera) continue;
+    const objects = allowed.get(camera) ?? new Set<CameraObject>();
+    objects.add(identity.object as CameraObject);
+    allowed.set(camera, objects);
+  }
+  return allowed;
+};
+const toCameraReview = (item: FrigateReviewItem, objects: CameraObject[], mode: MonitoringMode): CameraReview => ({
+  id: item.id,
+  occurredAt: new Date(item.start_time * 1000).toISOString(),
+  objects,
+  camera: item.camera,
+  ...(cameraZone(item) ? { zone: cameraZone(item) } : {}),
+  monitoringMode: mode,
+});
+const groupKey = (review: CameraReview) => `${normalizeName(review.camera)}:${normalizeName(review.zone ?? '')}`;
+const cameraGroupId = (reviews: CameraReview[]) => {
+  const first = reviews[0];
+  return `camera-event:${normalizeName(first.camera)}:${normalizeName(first.zone ?? '')}:${Date.parse(first.occurredAt)}`;
+};
+export const groupCameraReviews = (items: FrigateReviewItem[], points: HomeHistoryPoint[], configuredEntities: string[], start: Date, end: Date): CameraEventGroup[] => {
+  const allowed = configuredCameraObjects(configuredEntities);
+  const eligible = items.flatMap((item) => {
+    if (!Number.isFinite(item.start_time)) return [] as CameraReview[];
+    const occurredAt = item.start_time * 1000;
+    if (occurredAt < start.getTime() || occurredAt > end.getTime()) return [] as CameraReview[];
+    const objects = cameraObjects(item, allowed);
+    const mode = cameraMonitoringMode(points, occurredAt);
+    return mode && objects.length ? [toCameraReview(item, objects, mode)] : [] as CameraReview[];
+  }).sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt) || left.id.localeCompare(right.id));
+
+  const open = new Map<string, CameraReview[]>();
+  for (const review of eligible) {
+    const key = groupKey(review);
+    const current = open.get(key);
+    const firstAt = current ? Date.parse(current[0].occurredAt) : Number.NaN;
+    if (!current || Date.parse(review.occurredAt) - firstAt > 10 * 60_000) open.set(key, [review]);
+    else current.push(review);
+  }
+  return [...open.values()].map((reviews) => {
+    const ordered = [...reviews].sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt) || right.id.localeCompare(left.id));
+    const objects = cameraObjectOrder.filter((object) => ordered.some((review) => review.objects.includes(object)));
+    return {
+      id: cameraGroupId(ordered), occurredAt: ordered[0].occurredAt, camera: ordered[0].camera,
+      ...(ordered[0].zone ? { zone: ordered[0].zone } : {}), objects, reviewCount: ordered.length,
+      latestReviewId: ordered[0].id, reviews: ordered,
+    };
+  }).sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt) || right.id.localeCompare(left.id));
+};
+
 export const isActivityMediaId = (id: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -27,8 +122,10 @@ const activityBudgetMs = 8_000;
 const unavailable = () => new Error('Aktivitet er ikke tilgjengelig');
 const normalizeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 const displayName = (value: string) => value.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+const cameraDisplayName = (value: string) => value.replace(/^Gaardsplassen_Wide$/i, 'Gårdsplassen').replace(/_/g, ' ');
 const objectNames: Record<string, string> = { person: 'Person', car: 'Bil', dog: 'Hund', cat: 'Katt', bicycle: 'Sykkel', motorcycle: 'Motorsykkel', truck: 'Lastebil', bus: 'Buss', bird: 'Fugl' };
 const objectLabel = (value: string) => objectNames[value.toLowerCase()] ?? 'Objekt';
+const cameraObjectText = (objects: CameraObject[]) => objects.map((object, index) => index === 0 ? objectLabel(object) : objectLabel(object).toLowerCase()).join(' og ');
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && /^[\p{L}\p{N}_ -]{1,80}$/u.test(entry)) : [];
 const mediaPath = (id: string) => `/api/activity/review/${id}/preview`;
 const detectionIdentity = (entity: string) => {
@@ -50,6 +147,7 @@ const reviewEvent = (review: FrigateReviewItem): ActivityEvent => {
 /** Combines trusted recorder edges with media capabilities issued only for matched reviews. */
 export class ActivityService {
   private readonly resolvedMedia = new Map<string, ResolvedMedia>();
+  private readonly resolvedReviewMedia = new Map<string, ResolvedMedia>();
   private readonly resolvedThumbnails = new Map<string, { id: string; camera: string; expiresAt: number }>();
 
   public constructor(
@@ -70,20 +168,45 @@ export class ActivityService {
 
   private async getActivityWithSignal(now: Date, activitySignal: AbortSignal): Promise<ActivityPayload> {
     if (!Number.isFinite(now.getTime())) throw unavailable();
-    const payload: ActivityPayload = { generatedAt: now.toISOString(), awayCapture: { status: 'unavailable' }, timeline: [] };
-    let timelineStart = new Date(now.getTime() - dayMs);
+    const cameraFeedEnabled = Boolean(this.frigate && this.config.securityMode && this.config.frigateEvents.length);
+    const weekStart = new Date(now.getTime() - 7 * dayMs);
+    const payload: ActivityPayload = { generatedAt: now.toISOString(), cameraEvents: { status: 'unavailable', groups: [] }, awayCapture: { status: 'unavailable' }, timeline: [] };
+    let timelineStart = cameraFeedEnabled ? weekStart : new Date(now.getTime() - dayMs);
     let history: Record<string, HomeHistoryPoint[]>;
     try { history = await this.homeAssistant.getActivityHistory(timelineStart, now, activitySignal); }
     catch { throw unavailable(); }
 
     payload.timeline = this.timeline(history, timelineStart, now);
     if (payload.timeline.length < 3) {
-      const weekStart = new Date(now.getTime() - 7 * dayMs);
       try {
         history = await this.homeAssistant.getActivityHistory(weekStart, now, activitySignal);
         timelineStart = weekStart;
         payload.timeline = this.timeline(history, timelineStart, now);
       } catch { /* Keep the confirmed 24-hour timeline. */ }
+    }
+
+    let cameraGroups: CameraEventGroup[] = [];
+    if (cameraFeedEnabled) {
+      try {
+        const securityPoints = history[this.config.securityMode!] ?? [];
+        const currentMode = currentMonitoringMode(securityPoints, now.getTime());
+        if (currentMode === 3) {
+          payload.cameraEvents = { status: 'inactive', groups: [] };
+        } else if (currentMode === undefined) {
+          payload.cameraEvents = { status: 'unavailable', groups: [] };
+        } else {
+          const reviews = await this.frigate!.getReviewItems(weekStart, now, activitySignal);
+          cameraGroups = groupCameraReviews(reviews, securityPoints, this.config.frigateEvents, weekStart, now);
+          await this.resolveCameraGroupMedia(cameraGroups, now, activitySignal);
+          payload.cameraEvents = {
+            status: cameraGroups.length && cameraGroups.every((group) => group.reviews.every((review) => !review.mediaPath && !review.thumbnailPath)) ? 'expired' : cameraGroups.length ? 'available' : 'none',
+            groups: cameraGroups,
+          };
+        }
+      } catch {
+        payload.cameraEvents = { status: 'unavailable', groups: [] };
+      }
+      payload.timeline = this.timeline(history, timelineStart, now, cameraGroups);
     }
 
     let interval = this.latestAway(history, now);
@@ -125,7 +248,7 @@ export class ActivityService {
 
   /** Only server-issued IDs resolve; upstream coordinates never come from the browser. */
   public async getReviewMedia(id: string, signal?: AbortSignal): Promise<Response> {
-    const media = isActivityMediaId(id) ? [...this.resolvedMedia.values()].find((entry) => entry.id === id) : undefined;
+    const media = isActivityMediaId(id) ? [...this.resolvedReviewMedia.values(), ...this.resolvedMedia.values()].find((entry) => entry.id === id) : undefined;
     if (!media || media.expiresAt <= Date.now() || !media.available || !this.frigate) throw unavailable();
     try {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -156,6 +279,62 @@ export class ActivityService {
   private issuedMediaPath(reviewId: string): string | undefined {
     const media = this.resolvedMedia.get(reviewId);
     return media?.available && media.expiresAt > Date.now() ? mediaPath(media.id) : undefined;
+  }
+
+  private issuedReviewMediaPath(reviewId: string): string | undefined {
+    const media = this.resolvedReviewMedia.get(reviewId);
+    return media?.available && media.expiresAt > Date.now() ? mediaPath(media.id) : undefined;
+  }
+
+  private async resolveCameraGroupMedia(groups: CameraEventGroup[], now: Date, signal: AbortSignal): Promise<void> {
+    const reviews = groups.flatMap((group) => group.reviews);
+    const remaining = reviews.values();
+    await Promise.all(Array.from({ length: Math.min(4, reviews.length) }, async () => {
+      for (const review of remaining) {
+        const status = await this.resolveReviewMedia(review, now, signal);
+        if (status === 'available') review.mediaPath = this.issuedReviewMediaPath(review.id);
+        try { review.thumbnailPath = await this.issueThumbnail(review, signal); } catch { /* Metadata remains available without a thumbnail. */ }
+      }
+    }));
+  }
+
+  private async resolveReviewMedia(review: CameraReview, _now: Date, signal: AbortSignal): Promise<CameraReviewMediaStatus> {
+    const currentTime = Date.now();
+    for (const [id, entry] of this.resolvedReviewMedia) if (entry.expiresAt <= currentTime) this.resolvedReviewMedia.delete(id);
+    let media = this.resolvedReviewMedia.get(review.id);
+    if (media && media.review.camera !== review.camera) return 'unavailable';
+    if (!media) {
+      if (this.resolvedReviewMedia.size >= 500) this.resolvedReviewMedia.delete(this.resolvedReviewMedia.keys().next().value!);
+      media = {
+        id: randomUUID(), review: { id: review.id, camera: review.camera, start_time: Date.parse(review.occurredAt) / 1000, severity: 'detection' },
+        start: Date.parse(review.occurredAt) / 1000, end: Date.parse(review.occurredAt) / 1000 + 30,
+        source: 'preview', expiresAt: currentTime + 5 * 60 * 1000, available: false, version: 0,
+      };
+      this.resolvedReviewMedia.set(review.id, media);
+    }
+    try {
+      const response = await this.frigate!.getReviewPreview(review.id, signal);
+      await response.body?.cancel();
+      media.available = true;
+      return 'available';
+    } catch (error) {
+      media.available = false;
+      return error instanceof FrigateCommunicationError && error.mediaMissing ? 'expired' : 'unavailable';
+    }
+  }
+
+  private async issueThumbnail(review: CameraReview, signal: AbortSignal): Promise<string | undefined> {
+    const response = await this.frigate!.getReviewThumbnail(review.id, review.camera, signal);
+    await response.body?.cancel();
+    const currentTime = Date.now();
+    for (const [id, entry] of this.resolvedThumbnails) if (entry.expiresAt <= currentTime) this.resolvedThumbnails.delete(id);
+    let capability = this.resolvedThumbnails.get(review.id);
+    if (!capability) {
+      if (this.resolvedThumbnails.size >= 500) this.resolvedThumbnails.delete(this.resolvedThumbnails.keys().next().value!);
+      capability = { id: randomUUID(), camera: review.camera, expiresAt: currentTime + 5 * 60 * 1000 };
+      this.resolvedThumbnails.set(review.id, capability);
+    }
+    return `/api/activity/review/${capability.id}/thumbnail`;
   }
 
   private latestAway(history: Record<string, HomeHistoryPoint[]>, now: Date): AwayInterval | undefined {
@@ -251,9 +430,9 @@ export class ActivityService {
     return 'unavailable';
   }
 
-  private timeline(history: Record<string, HomeHistoryPoint[]>, start: Date, end: Date): ActivityEvent[] {
+  private timeline(history: Record<string, HomeHistoryPoint[]>, start: Date, end: Date, cameraGroups?: CameraEventGroup[]): ActivityEvent[] {
     const events: ActivityEvent[] = [];
-    const ids = new Set([this.config.home, this.config.frontDoorLock, this.config.doorbellVisitor, ...this.config.frigateEvents].filter(Boolean));
+    const ids = new Set([this.config.home, this.config.frontDoorLock, this.config.doorbellVisitor, ...(cameraGroups ? [] : this.config.frigateEvents)].filter(Boolean));
     for (const entity of ids) {
       let previous: string | undefined;
       const seenDetections = new Set<number>();
@@ -286,6 +465,17 @@ export class ActivityService {
         const occurredAt = new Date(occurred).toISOString();
         events.push({ id: `${entity}:${occurredAt}`, occurredAt, ...event });
       }
+    }
+    if (cameraGroups) {
+      events.push(...cameraGroups.map((group) => ({
+        id: group.id,
+        kind: 'frigate' as const,
+        occurredAt: group.occurredAt,
+        title: `${cameraObjectText(group.objects)} registrert`,
+        detail: [group.zone && displayName(group.zone), cameraDisplayName(group.camera)].filter(Boolean).join(' · '),
+        tone: 'default' as const,
+        ...(group.reviews[0]?.mediaPath ? { mediaPath: group.reviews[0].mediaPath } : {}),
+      })));
     }
     return events.sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
   }

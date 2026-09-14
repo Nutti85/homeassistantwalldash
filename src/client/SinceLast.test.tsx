@@ -1,13 +1,22 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActivityEvent, ActivityPayload, AwayCapture } from '../shared/activity';
+import type { ActivityEvent, ActivityPayload, AwayCapture, CameraEventFeed, CameraEventGroup } from '../shared/activity';
 import type { FamilyMessage } from './familyInbox';
-import { ActivityTimeline, AwayCaptureCard, FamilyInboxCard, SinceLast } from './SinceLast';
+import { ActivityTimeline, AwayCaptureCard, CameraEventsCard, FamilyInboxCard, SinceLast } from './SinceLast';
 
 const mediaPath = '/api/activity/review/01234567-89ab-4cde-8123-456789abcdef/preview';
 const thumbnailPath = mediaPath.replace('/preview', '/thumbnail');
 const event: ActivityEvent = { id: 'capture', kind: 'frigate', occurredAt: '2026-09-10T12:50:00Z', title: 'Bil registrert', detail: 'Parkering · Gårdsplassen', tone: 'default', mediaPath };
 const available: AwayCapture = { status: 'available', event, mediaPath, thumbnailPath };
+const cameraGroup = (index: number): CameraEventGroup => ({
+  id: `camera-event:bod:parkering:${index}`, occurredAt: `2026-09-12T0${index}:00:00Z`, camera: 'Gaardsplassen_Wide', zone: 'Parkering', objects: ['person', 'car'], reviewCount: 2,
+  latestReviewId: `178792140${index}.123456-abc12${index}`,
+  reviews: [
+    { id: `178792140${index}.123456-abc12${index}`, occurredAt: `2026-09-12T0${index}:00:00Z`, objects: ['person'], camera: 'Gaardsplassen_Wide', zone: 'Parkering', monitoringMode: 'notifications', mediaPath, thumbnailPath },
+    { id: `178792130${index}.123456-def12${index}`, occurredAt: `2026-09-11T23:50:00Z`, objects: ['car'], camera: 'Gaardsplassen_Wide', zone: 'Parkering', monitoringMode: 'armed', mediaPath: mediaPath.replace('4e654ee5', '5e654ee5'), thumbnailPath: thumbnailPath.replace('4e654ee5', '5e654ee5') },
+  ],
+});
+const cameraFeed: CameraEventFeed = { status: 'available', groups: Array.from({ length: 6 }, (_, index) => cameraGroup(index)) };
 const now = new Date('2026-09-12T00:30:00+02:00');
 const messages: FamilyMessage[] = [
   { id: 'old', source: 'Jacob', title: 'Eldre beskjed', body: 'Eldre tekst', publishedAt: '2026-09-08T12:00:00Z' },
@@ -122,6 +131,47 @@ describe('AwayCaptureCard', () => {
   });
 });
 
+describe('CameraEventsCard', () => {
+  it('shows the five newest groups with camera, zone, objects, and a circular review count', () => {
+    render(<CameraEventsCard feed={cameraFeed}/>);
+    const region = screen.getByRole('region', { name: 'KAMERAHENDELSER' });
+    expect(within(region).getAllByRole('button', { name: /Åpne kamerahendelse/ })).toHaveLength(5);
+    expect(within(region).getAllByText('2')).toHaveLength(5);
+    expect(within(region).getAllByRole('img')).toHaveLength(5);
+    expect(within(region).getAllByText(/Gårdsplassen/).length).toBeGreaterThan(0);
+    expect(within(region).getAllByText('Person og bil').length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ['inactive', 'Overvåkning er ikke aktiv.'],
+    ['none', 'Ingen kamerahendelser de siste sju dagene.'],
+    ['unavailable', 'Kunne ikke hente kamerahendelser.'],
+  ] as const)('shows the explicit %s state', (status, copy) => {
+    render(<CameraEventsCard feed={{ status, groups: [] }}/>);
+    expect(screen.getByText(copy)).toBeInTheDocument();
+  });
+
+  it('opens a keyboard-safe detail modal, changes selected review, and exposes playback only on request', () => {
+    render(<CameraEventsCard feed={{ ...cameraFeed, groups: [cameraGroup(1)] }}/>);
+    const opener = screen.getByRole('button', { name: /Åpne kamerahendelse/ });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole('dialog', { name: 'Kamerahendelse' });
+    expect(within(dialog).getByText('Notifikasjoner')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Spill klipp/ })).toBeInTheDocument();
+    expect(dialog.querySelector('video')).toBeNull();
+    const reviewButtons = within(dialog).getAllByRole('button', { name: /Velg registrering/ });
+    fireEvent.click(reviewButtons[1]);
+    expect(within(dialog).getByText('Armert')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Spill klipp/ }));
+    expect(dialog.querySelector('video')).toHaveAttribute('src', expect.stringContaining('/preview'));
+    expect(dialog.querySelector('video')).not.toHaveAttribute('autoplay');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Kamerahendelse' })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+});
+
 describe('FamilyInboxCard', () => {
   it('shows two newest unread previews and the combined count, and opens the selected message without reading it', () => {
     const open = vi.fn();
@@ -172,7 +222,7 @@ describe('ActivityTimeline', () => {
     const opener = screen.getByRole('button', { name: 'Se alle hendelser' });
     opener.focus();
     fireEvent.click(opener);
-    const dialog = screen.getByRole('dialog', { name: 'Tidslinje' });
+    const dialog = screen.getByRole('dialog', { name: 'Hendelser' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(7);
     expect(within(dialog).getByRole('button', { name: 'Lukk' })).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
@@ -195,17 +245,17 @@ describe('ActivityTimeline', () => {
   it('distinguishes initial loading from confirmed empty events', () => {
     const { rerender } = render(<ActivityTimeline events={[]} loading/>);
     expect(screen.queryByText('Ingen nye hendelser')).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Tidslinje' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('region', { name: 'Hendelser' })).toHaveAttribute('aria-busy', 'true');
     rerender(<ActivityTimeline events={[]}/>);
     expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
   });
 });
 
 it('keeps family messages usable independently of failed activity and preserves module order', () => {
-  const activity: ActivityPayload = { generatedAt: now.toISOString(), awayCapture: { status: 'unavailable' }, timeline: [] };
+  const activity: ActivityPayload = { generatedAt: now.toISOString(), cameraEvents: { status: 'unavailable', groups: [] }, awayCapture: { status: 'unavailable' }, timeline: [] };
   render(<SinceLast activity={activity} messages={messages} receipts={[]} onOpenFamily={() => {}} now={now}/>);
-  expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['SIST MENS HUSET VAR BORTE', 'Beskjeder', 'Tidslinje']);
-  expect(screen.getByText('Kunne ikke hente hendelser fra sist huset var borte')).toBeInTheDocument();
+  expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['KAMERAHENDELSER', 'Beskjeder', 'Hendelser']);
+  expect(screen.getByText('Kunne ikke hente kamerahendelser.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Se alle beskjeder' })).toBeEnabled();
 });
 
@@ -220,7 +270,7 @@ it('shows loading in all three modules until initial activity resolves without f
   }
   expect(screen.queryByText('Ingen uleste beskjeder')).not.toBeInTheDocument();
   expect(screen.queryByText('0 uleste')).not.toBeInTheDocument();
-  rerender(<SinceLast {...props} activityLoading={false} activity={{ generatedAt: now.toISOString(), awayCapture: { status: 'none' }, timeline: [] }}/>);
+  rerender(<SinceLast {...props} activityLoading={false} activity={{ generatedAt: now.toISOString(), cameraEvents: { status: 'none', groups: [] }, awayCapture: { status: 'none' }, timeline: [] }}/>);
   expect(screen.getByText('Ingen uleste beskjeder')).toBeInTheDocument();
   expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
   for (const region of screen.getAllByRole('region')) expect(region).toHaveAttribute('aria-busy', 'false');

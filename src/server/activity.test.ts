@@ -5,6 +5,7 @@ import type { ActivityPayload, FrigateReviewItem, HomeHistoryPoint } from '../sh
 
 const config = { home: 'input_select.home_state', frontDoorLock: 'lock.front', doorbellVisitor: 'binary_sensor.visitor', frigateEvents: ['image.gaardsplassen_wide_car', 'image.bod_person'] };
 const now = new Date('2026-08-28T15:00:00+02:00');
+const dayMs = 24 * 60 * 60 * 1000;
 const at = (time: string) => `2026-08-28T${time}:00+02:00`;
 const point = (state: string, time: string): HomeHistoryPoint => ({ state, changedAt: at(time) });
 const awayHistory = { [config.home]: [point('Hjemme', '07:00'), point('Borte', '07:50'), point('Hjemme', '14:53')] };
@@ -20,7 +21,7 @@ const mediaId = (path: string | undefined): string => {
   return path!.split('/')[4];
 };
 
-function setup(history: Record<string, HomeHistoryPoint[]> = awayHistory, reviews: FrigateReviewItem[] = [review], preview = 200, clip = 200) {
+function setup(history: Record<string, HomeHistoryPoint[]> = awayHistory, reviews: FrigateReviewItem[] = [review], preview = 200, clip = 200, serviceConfig = config) {
   const historySource = { getActivityHistory: vi.fn(async (_start: Date, _end: Date) => history) };
   const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockImplementation(async (input) => {
     const url = new URL(String(input));
@@ -29,11 +30,136 @@ function setup(history: Record<string, HomeHistoryPoint[]> = awayHistory, review
     const status = url.pathname.endsWith('/preview') ? preview : clip;
     return new Response(status === 200 ? 'video' : 'private error', { status, headers: { 'content-type': 'video/mp4' } });
   });
-  const service = new ActivityService(historySource, new FrigateClient('http://private:5000', fetcher), config);
+  const service = new ActivityService(historySource, new FrigateClient('http://private:5000', fetcher), serviceConfig);
   return { service, historySource, fetcher };
 }
 
+const cameraConfig = {
+  ...config,
+  securityMode: 'input_number.toggle_security_mode',
+  frigateEvents: [
+    'image.bakside_person', 'image.bakside_car', 'image.bakside_dog',
+    'image.bod_person', 'image.bod_car', 'image.bod_dog',
+    'image.gaardsplassen_wide_person', 'image.gaardsplassen_wide_car', 'image.gaardsplassen_wide_dog',
+    'image.hagen_person', 'image.hagen_car', 'image.hagen_dog',
+  ],
+};
+const cameraAt = (minutes: number) => new Date(Date.parse('2026-08-28T12:00:00.000Z') + minutes * 60_000);
+const cameraReview = (minutes: number, overrides: Partial<FrigateReviewItem> = {}): FrigateReviewItem => ({
+  id: `${Math.floor(cameraAt(minutes).getTime() / 1000)}.123456-${String(Math.abs(minutes)).padStart(6, '0')}`,
+  camera: 'Gaardsplassen_Wide', start_time: cameraAt(minutes).getTime() / 1000, end_time: cameraAt(minutes).getTime() / 1000 + 20,
+  severity: 'alert', data: { objects: ['person'], zones: ['Parkering'] }, ...overrides,
+});
+
 describe('ActivityService', () => {
+  it('filters reviews by security mode, allowlisted objects, cameras, and the seven-day boundary', async () => {
+    const reviews = [
+      cameraReview(0, { data: { objects: ['person', 'cat'], zones: ['Parkering'] } }),
+      cameraReview(6, { data: { objects: ['car'], zones: ['Parkering'] } }),
+      cameraReview(7, { data: { objects: ['dog'], zones: ['Parkering'] } }),
+      cameraReview(8, { camera: 'Bod', data: { objects: ['person'], zones: ['Bod'] } }),
+      cameraReview(9, { camera: 'Hagen', data: { objects: ['cat'], zones: ['Hagen'] } }),
+      cameraReview(12, { camera: 'Unknown', data: { objects: ['person'], zones: ['Parkering'] } }),
+      cameraReview(-8 * 24 * 60, { data: { objects: ['person'], zones: ['Parkering'] } }),
+    ];
+    const history = {
+      [cameraConfig.securityMode]: [
+        { state: '2', changedAt: new Date(now.getTime() - 7 * dayMs).toISOString(), baseline: true },
+        { state: '1', changedAt: cameraAt(0).toISOString() },
+        { state: '3', changedAt: cameraAt(7).toISOString() },
+        { state: '1', changedAt: cameraAt(8).toISOString() },
+      ],
+    };
+    const { service } = setup(history, reviews, 200, 200, cameraConfig);
+
+    const feed = (await service.getActivity(now)).cameraEvents;
+
+    expect(feed.status).toBe('available');
+    expect(feed.groups).toHaveLength(2);
+    const driveway = feed.groups.find((group) => group.camera === 'Gaardsplassen_Wide')!;
+    expect(driveway).toMatchObject({ camera: 'Gaardsplassen_Wide', zone: 'Parkering', objects: ['person', 'car'], reviewCount: 2 });
+    expect(driveway.reviews.map(({ objects }) => objects)).toEqual([['car'], ['person']]);
+    expect(feed.groups.find((group) => group.camera === 'Bod')).toMatchObject({ camera: 'Bod', zone: 'Bod', objects: ['person'], reviewCount: 1 });
+  });
+
+  it('keeps a review that starts armed before deactivation and omits reviews that start while deactivated', async () => {
+    const reviews = [cameraReview(6, { end_time: cameraAt(8).getTime() / 1000 }), cameraReview(8, { data: { objects: ['dog'], zones: ['Parkering'] } })];
+    const history = {
+      [cameraConfig.securityMode]: [
+        { state: '1', changedAt: new Date(cameraAt(0).getTime() - 60_000).toISOString(), baseline: true },
+        { state: '3', changedAt: cameraAt(7).toISOString() },
+        { state: '1', changedAt: cameraAt(10).toISOString() },
+      ],
+    };
+    const { service } = setup(history, reviews, 200, 200, cameraConfig);
+
+    const feed = (await service.getActivity(now)).cameraEvents;
+
+    expect(feed.groups).toHaveLength(1);
+    expect(feed.groups[0].reviews[0].monitoringMode).toBe('armed');
+  });
+
+  it('returns inactive for current mode three and emits the same grouped camera rows in the timeline', async () => {
+    const history = {
+      [cameraConfig.securityMode]: [{ state: '3', changedAt: new Date(now.getTime() - 60_000).toISOString(), baseline: true }],
+      [cameraConfig.home]: [point('Hjemme', '14:00')],
+    };
+    const { service } = setup(history, [cameraReview(0)], 200, 200, cameraConfig);
+
+    const payload = await service.getActivity(now);
+
+    expect(payload.cameraEvents).toMatchObject({ status: 'inactive', groups: [] });
+    expect(payload.timeline.some((event) => event.kind === 'frigate')).toBe(false);
+  });
+
+  it('returns unavailable when the security mode history has no known current state', async () => {
+    const { service } = setup({}, [cameraReview(0)], 200, 200, cameraConfig);
+
+    expect((await service.getActivity(now)).cameraEvents).toEqual({ status: 'unavailable', groups: [] });
+  });
+
+  it('groups the same camera and zone through the ten-minute boundary independent of review order', async () => {
+    const reviews = [cameraReview(10), cameraReview(0), cameraReview(5), cameraReview(11, { data: { objects: ['dog'], zones: ['Side'] } })];
+    const history = { [cameraConfig.securityMode]: [{ state: '2', changedAt: new Date(now.getTime() - 7 * dayMs).toISOString(), baseline: true }] };
+
+    const { service } = setup(history, reviews, 200, 200, cameraConfig);
+    const groups = (await service.getActivity(now)).cameraEvents.groups;
+
+    expect(groups).toHaveLength(2);
+    const mainGroup = groups.find((group) => group.zone === 'Parkering')!;
+    const sideGroup = groups.find((group) => group.zone === 'Side')!;
+    expect(mainGroup).toMatchObject({ reviewCount: 3, objects: ['person'] });
+    expect(mainGroup.reviews.map((item) => item.id)).toEqual([cameraReview(10).id, cameraReview(5).id, cameraReview(0).id]);
+    expect(sideGroup).toMatchObject({ reviewCount: 1, objects: ['dog'] });
+  });
+
+  it('issues only same-origin media capabilities per review and keeps expired metadata beside live siblings', async () => {
+    const live = cameraReview(0);
+    const expired = cameraReview(1, { data: { objects: ['car'], zones: ['Parkering'] } });
+    const { service, fetcher } = setup({ [cameraConfig.securityMode]: [{ state: '2', changedAt: new Date(now.getTime() - 7 * dayMs).toISOString(), baseline: true }] }, [live, expired], 200, 200, cameraConfig);
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes(`/review/${expired.id}/preview`) || url.includes(`thumb-${expired.camera}-${expired.id}`)) return new Response('missing', { status: 404 });
+      return original(input, init);
+    });
+
+    const group = (await service.getActivity(now)).cameraEvents.groups[0];
+    const liveReview = group.reviews.find(({ id }) => id === live.id)!;
+    const expiredReview = group.reviews.find(({ id }) => id === expired.id)!;
+
+    expect(liveReview.mediaPath).toMatch(/^\/api\/activity\/review\/[0-9a-f-]{36}\/preview$/);
+    expect(liveReview.thumbnailPath).toMatch(/^\/api\/activity\/review\/[0-9a-f-]{36}\/thumbnail$/);
+    expect(expiredReview).toMatchObject({ id: expired.id, camera: expired.camera, objects: ['car'] });
+    expect(expiredReview.mediaPath).toBeUndefined();
+    expect(expiredReview.thumbnailPath).toBeUndefined();
+    expect(JSON.stringify(group)).not.toContain('http://private');
+    expect(JSON.stringify(group)).not.toContain('/api/Gaardsplassen_Wide/');
+
+    await (await service.getReviewMedia(liveReview.mediaPath!.split('/')[4])).body?.cancel();
+    expect(String(fetcher.mock.calls.at(-1)?.[0])).toContain(`/api/review/${live.id}/preview?format=mp4`);
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/clip.mp4'))).toBe(false);
+  });
   it('resolves twelve delayed recording matches before the client deadline with bounded upstream concurrency', async () => {
     vi.useFakeTimers();
     try {

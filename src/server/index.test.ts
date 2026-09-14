@@ -22,9 +22,10 @@ describe('parseActivityEntityConfig', () => {
   it('filters blank Frigate entity entries', async () => {
     const { parseActivityEntityConfig } = await import('./index');
 
-    expect(parseActivityEntityConfig(' binary_sensor.ringeklokke_visitor ', ' image.driveway_person, ,image.front_door_person, ')).toEqual({
+    expect(parseActivityEntityConfig(' binary_sensor.ringeklokke_visitor ', ' image.driveway_person, ,image.front_door_person, ', ' input_number.monitoring_mode ')).toEqual({
       doorbellVisitor: 'binary_sensor.ringeklokke_visitor',
       frigateEvents: ['image.driveway_person', 'image.front_door_person'],
+      securityMode: 'input_number.monitoring_mode',
     });
   });
 
@@ -34,6 +35,7 @@ describe('parseActivityEntityConfig', () => {
     expect(parseActivityEntityConfig(undefined, ' , ')).toEqual({
       doorbellVisitor: '',
       frigateEvents: [],
+      securityMode: 'input_number.toggle_security_mode',
     });
   });
 
@@ -48,5 +50,11 @@ describe('parseActivityEntityConfig', () => {
       expect((error as Error).message).toContain('HA_FRIGATE_EVENT_ENTITY_IDS');
       expect((error as Error).message).not.toContain(configuredValue);
     }
+  });
+
+  it('rejects a security mode entity outside input_number', async () => {
+    const { parseActivityEntityConfig } = await import('./index');
+    expect(() => parseActivityEntityConfig(undefined, undefined, 'sensor.private_mode'))
+      .toThrow(/HA_SECURITY_MODE_ENTITY_ID/);
   });
 });

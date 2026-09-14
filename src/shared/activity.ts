@@ -19,8 +19,40 @@ export interface AwayCapture {
   mediaPath?: string;
 }
 
+export type CameraObject = 'person' | 'car' | 'dog';
+export type CameraEventStatus = 'available' | 'expired' | 'none' | 'unavailable' | 'inactive';
+
+export interface CameraReview {
+  id: string;
+  occurredAt: string;
+  objects: CameraObject[];
+  camera: string;
+  zone?: string;
+  monitoringMode: 'armed' | 'notifications';
+  thumbnailPath?: string;
+  mediaPath?: string;
+}
+
+export interface CameraEventGroup {
+  id: string;
+  occurredAt: string;
+  camera: string;
+  zone?: string;
+  objects: CameraObject[];
+  reviewCount: number;
+  latestReviewId: string;
+  reviews: CameraReview[];
+}
+
+export interface CameraEventFeed {
+  status: CameraEventStatus;
+  groups: CameraEventGroup[];
+}
+
 export interface ActivityPayload {
   generatedAt: string;
+  cameraEvents: CameraEventFeed;
+  /** Kept while older API consumers migrate to cameraEvents. */
   awayCapture: AwayCapture;
   timeline: ActivityEvent[];
 }
