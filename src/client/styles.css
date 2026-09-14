@@ -1099,7 +1099,7 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-since-module{min-height:0;background:#1a2421}
 .ppf-since-module>header h3{margin:0;font-size:18px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
 .ppf-away-capture>header h3{font-size:13px;letter-spacing:.055em;line-height:1.4}
-.ppf-camera-event-list{display:grid;gap:8px;list-style:none;margin:0;padding:0}
+.ppf-camera-event-list{display:grid;gap:8px;max-height:160px;overflow-y:auto;overscroll-behavior:contain;list-style:none;margin:0;padding:0 4px 0 0}
 .ppf-camera-event-card{position:relative;display:grid!important;grid-template-columns:112px minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:0!important;border:1px solid var(--ppf-line);border-radius:12px;background:rgba(255,255,255,.035);text-align:left}
 .ppf-camera-event-card:hover{background:rgba(239,178,118,.09)}
 .ppf-camera-event-card>img,.ppf-camera-event-placeholder{width:112px;height:76px;border-radius:11px 0 0 11px;object-fit:cover;background:#111b18}

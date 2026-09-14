@@ -95,7 +95,7 @@ function CameraEventDialog({ group, onClose }: { group: CameraEventGroup; onClos
 export function CameraEventsCard({ feed, loading = false }: { feed?: CameraEventFeed; loading?: boolean }) {
   const [selectedGroup, setSelectedGroup] = useState<CameraEventGroup>();
   const [thumbnailFailures, setThumbnailFailures] = useState<Set<string>>(() => new Set());
-  const groups = feed?.groups.slice(0, 5) ?? [];
+  const groups = feed?.groups ?? [];
   const statusCopy = feed?.status === 'inactive' ? 'Overvåkning er ikke aktiv.' : feed?.status === 'none' ? 'Ingen kamerahendelser de siste sju dagene.' : feed?.status === 'unavailable' || !feed ? 'Kunne ikke hente kamerahendelser.' : feed.status === 'expired' && !groups.length ? 'Kamerabildene er ikke lenger tilgjengelige.' : undefined;
   return <><Module title="KAMERAHENDELSER" icon="videocam" className="ppf-camera-events" loading={loading && !feed}>
     {loading && !feed ? <Loading rows={2}/> : groups.length ? <ol className="ppf-camera-event-list" aria-label="Kamerahendelser">{groups.map((group) => {

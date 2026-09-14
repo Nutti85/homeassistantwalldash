@@ -132,12 +132,13 @@ describe('AwayCaptureCard', () => {
 });
 
 describe('CameraEventsCard', () => {
-  it('shows the five newest groups with camera, zone, objects, and a circular review count', () => {
+  it('keeps all groups available in a two-card scrolling viewport with camera, zone, objects, and a circular review count', () => {
     render(<CameraEventsCard feed={cameraFeed}/>);
     const region = screen.getByRole('region', { name: 'KAMERAHENDELSER' });
-    expect(within(region).getAllByRole('button', { name: /Åpne kamerahendelse/ })).toHaveLength(5);
-    expect(within(region).getAllByText('2')).toHaveLength(5);
-    expect(within(region).getAllByRole('img')).toHaveLength(5);
+    expect(within(region).getAllByRole('button', { name: /Åpne kamerahendelse/ })).toHaveLength(6);
+    expect(within(region).getByRole('list', { name: 'Kamerahendelser' })).toHaveClass('ppf-camera-event-list');
+    expect(within(region).getAllByText('2')).toHaveLength(6);
+    expect(within(region).getAllByRole('img')).toHaveLength(6);
     expect(within(region).getAllByText(/Gårdsplassen/).length).toBeGreaterThan(0);
     expect(within(region).getAllByText('Person og bil').length).toBeGreaterThan(0);
   });
