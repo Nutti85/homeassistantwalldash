@@ -1139,7 +1139,7 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-since-stale{margin:0;color:var(--ppf-soft);font-size:12px}
 .ppf-activity-modal{display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100dvh - 36px)}
 .ppf-activity-modal>header{flex:none}
-.ppf-activity-modal>.ppf-activity-modal-body{min-height:0;overflow:auto;overscroll-behavior:contain}
+.ppf-activity-modal>.ppf-activity-modal-body{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(239,178,118,.72) #111b18}
 .ppf-activity-modal .ppf-recording video{height:auto;max-height:360px}
 .ppf-recording-modal{position:relative;display:grid;width:min(1120px,calc(100vw - 36px),calc((100dvh - 36px)*16/9));aspect-ratio:16/9;overflow:hidden;background:#0d1512}
 .ppf-recording-modal>header{position:absolute;z-index:1;inset:0 0 auto;border:0;background:linear-gradient(to bottom,rgba(3,8,7,.86),transparent)}
@@ -1152,8 +1152,12 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-since-last:has(.ppf-since-stale){grid-template-rows:auto auto minmax(0,1fr) auto}
   .ppf-activity-card{display:flex;flex-direction:column}
   .ppf-activity-card>header{flex:none}
-  .ppf-activity-card>.ppf-activity-list{min-height:0;overflow:auto;overscroll-behavior:contain}
+  .ppf-activity-card>.ppf-activity-list{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(239,178,118,.72) #111b18}
 }
+.ppf-activity-card>.ppf-activity-list::-webkit-scrollbar,.ppf-activity-modal>.ppf-activity-modal-body::-webkit-scrollbar{width:10px}
+.ppf-activity-card>.ppf-activity-list::-webkit-scrollbar-track,.ppf-activity-modal>.ppf-activity-modal-body::-webkit-scrollbar-track{margin:6px 2px;border-radius:999px;background:#111b18}
+.ppf-activity-card>.ppf-activity-list::-webkit-scrollbar-thumb,.ppf-activity-modal>.ppf-activity-modal-body::-webkit-scrollbar-thumb{border:2px solid #111b18;border-radius:999px;background:rgba(239,178,118,.72)}
+.ppf-activity-card>.ppf-activity-list::-webkit-scrollbar-thumb:hover,.ppf-activity-modal>.ppf-activity-modal-body::-webkit-scrollbar-thumb:hover{background:#f4c38f}
 @media(max-width:700px){
   .ppf-c-zones .ppf-zone-past,.ppf-c-zones .ppf-zone-now,.ppf-c-zones .ppf-zone-future{order:0}
   .ppf-since-last{gap:12px}
