@@ -20,30 +20,40 @@ function Loading({ rows = 1, label = 'Henter hendelser' }: { rows?: number; labe
   return <div className="ppf-since-loading" role="status"><span className="sr-only">{label}</span>{Array.from({ length: rows }, (_, index) => <span className="ppf-since-skeleton" aria-hidden="true" key={index}/>)}</div>;
 }
 
-function Recording({ path, thumbnail, label }: { path: string; thumbnail?: string; label: string }) {
-  const [playing, setPlaying] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [thumbnailFailed, setThumbnailFailed] = useState(false);
-  const [playbackBlocked, setPlaybackBlocked] = useState(false);
+function RecordingDialog({ path, label, failed, onClose, onFailed }: { path: string; label: string; failed: boolean; onClose: () => void; onFailed: () => void }) {
+  const id = useId();
+  const ref = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const failure = useRef<HTMLParagraphElement>(null);
-  const recoverFocus = useRef(false);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
   useLayoutEffect(() => {
-    if (!playing || !video.current) return;
-    video.current.focus();
+    const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    if (!failed) video.current?.focus(); else closeRef.current?.focus();
     let active = true;
     const cannotStart = () => { if (active) setPlaybackBlocked(true); };
-    // The player is mounted by the explicit play action. Keep native controls
-    // available if the browser rejects that initial playback request.
-    try { void video.current.play()?.catch(cannotStart); } catch { cannotStart(); }
-    return () => { active = false; };
-  }, [playing]);
-  useLayoutEffect(() => { if (failed && recoverFocus.current) failure.current?.focus(); }, [failed]);
-  if (failed) return <p ref={failure} tabIndex={-1} className="ppf-since-state" role="status">{expiredCopy}</p>;
+    if (!failed) try { void video.current?.play()?.catch(cannotStart); } catch { cannotStart(); }
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (event.key === 'Tab') {
+        const stops: HTMLElement[] = [closeRef.current, video.current].filter((item): item is HTMLButtonElement | HTMLVideoElement => item !== null);
+        const first = stops[0]; const last = stops[stops.length - 1];
+        if (event.shiftKey && document.activeElement === first || !event.shiftKey && document.activeElement === last) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); }
+      }
+    };
+    document.addEventListener('keydown', keydown, true);
+    return () => { active = false; document.removeEventListener('keydown', keydown, true); if (invoker?.isConnected) invoker.focus(); };
+  }, [failed, onClose]);
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={ref} className="ppf-modal ppf-recording-modal" role="dialog" aria-modal="true" aria-labelledby={id}><header><span><Icon>videocam</Icon></span><h2 id={id}>Opptak fra {label}</h2><button ref={closeRef} type="button" aria-label="Lukk opptak" onClick={onClose}><Icon>close</Icon></button></header><div>{failed ? <p className="ppf-since-state" role="status">{expiredCopy}</p> : <><video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onPlay={() => setPlaybackBlocked(false)} onError={onFailed}/>{playbackBlocked && <p className="ppf-since-state" role="status">Avspillingen startet ikke. Prøv avspillingsknappen i videoen.</p>}</>}</div></section></div>;
+}
+
+function Recording({ path, thumbnail, label }: { path: string; thumbnail?: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  if (failed && !open) return <p className="ppf-since-state" role="status">{expiredCopy}</p>;
   return <div className={`ppf-recording${thumbnail ? ' ppf-recording-preview' : ''}`}>
-    {playing ? <video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onPlay={() => setPlaybackBlocked(false)} onError={() => { recoverFocus.current = document.activeElement === video.current; setFailed(true); }}/>
-      : <>{thumbnail && !thumbnailFailed && <img src={thumbnail} alt={`Siste registrering: ${label}`} onError={() => setThumbnailFailed(true)}/>}<button type="button" className="ppf-recording-play" aria-label={`Spill av opptak fra ${label}`} onClick={() => setPlaying(true)}><Icon>play_arrow</Icon><span>Spill av</span></button></>}
-    {playbackBlocked && <p className="ppf-since-state" role="status">Avspillingen startet ikke. Prøv avspillingsknappen i videoen.</p>}
+    {thumbnail && !thumbnailFailed && <img src={thumbnail} alt={`Siste registrering: ${label}`} onError={() => setThumbnailFailed(true)}/>}<button type="button" className="ppf-recording-play" aria-label={`Spill av opptak fra ${label}`} onClick={() => setOpen(true)}><Icon>play_arrow</Icon><span>Spill av</span></button>
+    {open && <RecordingDialog path={path} label={label} failed={failed} onClose={() => setOpen(false)} onFailed={() => setFailed(true)}/>}
   </div>;
 }
 

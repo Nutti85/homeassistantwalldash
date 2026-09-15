@@ -25,11 +25,18 @@ describe.each(['away', 'timeline'] as const)('%s recording activation', (surface
     const { container } = show();
     const play = vi.mocked(HTMLMediaElement.prototype.play);
     expect(play).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: /Spill av opptak fra/ }));
+    const opener = screen.getByRole('button', { name: /Spill av opptak fra/ });
+    opener.focus();
+    fireEvent.click(opener);
     expect(play).toHaveBeenCalledTimes(1);
     expect(play.mock.instances[0]).toBe(container.querySelector('video'));
+    expect(screen.getByRole('dialog', { name: /Opptak fra/ })).toBeInTheDocument();
     expect(container.querySelector('video')).toHaveAttribute('src', mediaPath);
     expect(container.querySelector('video')).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: /Opptak fra/ })).not.toBeInTheDocument();
+    expect(container.querySelector('video')).toBeNull();
+    expect(opener).toHaveFocus();
   });
 
   it.each(['reject', 'throw'] as const)('keeps native playback controls usable when play fails via %s', async (mode) => {
@@ -59,6 +66,7 @@ describe('AwayCaptureCard', () => {
     expect(screen.getByRole('img')).toHaveAttribute('src', thumbnailPath);
     expect(container.querySelector('video')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Spill av opptak fra.*Gårdsplassen/ }));
+    expect(screen.getByRole('dialog', { name: /Opptak fra/ })).toBeInTheDocument();
     expect(container.querySelector('video')).toHaveAttribute('src', mediaPath);
     expect(container.querySelector('video')).toHaveAttribute('controls');
     expect(container.querySelector('video')).not.toHaveAttribute('autoplay');
@@ -118,6 +126,7 @@ describe('AwayCaptureCard', () => {
     fireEvent.error(container.querySelector('video')!);
     expect(screen.getByText('Opptaket er ikke lenger tilgjengelig')).toBeInTheDocument();
     expect(container.querySelector('video')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lukk opptak' }));
     expect(screen.queryByRole('button', { name: /Spill av/ })).not.toBeInTheDocument();
   });
 });
