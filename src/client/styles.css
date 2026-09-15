@@ -1141,9 +1141,10 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-activity-modal>header{flex:none}
 .ppf-activity-modal>.ppf-activity-modal-body{min-height:0;overflow:auto;overscroll-behavior:contain}
 .ppf-activity-modal .ppf-recording video{height:auto;max-height:360px}
-.ppf-recording-modal{width:min(900px,100%);overflow:hidden}
-.ppf-recording-modal>div{display:grid;gap:12px;padding:16px}
-.ppf-recording-modal video{display:block;width:100%;max-height:calc(100dvh - 180px);background:#0d1512;border-radius:12px}
+.ppf-recording-modal{position:relative;display:grid;width:min(1120px,calc(100vw - 36px),calc((100dvh - 36px)*16/9));aspect-ratio:16/9;overflow:hidden;background:#0d1512}
+.ppf-recording-modal>header{position:absolute;z-index:1;inset:0 0 auto;border:0;background:linear-gradient(to bottom,rgba(3,8,7,.86),transparent)}
+.ppf-recording-modal>div{display:grid;place-items:center;min-height:0;padding:0}
+.ppf-recording-modal video{display:block;width:100%;height:100%;background:#0d1512;object-fit:contain}
 @media(min-width:1101px) and (min-height:700px){
   .ppf-zone-past{height:100%;min-height:0;grid-template-rows:auto minmax(0,1fr)}
   .ppf-zone-past>div{min-height:0}
