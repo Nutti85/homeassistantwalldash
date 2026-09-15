@@ -363,7 +363,7 @@ describe('ActivityService', () => {
   it('selects the 14:50 car alert inside the completed 07:50–14:53 Away interval', async () => {
     const { service } = setup();
     const payload = await service.getActivity(now);
-    expect(payload.awayCapture).toMatchObject({ status: 'available', awayStartedAt: at('07:50'), homeReturnedAt: at('14:53'), event: { occurredAt: '2026-08-28T12:50:00.000Z', title: 'Bil registrert', detail: 'Parkering · Gaardsplassen Wide', tone: 'default' } });
+    expect(payload.awayCapture).toMatchObject({ status: 'available', awayStartedAt: at('07:50'), homeReturnedAt: at('14:53'), event: { occurredAt: '2026-08-28T12:50:00.000Z', title: 'Bil', detail: 'Parkering · Gaardsplassen Wide', tone: 'default' } });
     mediaId(payload.awayCapture.mediaPath);
     expect(payload.generatedAt).toBe('2026-08-28T13:00:00.000Z');
     expect(JSON.stringify(payload)).not.toMatch(/private|token|entity_picture|http:/);
@@ -384,7 +384,7 @@ describe('ActivityService', () => {
     const { service, fetcher } = setup(awayHistory, [review], preview, clip);
     const capture = (await service.getActivity(now)).awayCapture;
     expect(capture.status).toBe(status);
-    expect(capture.event?.title).toBe('Bil registrert');
+    expect(capture.event?.title).toBe('Bil');
     if (status === 'available') {
       mediaId(capture.mediaPath);
       expect(fetcher.mock.calls.some(([url]) => String(url).endsWith(`/start/${start}/end/${start + 20}/clip.mp4`))).toBe(true);
@@ -463,10 +463,10 @@ describe('ActivityService', () => {
     ]);
     const detections = (await service.getActivity(now)).timeline.filter((row) => row.kind === 'frigate');
     expect(detections).toHaveLength(2);
-    expect(detections[0]).toMatchObject({ title: 'Bil registrert' });
+    expect(detections[0]).toMatchObject({ title: 'Bil' });
     await (await service.getReviewMedia(mediaId(detections[0].mediaPath))).body?.cancel();
     expect(String(fetcher.mock.calls.at(-1)?.[0])).toContain(`/review/${nearest.id}/preview?`);
-    expect(detections[1]).toMatchObject({ title: 'Person registrert', detail: 'Bod' });
+    expect(detections[1]).toMatchObject({ title: 'Person', detail: 'Bod' });
     expect(detections[1].mediaPath).toBeUndefined();
   });
 
@@ -509,7 +509,7 @@ describe('ActivityService', () => {
     fetcher.mockImplementation(async (input, init) => String(input).endsWith('.webp') ? new Response('missing', { status: 404 }) : original(input, init));
     const capture = (await service.getActivity(now)).awayCapture;
     expect(capture.thumbnailPath).toBeUndefined();
-    expect(capture.event?.title).toBe('Bil registrert');
+    expect(capture.event?.title).toBe('Bil');
   });
 
   it('clamps open-ended reviews and does not expand Away media when matching its timeline detection', async () => {

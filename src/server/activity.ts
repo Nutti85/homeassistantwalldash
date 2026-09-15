@@ -139,7 +139,7 @@ const reviewEvent = (review: FrigateReviewItem): ActivityEvent => {
   const zone = strings(review.data?.zones)[0];
   return {
     id: `frigate:${review.camera}:${review.start_time}`, kind: 'frigate', occurredAt: new Date(review.start_time * 1000).toISOString(),
-    title: `${objectLabel(object)} registrert`,
+    title: objectLabel(object),
     detail: [zone && displayName(zone), displayName(review.camera)].filter(Boolean).join(' · '), tone: 'default',
   };
 };
@@ -459,7 +459,7 @@ export class ActivityService {
           if (seenDetections.has(occurred)) continue;
           seenDetections.add(occurred);
           const identity = detectionIdentity(entity);
-          event = { kind: 'frigate', title: `${objectLabel(identity.object)} registrert`, detail: displayName(identity.camera), tone: 'default' };
+          event = { kind: 'frigate', title: objectLabel(identity.object), detail: displayName(identity.camera), tone: 'default' };
         }
         if (!event || !Number.isFinite(occurred) || occurred < start.getTime() || occurred > end.getTime()) continue;
         const occurredAt = new Date(occurred).toISOString();
