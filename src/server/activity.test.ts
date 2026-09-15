@@ -82,7 +82,7 @@ describe('ActivityService', () => {
     expect(driveway.reviews.map(({ objects }) => objects)).toEqual([['car'], ['person']]);
     expect(feed.groups.find((group) => group.camera === 'Bod')).toMatchObject({ camera: 'Bod', zone: 'Bod', objects: ['person'], reviewCount: 1 });
     expect(payload.timeline.filter((event) => event.kind === 'frigate')).toHaveLength(2);
-    expect(payload.timeline).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Person og bil registrert', detail: 'Parkering · Gårdsplassen' })]));
+    expect(payload.timeline).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Person og bil', detail: 'Parkering · Gårdsplassen' })]));
   });
 
   it('keeps a review that starts armed before deactivation and omits reviews that start while deactivated', async () => {

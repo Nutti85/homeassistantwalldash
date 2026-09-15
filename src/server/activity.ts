@@ -471,7 +471,7 @@ export class ActivityService {
         id: group.id,
         kind: 'frigate' as const,
         occurredAt: group.occurredAt,
-        title: `${cameraObjectText(group.objects)} registrert`,
+        title: cameraObjectText(group.objects),
         detail: [group.zone && displayName(group.zone), cameraDisplayName(group.camera)].filter(Boolean).join(' · '),
         tone: 'default' as const,
         ...(group.reviews[0]?.mediaPath ? { mediaPath: group.reviews[0].mediaPath } : {}),
