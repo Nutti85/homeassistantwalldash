@@ -274,7 +274,6 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
   const common = { states: props.states, period, openDetail: setDetail };
-  const globalTime = <time className="ppf-global-time" dateTime={now.toISOString()}><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time>;
   const weather = query.weatherCard === 'v2'
     ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
     : <WeatherOverview states={props.states} regular onDetails={props.showWeather} className="ppf-weather-v1"/>;
@@ -288,7 +287,6 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
   const closeDetail = () => setDetail(undefined);
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
-    {globalTime}
     <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{cameras}{weather}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}

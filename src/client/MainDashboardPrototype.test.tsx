@@ -123,7 +123,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(action).toHaveBeenCalledWith('morning');
   });
 
-  it('centers the clock and date on the page without the top bar', () => {
+  it('removes the clock and date so the now lane can use the space for alerts', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
 
@@ -143,8 +143,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     expect(screen.queryByText('Hjemmeoversikt')).not.toBeInTheDocument();
     expect(document.querySelector('.ppf-c-head')).not.toBeInTheDocument();
-    expect(document.querySelector('.ppf-global-time')).toHaveTextContent('10:00');
-    expect(document.querySelector('.ppf-global-time')).toHaveTextContent('mandag 7. september');
+    expect(document.querySelector('.ppf-global-time')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Akkurat nå' })).toBeInTheDocument();
   });
 

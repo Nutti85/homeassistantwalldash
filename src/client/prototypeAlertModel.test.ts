@@ -30,6 +30,17 @@ describe('prototypeAlertDescriptors', () => {
     ]));
   });
 
+  it('does not surface a gust alert for a strong forecast that is more than three hours away', () => {
+    const alerts = prototypeAlertDescriptors({
+      weatherHourly: state('weather.hourly', 'rainy', { forecast: [
+        { datetime: '2026-09-16T10:00:00+02:00', wind_gust_speed: 5 },
+        { datetime: '2026-09-16T14:00:00+02:00', wind_gust_speed: 14 },
+      ] }),
+    }, 'calm', now);
+
+    expect(alerts.some((alert) => alert.kind === 'windGust')).toBe(false);
+  });
+
   it('adds stopped charging only in the warning scenario and never emits an unlocked door', () => {
     const states = { frontDoorLock: state('lock.front_door', 'unlocked') };
     expect(prototypeAlertDescriptors(states, 'calm', now).map((alert) => alert.title)).not.toContain('Ytterdøren er ulåst');

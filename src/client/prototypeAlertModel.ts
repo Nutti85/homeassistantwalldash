@@ -35,7 +35,12 @@ export const prototypeAlertDescriptors = (
     source: 'MET Norge',
   }));
   const lightningDistance = scenario === 'warning' ? 7.4 : numberState(states.lightningDistance);
-  const maximumGust = forecastPoints(states.weatherHourly).reduce<number | undefined>((maximum, point) => point.windGustSpeed === undefined ? maximum : maximum === undefined ? point.windGustSpeed : Math.max(maximum, point.windGustSpeed), undefined);
+  const gustDeadline = now.getTime() + 3 * 60 * 60 * 1000;
+  const maximumGust = forecastPoints(states.weatherHourly).reduce<number | undefined>((maximum, point) => {
+    const timestamp = Date.parse(point.datetime);
+    if (point.windGustSpeed === undefined || !Number.isFinite(timestamp) || timestamp < now.getTime() || timestamp > gustDeadline) return maximum;
+    return maximum === undefined ? point.windGustSpeed : Math.max(maximum, point.windGustSpeed);
+  }, undefined);
   const auroraActive = stateValue(states.auroraVisibility)?.toLocaleLowerCase('nb-NO') === 'on';
 
   return [
