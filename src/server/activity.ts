@@ -303,6 +303,7 @@ export class ActivityService {
     for (const [id, entry] of this.resolvedReviewMedia) if (entry.expiresAt <= currentTime) this.resolvedReviewMedia.delete(id);
     let media = this.resolvedReviewMedia.get(review.id);
     if (media && media.review.camera !== review.camera) return 'unavailable';
+    if (media?.available && media.expiresAt > currentTime) return 'available';
     if (!media) {
       if (this.resolvedReviewMedia.size >= 500) this.resolvedReviewMedia.delete(this.resolvedReviewMedia.keys().next().value!);
       media = {

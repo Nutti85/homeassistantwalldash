@@ -163,6 +163,23 @@ describe('ActivityService', () => {
     expect(String(fetcher.mock.calls.at(-1)?.[0])).toContain(`/api/review/${live.id}/preview?format=mp4`);
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/clip.mp4'))).toBe(false);
   });
+
+  it('keeps an issued camera preview playable through a transient Frigate probe failure', async () => {
+    const item = cameraReview(0);
+    const history = { [cameraConfig.securityMode]: [{ state: '2', changedAt: new Date(now.getTime() - 7 * dayMs).toISOString(), baseline: true }] };
+    const { service, fetcher } = setup(history, [item], 200, 200, cameraConfig);
+
+    const first = (await service.getActivity(now)).cameraEvents.groups[0].reviews[0];
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (input, init) => String(input).includes(`/review/${item.id}/preview`)
+      ? new Response('temporary failure', { status: 503 })
+      : original(input, init));
+
+    const afterTransientFailure = (await service.getActivity(now)).cameraEvents.groups[0].reviews[0];
+
+    expect(first.mediaPath).toMatch(/^\/api\/activity\/review\/[0-9a-f-]{36}\/preview$/);
+    expect(afterTransientFailure.mediaPath).toBe(first.mediaPath);
+  });
   it('resolves twelve delayed recording matches before the client deadline with bounded upstream concurrency', async () => {
     vi.useFakeTimers();
     try {
