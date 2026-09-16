@@ -10,6 +10,7 @@ import { CameraCard } from './CameraCard';
 import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
 import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
 import { SinceLast, type SinceLastProps } from './SinceLast';
+import { prototypeAlertDescriptors, type PrototypeAlertDescriptor } from './prototypeAlertModel';
 
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const numberState = (state?: HomeAssistantState) => { const value = Number(stateValue(state)); return Number.isFinite(value) ? value : undefined; };
@@ -79,15 +80,18 @@ function WeatherFocus({ states, showWeather }: Pick<PrototypeProps, 'states' | '
   </Surface>;
 }
 
-function UrgentStrip({ states, scenario, openDetail }: { states: PrototypeProps['states']; scenario: Scenario; openDetail: (detail: Detail) => void }) {
-  const lightning = numberState(states.lightningDistance);
-  const items = [
-    ...(scenario === 'warning' || (lightning !== undefined && lightning < 15) ? [{ icon: 'thunderstorm', title: 'Lyn i nærheten', text: `${reading(scenario === 'warning' ? 7.4 : lightning, ' km')} til nærmeste registrerte lyn` }] : []),
-    ...(scenario === 'warning' || stateValue(states.frontDoorLock) === 'unlocked' ? [{ icon: 'lock_open', title: 'Ytterdøren er ulåst', text: 'Sist endret for 8 minutter siden' }] : []),
-    ...(scenario === 'warning' ? [{ icon: 'electric_car', title: 'Lading stoppet', text: 'Peugeot · kontroller Zaptec-kabelen' }] : []),
-  ];
-  if (!items.length) return null;
-  return <aside className="ppf-urgent" aria-label="Viktig nå">{items.map((item) => <button type="button" key={item.title} onClick={() => openDetail({ title: item.title, icon: item.icon, body: <p>{item.text}. Dette er en prototype på hvordan varselet kan utvides med kilde, tidspunkt og anbefalt handling.</p> })}><Icon>{item.icon}</Icon><span><strong>{item.title}</strong><small>{item.text}</small></span><Icon>chevron_right</Icon></button>)}</aside>;
+const alertSeverityLabel = (severity?: 'yellow' | 'orange' | 'red') => severity === 'red' ? 'Rødt nivå' : severity === 'orange' ? 'Oransje nivå' : severity === 'yellow' ? 'Gult nivå' : undefined;
+const alertTime = (value?: string) => value && !Number.isNaN(Date.parse(value)) ? new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Oslo' }).format(new Date(value)) : undefined;
+
+function AlertDetails({ alert }: { alert: PrototypeAlertDescriptor }) {
+  if (!alert.meteo) return <><p>{alert.summary}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{alert.source}</dd></div>{alert.value && <div><dt>Nåverdi</dt><dd>{alert.value}</dd></div>}<div><dt>Kontekst</dt><dd>{alert.summary}</dd></div></dl></>;
+  const meteo = alert.meteo;
+  return <div className="ppf-alert-detail"><p>{[alertSeverityLabel(meteo.severity), meteo.area, meteo.seriousness, meteo.response].filter(Boolean).join(' · ')}</p>{meteo.description && <section><h3>Beskrivelse</h3><p>{meteo.description}</p></section>}{meteo.consequences && <section><h3>Konsekvenser</h3><p>{meteo.consequences}</p></section>}{meteo.instruction && <section><h3>Råd</h3><p>{meteo.instruction}</p></section>}<dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{alert.source}</dd></div>{meteo.startsAt && <div><dt>Gjelder fra</dt><dd>{alertTime(meteo.startsAt)}</dd></div>}{meteo.endsAt && <div><dt>Gjelder til</dt><dd>{alertTime(meteo.endsAt)}</dd></div>}{meteo.incidentName && <div><dt>Ekstremvær</dt><dd>{meteo.incidentName}</dd></div>}{meteo.altitude && <div><dt>Høyde</dt><dd>{meteo.altitude}</dd></div>}</dl></div>;
+}
+
+function ActiveAlertIcons({ alerts, openAlert }: { alerts: PrototypeAlertDescriptor[]; openAlert: (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => void }) {
+  if (!alerts.length) return null;
+  return <div className="ppf-alert-icons" aria-label="Aktive varsler">{alerts.map((alert, index) => <button type="button" key={`${alert.kind}-${alert.title}-${index}`} className={`ppf-alert-icon ppf-alert-icon-${alert.kind}`} aria-label={`${alert.title}${alert.value ? `: ${alert.value}` : ''}`} title={`${alert.title}${alert.value ? `: ${alert.value}` : ''}`} onClick={(event) => openAlert(alert, event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); openAlert(alert, event.currentTarget); } }}><Icon>{alert.icon}</Icon></button>)}</div>;
 }
 
 function ArrivalEvidence({ scenario, openDetail }: { scenario: Scenario; openDetail: (detail: Detail) => void }) {
@@ -239,6 +243,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [familyTab, setFamilyTab] = useState<FamilyInboxTab>('messages');
   const [messageFilter, setMessageFilter] = useState<FamilyMessageFilter>('unread');
   const [selectedMessageId, setSelectedMessageId] = useState<string>();
+  const detailInvoker = useRef<HTMLElement>();
   const familyInvoker = useRef<HTMLElement>();
   const familyFallback = useRef<HTMLDivElement>(null);
   const messages = familyMessages(props.states);
@@ -255,6 +260,13 @@ export function MainDashboardPrototype(props: PrototypeProps) {
       target?.focus(); familyInvoker.current = undefined;
     }
   }, [familyOpen]);
+  useEffect(() => {
+    if (!detail && detailInvoker.current) {
+      const target = detailInvoker.current;
+      detailInvoker.current = undefined;
+      if (target.isConnected) target.focus();
+    }
+  }, [detail]);
   const [doorbellOpen, setDoorbellOpen] = useState(query.scenario === 'doorbell');
   useEffect(() => { document.documentElement.classList.add('prototype-active'); document.body.classList.add('prototype-active'); const sync = () => setQuery(readQuery()); window.addEventListener('popstate', sync); return () => { document.documentElement.classList.remove('prototype-active'); document.body.classList.remove('prototype-active'); window.removeEventListener('popstate', sync); }; }, []);
   useEffect(() => setDoorbellOpen(query.scenario === 'doorbell'), [query.scenario]);
@@ -272,13 +284,15 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
+  const alerts = prototypeAlertDescriptors(props.states, query.scenario, now);
+  const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
+  const closeDetail = () => setDetail(undefined);
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
     {globalTime}
-    <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
+    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{cameras}{weather}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
     <BottomControls {...props}/>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
-    {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
+    {detail && <DetailModal detail={detail} close={closeDetail}/>}
     {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}
     {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
   </div>;

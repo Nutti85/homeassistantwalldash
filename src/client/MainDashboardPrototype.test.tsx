@@ -27,6 +27,42 @@ afterEach(() => {
 });
 
 describe('MainDashboardPrototype Nicolai agenda', () => {
+  it('opens rich MET alert details from the now-heading icon and restores focus on Escape', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-16T10:00:00+02:00'));
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', `${window.location.pathname}?variant=C&scenario=warning`);
+    try {
+      renderPrototype({
+        meteoAlarm: state('sensor.met', 'on', {
+          event: 'forestFire', eventAwarenessName: 'Skogbrannfare', riskMatrixColor: 'Orange', area: 'Agder',
+          awarenessSeriousness: 'Vær oppmerksom', awarenessResponse: 'Følg råd', description: 'Tørt i terrenget.',
+          consequences: 'Brann kan spre seg raskt.', instruction: 'Unngå åpen ild.', onset: '2026-09-16T10:00:00+02:00',
+          expires: '2026-09-16T20:00:00+02:00', incidentName: 'Tørke', altitude: 'Over 200 moh',
+        }),
+      });
+
+      const alert = screen.getByRole('button', { name: /Skogbrannfare/ });
+      expect(screen.getByLabelText('Aktive varsler')).toContainElement(alert);
+      alert.focus();
+      fireEvent.keyDown(alert, { key: 'Enter' });
+      const modal = screen.getByRole('dialog', { name: 'Skogbrannfare' });
+      expect(modal).toHaveTextContent('Oransje nivå');
+      expect(modal).toHaveTextContent('Agder');
+      expect(modal).toHaveTextContent('Vær oppmerksom');
+      expect(modal).toHaveTextContent('Tørt i terrenget.');
+      expect(modal).toHaveTextContent('Konsekvenser');
+      expect(modal).toHaveTextContent('Unngå åpen ild.');
+      expect(modal).toHaveTextContent('Tørke');
+      expect(modal).toHaveTextContent('Over 200 moh');
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByRole('dialog', { name: 'Skogbrannfare' })).not.toBeInTheDocument();
+      expect(alert).toHaveFocus();
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
+  });
+
   it('uses the V1 weather overview in the V2 now lane while retaining the V2 weather implementation', () => {
     const showWeather = vi.fn();
     render(<MainDashboardPrototype
@@ -63,7 +99,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       courtyardCamera: state('camera.gaardsplass_fluent_lens_0', 'idle'),
     });
 
-    const nowLane = screen.getByRole('heading', { name: 'Akkurat nå' }).parentElement!;
+    const nowLane = screen.getByRole('heading', { name: 'Akkurat nå' }).closest('section')!;
     const cameraPair = nowLane.querySelector('.ppf-camera-pair');
 
     expect(cameraPair).toBeInTheDocument();

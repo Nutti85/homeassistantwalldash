@@ -201,7 +201,7 @@ export type AlertSeverity = 'yellow' | 'orange' | 'red';
 export type MeteoAlert = { events: string[]; severity?: AlertSeverity; name: string; description?: string; consequences?: string; instruction?: string; area?: string; response?: string; seriousness?: string; startsAt?: string; endsAt?: string; incidentName?: string; altitude?: string };
 
 export const meteoEventMeta: Record<string, { label: string; icon: string }> = {
-  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'air' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy' }, snow: { label: 'Snø', icon: 'ac_unit' }, blowingSnow: { label: 'Snøfokk', icon: 'ac_unit' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'local_fire_department' }, icing: { label: 'Ising', icon: 'severe_cold' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
+  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'airwave' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy_heavy' }, snow: { label: 'Snø', icon: 'weather_snowy' }, blowingSnow: { label: 'Snøfokk', icon: 'weather_snowy' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'forest' }, icing: { label: 'Ising', icon: 'weather_hail' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
 };
 
 export const meteoAlarmSeverity = (value?: string): AlertSeverity | undefined => {

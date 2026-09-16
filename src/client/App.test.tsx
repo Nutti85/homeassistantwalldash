@@ -857,7 +857,7 @@ describe('redesigned dashboard', () => {
     expect(alerts).toHaveTextContent('Gult nivå');
     expect(alerts.querySelector('.weather-alert-meteoalarm')).toHaveClass('weather-alert-yellow');
     expect(alerts).toHaveClass('weather-alerts-meteoalarm-yellow');
-    expect(alerts.querySelector('.weather-alert-meteoalarm .material-symbols-outlined')).toHaveTextContent('local_fire_department');
+    expect(alerts.querySelector('.weather-alert-meteoalarm .material-symbols-outlined')).toHaveTextContent('forest');
     expect(alerts).toHaveTextContent('Lyn8,2 km');
     expect(alerts).toHaveTextContent('Vindkast11,8 m/s');
     expect(alerts).toHaveTextContent('Nordlys');
