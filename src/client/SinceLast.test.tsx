@@ -151,6 +151,16 @@ describe('FamilyInboxCard', () => {
     expect(open).toHaveBeenLastCalledWith();
   });
 
+  it('keeps the MyKid Dagen min update in the compact preview ahead of newer routine messages', () => {
+    render(<FamilyInboxCard messages={[
+      { id: 'plan', source: 'Nicolai', title: 'Ukeplan', body: 'Plan', publishedAt: '2026-09-17T18:00:00Z' },
+      { id: 'today', source: 'Nicolai', title: 'Dagen min', body: 'Dagens oppsummering', publishedAt: '2026-09-17' },
+      { id: 'notice', source: 'Nicolai', title: 'Oppslag', body: 'Info', publishedAt: '2026-09-17T17:00:00Z' },
+    ]} receipts={[]} onOpen={() => {}}/>);
+
+    expect(within(screen.getByRole('list')).getAllByRole('listitem')[0]).toHaveTextContent('Dagen min');
+  });
+
   it('keeps the full inbox reachable when no unread messages remain', () => {
     render(<FamilyInboxCard messages={messages} receipts={messages.map(({ id }) => ({ id, readAt: now.toISOString() }))} onOpen={() => {}} now={now}/>);
     expect(screen.getByText('Ingen uleste beskjeder')).toBeInTheDocument();
