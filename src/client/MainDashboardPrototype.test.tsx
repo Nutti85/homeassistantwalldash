@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
 import { familyReceiptStorageKey } from './familyInbox';
+import { homeworkCompletionStorageKey } from './homeworkAgenda';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 
@@ -164,6 +165,26 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     expect(within(document.querySelector('.ppf-agenda') as HTMLElement).getByRole('heading', { name: 'Hendelser' })).toBeInTheDocument();
     expect(screen.queryByText('Det familien må vite')).not.toBeInTheDocument();
+  });
+
+  it('shows Friday homework from Monday and removes it when Ferdig is pressed', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
+
+    renderPrototype({
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 37', {
+        homework: [{ date: '2026-09-11', subject: 'Norsk', title: 'Les kapittel 2', details: 'Skriv tre setninger.' }],
+      }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Les kapittel 2/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Les kapittel 2' });
+    expect(within(dialog).getByRole('button', { name: 'Ferdig' })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ferdig' }));
+
+    expect(screen.queryByRole('button', { name: /Les kapittel 2/ })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(homeworkCompletionStorageKey)!)).toHaveLength(1);
   });
 
   it('uses the upstream MyKid agenda classification', () => {

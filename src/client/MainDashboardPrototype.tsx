@@ -9,6 +9,7 @@ import { WeatherOverview } from './WeatherOverview';
 import { CameraCard } from './CameraCard';
 import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
 import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
+import { homeworkId, isHomeworkActive, readCompletedHomework, writeCompletedHomework } from './homeworkAgenda';
 import { SinceLast, type SinceLastProps } from './SinceLast';
 import { prototypeAlertDescriptors, type PrototypeAlertDescriptor } from './prototypeAlertModel';
 
@@ -21,7 +22,7 @@ const timeLabel = (value?: string) => value && !Number.isNaN(Date.parse(value)) 
 
 type Scenario = 'calm' | 'arrival' | 'doorbell' | 'warning';
 type Period = 'now' | 'later' | 'tomorrow' | 'week';
-type Detail = { title: string; icon: string; body: ReactNode };
+type Detail = { title: string; icon: string; body: ReactNode; onComplete?: () => void };
 type PrototypeProps = {
   states: Record<string, HomeAssistantState>;
   showWeather: () => void;
@@ -118,25 +119,29 @@ function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBrief
   return <button type="button" className="ppf-departure-preview" onClick={openDeparture}><span className="ppf-surface-icon"><Icon>route</Icon></span><span><small>Avreisebriefing klar</small><strong>{trip.eventTitle}</strong><em>{departure ? `Dra ca. ${departure}` : 'Åpne for reisetid, bilvalg og vær'}</em></span><Icon>chevron_right</Icon></button>;
 }
 
-type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
+type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean; homeworkId?: string };
 const planDate = (date: string, time?: string): Date => {
   if (time && !Number.isNaN(Date.parse(time))) return new Date(time);
   const match = time?.match(/^(\d{1,2}):(\d{2})/);
   return new Date(`${date}T${match ? `${match[1].padStart(2, '0')}:${match[2]}:00` : '12:00:00'}`);
 };
 const planTime = (time?: string): string | undefined => time && !Number.isNaN(Date.parse(time)) ? timeLabel(time) : time;
-function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] {
+function agendaItems(states: PrototypeProps['states'], now: Date, completedHomework = new Set<string>()): AgendaItem[] {
   const calendar = calendarEvents(states.calendar).flatMap((event): AgendaItem[] => {
     if (Number.isNaN(Date.parse(event.start))) return [];
     const end = event.end && !Number.isNaN(Date.parse(event.end)) ? new Date(event.end) : undefined;
     return [{ source: 'Felles', title: event.title, date: new Date(event.start), end, time: event.allDay ? 'Hele dagen' : timeLabel(event.start), allDay: event.allDay, detail: event.allDay ? 'Felles kalender' : `${timeLabel(event.start)}–${timeLabel(event.end)}`, briefing: /reise|fly|tog|ferie|tur/i.test(event.title) }];
   });
   const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
-  const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? []), ...(school?.homework ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const activeHomework = (school?.homework ?? []).flatMap((item): AgendaItem[] => {
+    const id = homeworkId(item);
+    return isHomeworkActive(item, now) && !completedHomework.has(id) ? [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: new Date(now.getFullYear(), now.getMonth(), now.getDate()), allDay: true, homeworkId: id }] : [];
+  });
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
   const kinderItems = (kindergarten?.events ?? []).filter((item) => item.include_in_agenda === true).flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const future = [...calendar, ...schoolItems, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
+  const future = [...calendar, ...schoolItems, ...activeHomework, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
   return future.length ? future : [
     { source: 'Jacob', title: 'Gym · husk innesko', detail: 'Ta med gymtøy og drikkeflaske', date: now, time: '10:15' },
     { source: 'Nicolai', title: 'Turdag og varmmat', detail: 'Klær etter været. Mat serveres i barnehagen.', date: new Date(now.getTime() + 86_400_000), time: '09:30' },
@@ -145,9 +150,9 @@ function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] 
 }
 
 
-function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {
+function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing, completedHomework, completeHomework }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void; completedHomework: Set<string>; completeHomework: (id: string) => void }) {
   const now = new Date();
-  const items = agendaItems(states, now);
+  const items = agendaItems(states, now, completedHomework);
   const tomorrow = new Date(now.getTime() + 86_400_000);
   const todayItems = items.filter((item) => dayKey(item.date) === dayKey(now));
   const usesTomorrowFallback = period === 'later' && todayItems.length === 0;
@@ -158,8 +163,9 @@ function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefin
   const grouped = Object.entries(visible.reduce<Record<string, AgendaItem[]>>((days, item) => { (days[dayKey(item.date)] ??= []).push(item); return days; }, {}));
   const agendaDetailTitle = period === 'week' ? 'Dette skjer de neste 7 dagene' : period === 'tomorrow' || usesTomorrowFallback ? 'Dette skjer i morgen' : 'Dette skjer resten av dagen';
   const openAll = () => openDetail({ title: agendaDetailTitle, icon: 'calendar_month', body: <div className="ppf-agenda-modal-list">{filtered.map((item, index) => <div key={`${item.source}-${item.title}-${index}`}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><small>{dayLabel(item.date, now)} · {item.time || 'Hele dagen'}</small><strong>{item.title}</strong>{item.detail && <p>{item.detail}</p>}</span></div>)}</div> });
+  const openAgendaItem = (item: AgendaItem) => item.briefing && hasDepartureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></>, ...(item.homeworkId ? { onComplete: () => completeHomework(item.homeworkId!) } : {}) });
   return <Surface icon="calendar_month" title="Hendelser" className="ppf-agenda">
-    <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => item.briefing && hasDepartureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{(item.briefing || (hasDepartureBriefing && /reise|tur/i.test(item.title))) && <em title="Reisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}{filtered.length > visible.length && <button type="button" className="ppf-agenda-more" onClick={openAll}>+{filtered.length - visible.length} flere <Icon>arrow_outward</Icon></button>}</div>
+    <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => openAgendaItem(item)}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{(item.briefing || (hasDepartureBriefing && /reise|tur/i.test(item.title))) && <em title="Reisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}{filtered.length > visible.length && <button type="button" className="ppf-agenda-more" onClick={openAll}>+{filtered.length - visible.length} flere <Icon>arrow_outward</Icon></button>}</div>
   </Surface>;
 }
 
@@ -230,7 +236,7 @@ function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
 }
 
 function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="ppf-modal" role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}</div></section></div>;
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="ppf-modal" role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
@@ -238,6 +244,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
+  const [completedHomework, setCompletedHomework] = useState(() => new Set(readCompletedHomework()));
   const [receipts, setReceipts] = useState(() => readFamilyReceipts());
   const [familyOpen, setFamilyOpen] = useState(false);
   const [familyTab, setFamilyTab] = useState<FamilyInboxTab>('messages');
@@ -273,11 +280,12 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setDetail(undefined); setDoorbellOpen(false); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
+  const completeHomework = (id: string) => setCompletedHomework((current) => new Set(writeCompletedHomework([...current, id])));
   const common = { states: props.states, period, openDetail: setDetail };
   const weather = query.weatherCard === 'v2'
     ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
     : <WeatherOverview states={props.states} regular onDetails={props.showWeather} className="ppf-weather-v1"/>;
-  const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
+  const agenda = <Agenda {...common} completedHomework={completedHomework} completeHomework={completeHomework} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
   const cameras = <CameraPair states={props.states}/>;
   const arrivalEvidence = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
