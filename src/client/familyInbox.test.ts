@@ -136,6 +136,16 @@ describe('familyMessages', () => {
 
     expect(messages[0]?.body).toBe(fullDay);
   });
+
+  it('puts Dagen min first so it remains visible in the compact dashboard preview', () => {
+    const messages = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
+      ...emptyMyKid,
+      today: [{ title: 'Dagen min', details: 'Dagens oppsummering.', date: '2026-09-17' }],
+      newsletters: [{ title: 'Nyere ukeplan', details: 'Plan', published_at: '2026-09-17T18:00:00Z' }],
+    }) });
+
+    expect(messages.map((message) => message.title)).toEqual(['Dagen min', 'Nyere ukeplan']);
+  });
 });
 
 describe('family read receipts', () => {

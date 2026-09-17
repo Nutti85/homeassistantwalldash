@@ -46,6 +46,7 @@ const mykidId = (item: MyKidKindergartenItem): string => item.id ?? `mykid-${bro
   'Nicolai', item.published_at ?? '', item.title, item.details ?? '',
 ].map(normalizedText).join('\u0000'))}`;
 const validTime = (value: string | undefined): number => value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : 0;
+const messagePriority = (message: FamilyMessage): number => message.source === 'Nicolai' && message.title === 'Dagen min' ? 1 : 0;
 
 const mykidMessages = (items: MyKidKindergartenItem[]): FamilyMessage[] => items.map((item) => ({
   id: mykidId(item),
@@ -91,7 +92,7 @@ export const familyMessages = (states: Record<string, HomeAssistantState>): Fami
   });
   const unique = new Map<string, FamilyMessage>();
   [...nicolai, ...jacobMessages]
-    .sort((left, right) => validTime(right.publishedAt) - validTime(left.publishedAt))
+    .sort((left, right) => messagePriority(right) - messagePriority(left) || validTime(right.publishedAt) - validTime(left.publishedAt))
     .forEach((message) => { if (!unique.has(message.id)) unique.set(message.id, message); });
   return [...unique.values()];
 };
