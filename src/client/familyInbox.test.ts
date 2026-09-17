@@ -105,6 +105,23 @@ describe('familyMessages', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.title).toBe('Oppslag');
   });
+
+  it('combines all MyKid Dagen min entries into one complete message', () => {
+    const messages = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
+      ...emptyMyKid,
+      today: [
+        { title: 'Vi startet dagen med frokost.', date: '2026-09-17' },
+        { title: 'Deretter var vi ute og lekte.', date: '2026-09-17' },
+      ],
+    }) });
+
+    expect(messages).toEqual([expect.objectContaining({
+      source: 'Nicolai',
+      title: 'Dagen min',
+      body: 'Vi startet dagen med frokost.\n\nDeretter var vi ute og lekte.',
+      publishedAt: '2026-09-17',
+    })]);
+  });
 });
 
 describe('family read receipts', () => {

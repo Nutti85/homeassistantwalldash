@@ -55,6 +55,19 @@ const mykidMessages = (items: MyKidKindergartenItem[]): FamilyMessage[] => items
   ...(publishedAt(item) ? { publishedAt: publishedAt(item) } : {}),
 }));
 
+const mykidTodayMessage = (items: MyKidKindergartenItem[]): FamilyMessage[] => {
+  const body = items.map((item) => normalizedText(item.details ?? item.title)).filter(Boolean).join('\n\n');
+  if (!body) return [];
+  const published = items.map(publishedAt).find((value): value is string => !!value);
+  return [{
+    id: `mykid-today-${browserHash(items.map((item) => [item.id ?? '', item.published_at ?? item.date ?? '', item.title, item.details ?? ''].map(String).map(normalizedText).join('\u0000')).join('\u0001'))}`,
+    source: 'Nicolai',
+    title: 'Dagen min',
+    body,
+    ...(published ? { publishedAt: published } : {}),
+  }];
+};
+
 export const familyMessages = (states: Record<string, HomeAssistantState>): FamilyMessage[] => {
   const mykid = mykidKindergarten(states.mykidKindergarten);
   const jacob = jacobWeeklyPlan(states.jacobWeeklyPlan);
@@ -62,9 +75,8 @@ export const familyMessages = (states: Record<string, HomeAssistantState>): Fami
     ...(mykid?.noticeboard ?? []),
     ...(mykid?.newsletters ?? []),
     ...(mykid?.weeklyPlans ?? []),
-    ...(mykid?.today ?? []),
     ...(mykid?.events ?? []),
-  ]);
+  ]).concat(mykidTodayMessage(mykid?.today ?? []));
   const jacobMessages = (jacob?.messages ?? []).flatMap((message): FamilyMessage[] => {
     const body = normalizedText(message);
     if (!body) return [];
