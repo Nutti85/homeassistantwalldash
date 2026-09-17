@@ -56,7 +56,8 @@ const mykidMessages = (items: MyKidKindergartenItem[]): FamilyMessage[] => items
 }));
 
 const mykidTodayMessage = (items: MyKidKindergartenItem[]): FamilyMessage[] => {
-  const body = items.map((item) => normalizedText(item.details ?? item.title)).filter(Boolean).join('\n\n');
+  const fragments = [...new Set(items.map((item) => normalizedText(item.details ?? item.title)).filter(Boolean))];
+  const body = fragments.filter((fragment) => !fragments.some((candidate) => candidate !== fragment && candidate.includes(fragment))).join('\n\n');
   if (!body) return [];
   const published = items.map(publishedAt).find((value): value is string => !!value);
   return [{

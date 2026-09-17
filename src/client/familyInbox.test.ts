@@ -122,6 +122,20 @@ describe('familyMessages', () => {
       publishedAt: '2026-09-17',
     })]);
   });
+
+  it('uses the complete Dagen min update instead of duplicate legacy fragments', () => {
+    const fullDay = 'Vi startet med frokost. Deretter var vi ute og lekte.';
+    const messages = familyMessages({ mykidKindergarten: state('sensor.mykid_kindergarten', {
+      ...emptyMyKid,
+      today: [
+        { title: 'Vi startet med frokost.', date: '2026-09-17' },
+        { title: 'Deretter var vi ute og lekte.', date: '2026-09-17' },
+        { title: 'Dagen min', details: fullDay, date: '2026-09-17' },
+      ],
+    }) });
+
+    expect(messages[0]?.body).toBe(fullDay);
+  });
 });
 
 describe('family read receipts', () => {
