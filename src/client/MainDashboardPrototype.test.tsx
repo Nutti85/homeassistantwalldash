@@ -274,7 +274,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     />);
 
     const past = screen.getByRole('region', { name: 'SIDEN SIST' });
-    expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'Beskjeder', 'Hendelser']);
+  expect(within(past).getAllByRole('heading').map((heading) => heading.textContent?.replace('history', ''))).toEqual(['SIDEN SIST', 'Beskjeder', 'Tidslinje']);
     expect(within(past).getByText('Ingen uleste beskjeder')).toBeInTheDocument();
     expect(screen.queryByText('Det som har skjedd')).not.toBeInTheDocument();
     const opener = screen.getByRole('button', { name: 'Se alle beskjeder' });

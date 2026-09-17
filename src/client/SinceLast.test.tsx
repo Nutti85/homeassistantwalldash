@@ -181,7 +181,7 @@ describe('ActivityTimeline', () => {
     const opener = screen.getByRole('button', { name: 'Se alle hendelser' });
     opener.focus();
     fireEvent.click(opener);
-    const dialog = screen.getByRole('dialog', { name: 'Hendelser' });
+    const dialog = screen.getByRole('dialog', { name: 'Tidslinje' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(7);
     expect(within(dialog).getByRole('button', { name: 'Lukk' })).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
@@ -204,7 +204,7 @@ describe('ActivityTimeline', () => {
   it('distinguishes initial loading from confirmed empty events', () => {
     const { rerender } = render(<ActivityTimeline events={[]} loading/>);
     expect(screen.queryByText('Ingen nye hendelser')).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Hendelser' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('region', { name: 'Tidslinje' })).toHaveAttribute('aria-busy', 'true');
     rerender(<ActivityTimeline events={[]}/>);
     expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
   });
@@ -213,7 +213,7 @@ describe('ActivityTimeline', () => {
 it('keeps family messages usable independently of failed activity and preserves module order', () => {
   const activity: ActivityPayload = { generatedAt: now.toISOString(), cameraEvents: { status: 'unavailable', groups: [] }, awayCapture: { status: 'unavailable' }, timeline: [] };
   render(<SinceLast activity={activity} messages={messages} receipts={[]} onOpenFamily={() => {}} now={now}/>);
-  expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Beskjeder', 'Hendelser']);
+  expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Beskjeder', 'Tidslinje']);
   expect(screen.getByRole('button', { name: 'Se alle beskjeder' })).toBeEnabled();
 });
 

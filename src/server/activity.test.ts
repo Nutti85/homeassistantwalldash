@@ -180,6 +180,23 @@ describe('ActivityService', () => {
     expect(first.mediaPath).toMatch(/^\/api\/activity\/review\/[0-9a-f-]{36}\/preview$/);
     expect(afterTransientFailure.mediaPath).toBe(first.mediaPath);
   });
+
+  it('keeps an issued timeline recording after a transient Frigate probe failure', async () => {
+    const { service, fetcher } = setup(detectionHistory, [crossingReview]);
+    const first = (await service.getActivity(now)).timeline.find((event) => event.kind === 'frigate');
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/preview') || path.endsWith('/clip.mp4')) return new Response('temporary failure', { status: 503 });
+      return original(input, init);
+    });
+
+    const afterTransientFailure = (await service.getActivity(now)).timeline.find((event) => event.kind === 'frigate');
+
+    expect(first?.mediaPath).toMatch(/^\/api\/activity\/review\/[0-9a-f-]{36}\/preview$/);
+    expect(afterTransientFailure?.mediaPath).toBe(first?.mediaPath);
+  });
+
   it('resolves twelve delayed recording matches before the client deadline with bounded upstream concurrency', async () => {
     vi.useFakeTimers();
     try {

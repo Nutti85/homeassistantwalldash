@@ -389,6 +389,7 @@ export class ActivityService {
     let media = this.resolvedMedia.get(review.id);
     if (media) {
       if (media.review.camera !== review.camera) return 'unavailable';
+      if (media.available && media.expiresAt > now && start <= media.start && end >= media.end) return 'available';
       const nextStart = Math.max(media.start, start);
       const nextEnd = Math.min(media.end, end);
       const nextSource = media.source === 'clip' || !previewAllowed || nextStart !== media.start || nextEnd !== media.end ? 'clip' : 'preview';
