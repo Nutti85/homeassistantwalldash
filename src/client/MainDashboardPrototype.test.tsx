@@ -223,11 +223,11 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'I morgen' }));
 
-    expect(screen.getByText('Turdag')).toBeInTheDocument();
-    expect(screen.getByText('Foreldremøte')).toBeInTheDocument();
+    const agenda = within(document.querySelector('.ppf-agenda') as HTMLElement);
+    expect(agenda.getByText('Turdag')).toBeInTheDocument();
+    expect(agenda.getByText('Foreldremøte')).toBeInTheDocument();
     expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText(/Linus, Balder, Arne, Yashvi/)).toHaveLength(0);
     expect(within(document.querySelector('.ppf-agenda') as HTMLElement).queryAllByText('I dag har vi vært på tur')).toHaveLength(0);
-    const agenda = within(document.querySelector('.ppf-agenda') as HTMLElement);
     expect(agenda.queryByText('Bunny and tree project')).not.toBeInTheDocument();
     expect(agenda.queryByText('Bursdags samling')).not.toBeInTheDocument();
     expect(agenda.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
