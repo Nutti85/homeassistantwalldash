@@ -102,17 +102,21 @@ describe('ActivityService', () => {
     expect(feed.groups[0].reviews[0].monitoringMode).toBe('armed');
   });
 
-  it('returns inactive for current mode three and emits the same grouped camera rows in the timeline', async () => {
+  it('keeps camera events recorded while armed after monitoring is disabled', async () => {
     const history = {
-      [cameraConfig.securityMode]: [{ state: '3', changedAt: new Date(now.getTime() - 60_000).toISOString(), baseline: true }],
+      [cameraConfig.securityMode]: [
+        { state: '1', changedAt: new Date(now.getTime() - 7 * dayMs).toISOString(), baseline: true },
+        { state: '3', changedAt: new Date(now.getTime() - 60_000).toISOString() },
+      ],
       [cameraConfig.home]: [point('Hjemme', '14:00')],
     };
     const { service } = setup(history, [cameraReview(0)], 200, 200, cameraConfig);
 
     const payload = await service.getActivity(now);
 
-    expect(payload.cameraEvents).toMatchObject({ status: 'inactive', groups: [] });
-    expect(payload.timeline.some((event) => event.kind === 'frigate')).toBe(false);
+    expect(payload.cameraEvents).toMatchObject({ status: 'available' });
+    expect(payload.cameraEvents.groups).toHaveLength(1);
+    expect(payload.timeline.some((event) => event.kind === 'frigate')).toBe(true);
   });
 
   it('returns unavailable when the security mode history has no known current state', async () => {

@@ -189,10 +189,7 @@ export class ActivityService {
     if (cameraFeedEnabled) {
       try {
         const securityPoints = history[this.config.securityMode!] ?? [];
-        const currentMode = currentMonitoringMode(securityPoints, now.getTime());
-        if (currentMode === 3) {
-          payload.cameraEvents = { status: 'inactive', groups: [] };
-        } else if (currentMode === undefined) {
+        if (currentMonitoringMode(securityPoints, now.getTime()) === undefined) {
           payload.cameraEvents = { status: 'unavailable', groups: [] };
         } else {
           const reviews = await this.frigate!.getReviewItems(weekStart, now, activitySignal);
