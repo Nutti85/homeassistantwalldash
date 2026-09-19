@@ -1014,8 +1014,8 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-scene-controls .scene{min-height:38px;padding:3px 10px}
   .ppf-scene-controls .scene .material-symbols-outlined{display:none}
   .ppf-scene-controls .scene span{font-size:12px}
-  .ppf-home-controls{grid-template-columns:repeat(8,44px);min-width:352px}
-  .ppf-bottom-controls .ppf-home-controls button{width:44px;min-width:44px;min-height:38px;padding:3px 10px}
+  .ppf-home-controls{grid-template-columns:repeat(8,92px);min-width:736px}
+  .ppf-bottom-controls .ppf-home-controls button{width:92px;min-width:92px;min-height:38px;padding:3px 10px}
   .ppf-home-controls button>span:not(.material-symbols-outlined){display:none}
   .ppf-home-controls button .material-symbols-outlined{font-size:18px}
 }
