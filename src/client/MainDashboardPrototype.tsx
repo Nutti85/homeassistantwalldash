@@ -240,7 +240,7 @@ function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
-  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: import.meta.env.DEV || params.has('scenario'), weatherCard: params.get('weather-card') === 'v2' ? 'v2' as const : 'v1' as const }; };
+  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: params.has('scenario'), weatherCard: params.get('weather-card') === 'v2' ? 'v2' as const : 'v1' as const }; };
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();

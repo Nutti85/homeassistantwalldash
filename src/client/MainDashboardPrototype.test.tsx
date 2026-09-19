@@ -382,6 +382,17 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 });
 
 describe('MainDashboardPrototype bottom controls', () => {
+  it('hides prototype scenario controls unless explicitly requested in the URL', () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', window.location.pathname);
+    try {
+      renderPrototype();
+      expect(screen.queryByRole('complementary', { name: 'Prototypescenario' })).not.toBeInTheDocument();
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
+  });
+
   it('keeps scenes separate and groups all daily controls together', () => {
     const openMode = vi.fn();
     renderPrototype({
