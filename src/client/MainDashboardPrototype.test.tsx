@@ -7,14 +7,18 @@ import { homeworkCompletionStorageKey } from './homeworkAgenda';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 
-const renderPrototype = (states: Record<string, HomeAssistantState> = {}, action = vi.fn()) => render(<MainDashboardPrototype
+const renderPrototype = (
+  states: Record<string, HomeAssistantState> = {},
+  action = vi.fn(),
+  openMode = vi.fn(),
+) => render(<MainDashboardPrototype
   states={states}
   showWeather={() => {}}
   openLights={() => {}}
   openHeatPump={() => {}}
   openVacuum={() => {}}
   openVehicles={() => {}}
-  openMode={() => {}}
+  openMode={openMode}
   openKlaraAi={() => {}}
   openDeparture={() => {}}
   hasDepartureBriefing={false}
@@ -374,6 +378,43 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(within(section).queryAllByText('God helg til dere alle! ❤️')).toHaveLength(0);
     expect(within(section).getByText('I dag har vi laget salatbuffé')).toBeInTheDocument();
     expect(within(section).getByText('I dag har vi laget salatbuffé og lekt med togbane.')).toBeInTheDocument();
+  });
+});
+
+describe('MainDashboardPrototype bottom controls', () => {
+  it('keeps scenes separate and groups all daily controls together', () => {
+    const openMode = vi.fn();
+    renderPrototype({
+      frontDoorLock: state('lock.front_door', 'locked'),
+      securityMode: state('input_number.security_mode', '1'),
+    }, vi.fn(), openMode);
+
+    const nav = screen.getByRole('navigation', { name: 'Hjemkontroller' });
+    const scenes = within(nav).getByRole('group', { name: 'Scener' });
+    const home = within(nav).getByRole('group', { name: 'Hjemmekontroller' });
+
+    expect(within(scenes).getAllByRole('button')).toHaveLength(3);
+    ['Morgen', 'Kveld', 'Natt'].forEach((name) => expect(within(scenes).getByRole('button', { name })).toBeInTheDocument());
+    ['Lys', 'Klima', 'Støvsuger', 'Biler', 'Modus', 'Klara', 'Låst', 'Overvåket']
+      .forEach((name) => expect(within(home).getByRole('button', { name })).toBeInTheDocument());
+
+    fireEvent.click(within(home).getByRole('button', { name: 'Modus' }));
+    expect(openMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves lock and security actions inside the home group', () => {
+    const action = vi.fn();
+    renderPrototype({
+      frontDoorLock: state('lock.front_door', 'locked'),
+      securityMode: state('input_number.security_mode', '1'),
+    }, action);
+
+    const home = screen.getByRole('group', { name: 'Hjemmekontroller' });
+    fireEvent.click(within(home).getByRole('button', { name: 'Låst' }));
+    fireEvent.click(within(home).getByRole('button', { name: 'Overvåket' }));
+
+    expect(action).toHaveBeenCalledWith('unlockDoor');
+    expect(action).toHaveBeenCalledWith('securityMode');
   });
 });
 

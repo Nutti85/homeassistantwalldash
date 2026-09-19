@@ -971,12 +971,19 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-agenda-modal-list>div{display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid var(--ppf-line)}
 .ppf-agenda-modal-list>div>span:last-child{display:grid;gap:3px}.ppf-agenda-modal-list small{color:var(--ppf-soft)}.ppf-agenda-modal-list p{margin:2px 0 0;color:#b9c4be;font-size:12px}
 .ppf-room-summary>section{padding-bottom:12px;border-bottom:1px solid var(--ppf-line)}.ppf-room-summary h3{display:flex;align-items:center;gap:8px;margin-bottom:8px}.ppf-room-summary h3 .material-symbols-outlined{color:var(--ppf-warm)}
-.ppf-bottom-controls{display:flex;grid-template-columns:none;gap:10px;padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
-.ppf-home-controls,.ppf-safety-controls{display:grid;padding:5px;border:1px solid rgba(213,236,225,.12);border-radius:13px;background:rgba(18,28,25,.96);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(18px)}
-.ppf-home-controls{grid-template-columns:repeat(6,minmax(0,1fr));min-width:0;flex:1}
-.ppf-safety-controls{grid-template-columns:repeat(2,minmax(112px,1fr));flex:0 0 255px;border-color:rgba(239,178,118,.22);background:rgba(31,29,24,.97)}
-.ppf-bottom-controls .ppf-safety-controls button{border-left:0}
-.ppf-bottom-controls .ppf-safety-controls button+button{border-left:1px solid rgba(239,178,118,.16)}
+.ppf-bottom-controls{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
+.ppf-scene-controls,.ppf-home-controls{display:grid;padding:5px;border:1px solid rgba(213,236,225,.12);border-radius:13px;background:rgba(18,28,25,.96);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(18px)}
+.ppf-scene-controls{grid-column:1;grid-template-columns:repeat(3,minmax(0,1fr));justify-self:end;border-color:rgba(239,178,118,.22);background:rgba(31,29,24,.97)}
+.ppf-scene-controls .scene-action{position:relative;min-width:0}
+.ppf-scene-controls .scene{display:grid;place-items:center;gap:2px;width:100%;height:100%;min-width:0;min-height:55px;padding:5px;border-radius:11px;color:#b7c2bd}
+.ppf-scene-controls .scene-action+.scene-action .scene{border-left:1px solid rgba(239,178,118,.16);border-radius:0}
+.ppf-scene-controls .scene:hover,.ppf-scene-controls .scene[aria-expanded="true"]{background:rgba(239,178,118,.11);color:#fff}
+.ppf-scene-controls .scene .material-symbols-outlined{font-size:22px}
+.ppf-scene-controls .scene span{font-size:9px;font-weight:600;white-space:nowrap}
+.ppf-scene-controls .scene.morning .material-symbols-outlined{color:#f3c653}.ppf-scene-controls .scene.evening .material-symbols-outlined{color:#f4b17b}.ppf-scene-controls .scene.night .material-symbols-outlined{color:#b9a2ff}
+.ppf-scene-controls .scene-confirm-wrap{top:auto;bottom:calc(100% + 10px)}
+.ppf-home-controls{grid-column:2;grid-template-columns:repeat(8,minmax(64px,1fr));width:auto;min-width:512px}
+.ppf-bottom-controls .ppf-home-controls button{min-width:64px;min-height:55px}
 .ppf-prototype-switcher>span{min-width:112px}
 
 @media(min-width:1101px) and (min-height:700px){
@@ -987,27 +994,11 @@ body.prototype-active{min-width:0;background:#07100f}
 }
 
 @media(max-width:700px){
-  .ppf-bottom-controls{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:3px;background:#121c19}
-  .ppf-home-controls{grid-template-columns:repeat(6,minmax(0,1fr))}.ppf-safety-controls{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
-}
-
-/* V1 scene actions remain available in the V2 bottom navigation. */
-.ppf-scene-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:0 0 294px;min-width:0;padding:5px;border:1px solid rgba(239,178,118,.22);border-radius:13px;background:rgba(31,29,24,.97);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(18px)}
-.ppf-scene-controls .scene-action{position:relative;min-width:0}
-.ppf-scene-controls .scene{display:grid;place-items:center;gap:2px;width:100%;height:100%;min-width:0;min-height:55px;padding:5px;border-radius:11px;color:#b7c2bd;aspect-ratio:auto}
-.ppf-scene-controls .scene+ .scene{border-left:1px solid rgba(239,178,118,.16);border-radius:0}
-.ppf-scene-controls .scene:hover,.ppf-scene-controls .scene[aria-expanded="true"]{background:rgba(239,178,118,.11);color:#fff}
-.ppf-scene-controls .scene .material-symbols-outlined{font-size:22px}
-.ppf-scene-controls .scene span{font-size:9px;font-weight:600;white-space:nowrap}
-.ppf-scene-controls .scene.morning .material-symbols-outlined{color:#f3c653}
-.ppf-scene-controls .scene.evening .material-symbols-outlined{color:#f4b17b}
-.ppf-scene-controls .scene.night .material-symbols-outlined{color:#b9a2ff}
-.ppf-scene-controls .scene-confirm-wrap{top:auto;bottom:calc(100% + 10px)}
-
-@media(max-width:700px){
-  .ppf-bottom-controls{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
-  .ppf-scene-controls{grid-template-columns:repeat(3,minmax(0,1fr));width:100%;min-width:0;flex:0 1 auto}
-  .ppf-safety-controls{grid-column:1/-1;width:100%;flex:0 0 auto}
+  .ppf-bottom-controls{grid-template-columns:1fr;gap:5px;padding:4px 3px 8px;background:#121c19}
+  .ppf-scene-controls,.ppf-home-controls{grid-column:1;width:100%;min-width:0}
+  .ppf-scene-controls{grid-row:1;justify-self:stretch}
+  .ppf-home-controls{grid-row:2;grid-template-columns:repeat(8,minmax(0,1fr))}
+  .ppf-bottom-controls .ppf-home-controls button{min-width:0;min-height:58px;padding-inline:1px}
 }
 
 @media(min-width:1101px) and (min-height:700px){
@@ -1017,6 +1008,16 @@ body.prototype-active{min-width:0;background:#07100f}
 
 @media(min-width:701px){
   .main-dashboard-prototype .ppf-bottom-controls{height:70px}
+  .ppf-scene-controls,.ppf-home-controls{padding:2px}
+  .ppf-scene-controls{grid-template-columns:repeat(3,92px)}
+  .ppf-scene-controls .scene-action,.ppf-scene-controls .scene{height:38px}
+  .ppf-scene-controls .scene{min-height:38px;padding:3px 10px}
+  .ppf-scene-controls .scene .material-symbols-outlined{display:none}
+  .ppf-scene-controls .scene span{font-size:12px}
+  .ppf-home-controls{grid-template-columns:repeat(8,44px);min-width:352px}
+  .ppf-bottom-controls .ppf-home-controls button{width:44px;min-width:44px;min-height:38px;padding:3px 10px}
+  .ppf-home-controls button>span:not(.material-symbols-outlined){display:none}
+  .ppf-home-controls button .material-symbols-outlined{font-size:18px}
 }
 
 /* Temporary V2 test: fit the V1 weather overview into the current lane while
