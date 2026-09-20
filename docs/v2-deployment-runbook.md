@@ -43,9 +43,12 @@ I Portainer:
 1. Åpne det rediscoverede miljøet og stacken `homeassistant-wall-dashboard-v2`.
 2. Kontroller at repository/branch peker på `origin` og
    `codex/dashboard-prototype-v2`.
-3. Stopp stacken og start den igjen. Ikke rediger eller erstatt eksisterende
-   miljøvariabler, spesielt `HA_URL` og `HA_TOKEN`.
-4. Vent til containeren er `healthy`/`running`.
+3. Kontroller at `HA_DOORBELL_VISITOR_ENTITY_ID` er satt til
+   `binary_sensor.ringeklokke_visitor`. Uten denne variabelen spør ikke
+   tidslinjen Home Assistant etter ringeklokkens historikk.
+4. Stopp stacken og start den igjen. Ikke rediger eller erstatt andre
+   eksisterende miljøvariabler, spesielt `HA_URL` og `HA_TOKEN`.
+5. Vent til containeren er `healthy`/`running`.
 
 ## 4. Verifiser deploy
 
@@ -56,6 +59,7 @@ Invoke-WebRequest http://192.168.1.50:3200/ -UseBasicParsing
 
 Kontroller deretter dashboardet i nettleseren. For tidslinjen skal
 `binary_sensor.ringeklokke_visitor` med state `on` vises som «Noen ringte på».
+Sjekk også `/api/activity` direkte hvis hendelsen ikke vises etter polling.
 
 ## Feilsøking
 

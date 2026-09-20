@@ -13,19 +13,30 @@
 - For UI/UX work, inspect the existing UI/component patterns and any design guidance first. Use the configured Intent/design skillset when available; preserve the existing Walldash visual and interaction language rather than inventing a new one.
 - Do not ask the user for facts that can be determined from this repository, Home Assistant, or connected project tooling.
 
+## Parallel local development
+
+- For substantial independent work running in parallel, use one local branch and one Git worktree per task when the workflow router determines a worktree is appropriate. Never have multiple agents actively modify the same worktree.
+- Worktrees share Git history but not uncommitted changes. Use local commits as safe, shareable checkpoints; do not normally copy changed source files between worktrees.
+- Prefer integrating stable shared changes into the local integration branch, then incorporate them into active worktrees when relevant. An unfinished feature may temporarily use another unfinished feature's local commits when it directly depends on them; avoid long feature-branch dependency chains.
+- Scope parallel tasks to limit overlap and conflicts; avoid unrelated refactors, especially in central shared files. Agents may resolve clear local merge/rebase conflicts, preserving valid behavior from both sides and verifying afterward.
+- Before substantial work, identify the current branch and worktree and check whether relevant integrated changes should be incorporated. Before completing, leave a coherent branch, run relevant verification, make sensible local commits, and report dependencies or integration risks.
+- Local branch and worktree operations do not imply permission to push, publish, release, or deploy.
+
+Mental model: branch = line of changes; worktree = separate local directory for that branch; commit = safe/shareable local checkpoint; integration branch = latest combined local application state.
+
 ## Local development and reloads
 
-- Run `npm.cmd run dev` from the repository root for local development. It starts an API-only backend on port `3000` and Vite on port `5173`.
+- Run `npm.cmd run dev` from the repository root for local development. In the primary/default worktree, it starts an API-only backend on port `3000` and Vite on port `5173`.
 - The development launcher supervises the backend. If the backend exits after a successful start, it is restarted with bounded backoff while Vite stays available. Five consecutive startup failures stop the full stack so configuration and port errors remain visible.
 - Local backend/frontend output and lifecycle events are written to `.local-dev.log` (ignored by Git and trimmed automatically). Inspect the end of this file before restarting when a local failure is reported.
-- `http://127.0.0.1:5173` is the sole local dashboard URL. Use it to preview uncommitted changes with hot reload.
-- Port `3000` is an internal API endpoint for Vite during development; it must not serve a dashboard page in dev mode.
+- The primary/default local dashboard URL is `http://127.0.0.1:5173`. Use it to preview uncommitted changes with hot reload. A concurrently running secondary worktree must use explicitly assigned, distinct API and Vite ports; ensure both frontend and backend use the assigned pair, and record/report its dashboard URL.
+- The API port is internal to Vite during development and must not serve a dashboard page in dev mode.
 - `npm.cmd run start` serves the built dashboard locally for a production-build check, but it is not part of normal development.
-- Keep ports fixed: API = `3000`, Vite = `5173`. Vite uses `strictPort` so a port conflict fails visibly instead of silently selecting another port.
-- Before restarting local development, confirm the process command line and working directory. Do not stop or repurpose another project's listener.
+- Do not silently change the primary defaults (API = `3000`, Vite = `5173`) for normal single-worktree development. Secondary worktrees running concurrently require their own explicitly assigned API and Vite ports. Vite uses `strictPort` so a port conflict fails visibly instead of silently selecting another port.
+- Before starting, restarting, or stopping local development, confirm the owning process command line and working directory. Never take over, stop, or repurpose another worktree's listener merely because a default port is occupied. If the scripts/configuration cannot safely support assigned per-worktree ports, surface the limitation; make the smallest proper configuration change only when it is within the current task.
 - On Windows with Node 24, `os.userInfo()` can fail with `uv_os_get_passwd`/`ENOMEM` before `tsx` loads. `scripts/dev.mjs` must keep preloading `scripts/node-os-userinfo-fallback.cjs`; this fallback is intentionally limited to that exact error and must not be replaced by edits in `node_modules`.
 - A PTY or npm wrapper can leave the child Vite/backend processes running after the wrapper exits. After local checks, verify the command line and working directory, then stop only the verified project process tree and confirm the project ports are no longer listening.
-- The dashboard message `Kunne ikke oppdatere smarthuset. Prøv igjen.` means repeated `/api/states` requests failed; it does not by itself prove the Node backend exited. Diagnose in this order: check `http://127.0.0.1:3000/health`, check `http://127.0.0.1:5173/api/states`, then inspect `.local-dev.log` and the verified listener command lines.
+- The dashboard message `Kunne ikke oppdatere smarthuset. Prøv igjen.` means repeated `/api/states` requests failed; it does not by itself prove the Node backend exited. Diagnose in this order: check the worktree's API `/health`, its Vite `/api/states`, then inspect `.local-dev.log` and the verified listener command lines. The primary defaults are `http://127.0.0.1:3000/health` and `http://127.0.0.1:5173/api/states`.
 - The client retries failed state polls after 1, 2, 4, then at most 5 seconds. It shows a connection-specific warning after three failed initial requests, but preserves confirmed state and tolerates up to twelve consecutive background failures before warning. Visibility, focus, and browser-online events trigger immediate recovery checks.
 - Production is the Portainer deployment at `http://192.168.1.50:3100`. Local file saves never reload or update it; update production only through an explicitly requested Portainer stack deployment.
 
@@ -34,10 +45,17 @@
 - Re-discover the Portainer environment and stack IDs before mutating them; target the stack named `homeassistant-wall-dashboard`.
 - Preserve existing Portainer environment variables, especially Home Assistant credentials, during stack updates.
 
-## V2 completion and deployment
+## Local implementation completion
 
-- After every completed implementation change on `codex/dashboard-prototype-v2`, run `npm.cmd test`, `npm.cmd run build`, and `git diff --check` before committing.
-- Commit the verified changes with a descriptive message and push `codex/dashboard-prototype-v2` to `origin`.
+- For ordinary local feature or worktree completion, run the relevant tests, build, typecheck, and lint required by the workflow; run `git diff --check`; and make appropriate local commits.
+- Do not automatically push, deploy, or invoke `$portainer-v2-release`. Leave work ready for local integration or review, and do not push local feature branches unless explicitly requested.
+
+## Explicit V2 release and deployment
+
+- Perform this procedure only when the user explicitly requests a push, release, or deployment of the integrated V2 branch, or when the current task is explicitly classified as such. Do not deploy an individual feature worktree merely because implementation is complete.
+- Verify the exact intended integration/release branch, run `npm.cmd test`, `npm.cmd run build`, and `git diff --check`, then commit the verified changes with a descriptive message.
+- The repository owner authorizes pushes of verified dashboard changes to the configured GitHub `origin`; confirm the exact branch and remote before pushing.
+- Push the verified intended branch to `origin`, then invoke the repository skill `$portainer-v2-release` before reporting completion. It must rediscover, restart, and verify only the V2 Portainer stack.
 - Re-discover the Portainer environment and local stack immediately before deployment. Target only the stack named `homeassistant-wall-dashboard-v2`; do not mutate the V1 `homeassistant-wall-dashboard` stack.
 - Restart the V2 stack through Portainer by stopping and starting the discovered stack, preserving every existing stack environment variable.
 - Verify the V2 stack is active and check `http://192.168.1.50:3200/health` and `http://192.168.1.50:3200/` before reporting completion.
