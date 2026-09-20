@@ -43,6 +43,15 @@ describe('V2 activity lifecycle', () => {
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   });
 
+  it('uses the V2 dashboard at the base URL when no version is configured', async () => {
+    vi.stubEnv('VITE_DASHBOARD_VERSION', '');
+
+    render(<App api={createApi()} />);
+    await settle();
+
+    expect(screen.getByRole('heading', { name: 'SIDEN SIST' })).toBeInTheDocument();
+  });
+
   it('loads activity independently while confirmed family messages remain usable', async () => {
     const api = activityApi();
     let confirm!: (value: ActivityPayload) => void;

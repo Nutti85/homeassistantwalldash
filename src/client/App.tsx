@@ -1105,8 +1105,8 @@ const recentAiReportWindowMs = 12 * 60 * 60 * 1_000;
 const aiReportSeenStorageKey = 'walldash.klara-ai.last-seen-published-at';
 
 export default function App({ api = browserApi }: { api?: DashboardApi }) {
-  const v2Build = import.meta.env.VITE_DASHBOARD_VERSION === 'v2';
-  const prototypeRequested = v2Build || new URLSearchParams(window.location.search).has('variant');
+  const v2Build = import.meta.env.VITE_DASHBOARD_VERSION !== 'v1';
+  const prototypeRequested = v2Build;
   const [states, setStates] = useState<Record<string, HomeAssistantState>>({});
   const [{ activity, activityLoading, activityStale }, setActivityState] = useState<{
     activity?: ActivityPayload; activityLoading: boolean; activityStale: boolean;
@@ -1162,7 +1162,7 @@ export default function App({ api = browserApi }: { api?: DashboardApi }) {
   const wasModeOpen = useRef(false);
   const wasKlaraAiOpen = useRef(false);
   const wasDepartureOpen = useRef(false);
-  const prototypeRoute = v2Build || new URLSearchParams(window.location.search).has('variant');
+  const prototypeRoute = v2Build;
   const canUseDepartureDemo = prototypeRoute && !v2Build;
   const departureDemo = useMemo(() => canUseDepartureDemo ? departureBriefingFixtureFromQuery(window.location.search) ?? departureBriefingDemoPayload('short') : undefined, [canUseDepartureDemo]);
 

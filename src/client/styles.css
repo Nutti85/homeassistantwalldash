@@ -971,7 +971,7 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-agenda-modal-list>div{display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid var(--ppf-line)}
 .ppf-agenda-modal-list>div>span:last-child{display:grid;gap:3px}.ppf-agenda-modal-list small{color:var(--ppf-soft)}.ppf-agenda-modal-list p{margin:2px 0 0;color:#b9c4be;font-size:12px}
 .ppf-room-summary>section{padding-bottom:12px;border-bottom:1px solid var(--ppf-line)}.ppf-room-summary h3{display:flex;align-items:center;gap:8px;margin-bottom:8px}.ppf-room-summary h3 .material-symbols-outlined{color:var(--ppf-warm)}
-.ppf-bottom-controls{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
+.ppf-bottom-controls{display:grid;grid-template-columns:auto auto;align-items:center;justify-content:center;gap:10px;padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
 .ppf-scene-controls,.ppf-home-controls{display:grid;padding:5px;border:1px solid rgba(213,236,225,.12);border-radius:13px;background:rgba(18,28,25,.96);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(18px)}
 .ppf-scene-controls{grid-column:1;grid-template-columns:repeat(3,minmax(0,1fr));justify-self:end;border-color:rgba(239,178,118,.22);background:rgba(31,29,24,.97)}
 .ppf-scene-controls .scene-action{position:relative;min-width:0}
@@ -1018,6 +1018,14 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-bottom-controls .ppf-home-controls button{width:92px;min-width:92px;min-height:38px;padding:3px 10px}
   .ppf-home-controls button>span:not(.material-symbols-outlined){display:none}
   .ppf-home-controls button .material-symbols-outlined{font-size:18px}
+}
+
+@media(min-width:701px) and (max-width:1102px){
+  .main-dashboard-prototype .ppf-bottom-controls{grid-template-columns:1fr;width:min(736px,calc(100vw - 28px));height:auto}
+  .ppf-scene-controls,.ppf-home-controls{grid-column:1}
+  .ppf-scene-controls{justify-self:center}
+  .ppf-home-controls{grid-template-columns:repeat(8,minmax(0,1fr));width:100%;min-width:0}
+  .ppf-bottom-controls .ppf-home-controls button{width:auto;min-width:0}
 }
 
 /* Temporary V2 test: fit the V1 weather overview into the current lane while

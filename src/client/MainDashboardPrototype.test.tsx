@@ -393,6 +393,19 @@ describe('MainDashboardPrototype bottom controls', () => {
     }
   });
 
+  it('keeps scenario controls temporary without adding a dashboard variant to the URL', () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', `${window.location.pathname}?scenario=calm`);
+    try {
+      renderPrototype();
+      fireEvent.change(screen.getByRole('combobox', { name: 'Vis dynamisk tilstand' }), { target: { value: 'warning' } });
+
+      expect(window.location.search).toBe('?scenario=warning');
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
+  });
+
   it('keeps scenes separate and groups all daily controls together', () => {
     const openMode = vi.fn();
     renderPrototype({

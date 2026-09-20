@@ -231,7 +231,7 @@ function BottomControls(props: PrototypeProps) {
 
 function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
   const scenarios: Scenario[] = ['calm', 'arrival', 'doorbell', 'warning'];
-  const update = (nextScenario: Scenario) => { const params = new URLSearchParams(window.location.search); params.set('variant', 'C'); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
+  const update = (nextScenario: Scenario) => { const params = new URLSearchParams(window.location.search); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
   return <aside className="ppf-prototype-switcher" aria-label="Prototypescenario"><span><small>Prototype v3</small><b>C · Tidssoner</b></span><select aria-label="Vis dynamisk tilstand" value={scenario} onChange={(event) => update(event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Kameraer utløst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
 }
 
