@@ -92,7 +92,8 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     const weather = screen.getByRole('button', { name: 'Åpne detaljert vær' });
     expect(weather).toHaveClass('weather-regular');
-    expect(weather.querySelector('.weather-chart')).toBeInTheDocument();
+    expect(weather.querySelector('.weather-chart')).not.toBeInTheDocument();
+    expect(weather.querySelector('.weather-top')).toBeInTheDocument();
     expect(weather.querySelector('.ppf-weather-tiles')).not.toBeInTheDocument();
     fireEvent.click(weather);
     expect(showWeather).toHaveBeenCalledTimes(1);
@@ -380,6 +381,48 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(within(section).getByText('I dag har vi laget salatbuffé og lekt med togbane.')).toBeInTheDocument();
   });
 });
+
+  it('shows forward weather and today modules in the latest dev future lane', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-20T10:00:00+02:00'));
+    const forecast = Array.from({ length: 6 }, (_, index) => ({
+      datetime: new Date(Date.parse('2026-09-20T10:00:00+02:00') + index * 2 * 60 * 60 * 1000).toISOString(),
+      condition: index % 2 ? 'partlycloudy' : 'sunny',
+      temperature: 12 + index,
+      precipitation: index === 2 ? 1.2 : 0,
+      precipitation_probability: 35 + index * 5,
+      wind_speed: 2 + index / 2,
+      wind_gust_speed: 5 + index,
+      cloud_coverage: 20 + index * 10,
+    }));
+
+    renderPrototype({
+      weatherHourly: state('sensor.hourly', 'sunny', { forecast }),
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', { today: [{ title: 'Handle mat', details: 'Kiwi', date: '2026-09-20' }] }),
+    });
+
+    const future = screen.getByRole('heading', { name: 'Dette skjer' }).closest('section') as HTMLElement;
+    const now = screen.getByRole('heading', { name: 'Akkurat nå' }).closest('section') as HTMLElement;
+    const currentWeather = now.querySelector('.ppf-weather-v1') as HTMLElement;
+    expect(currentWeather.querySelector('.weather-top')).toBeInTheDocument();
+    expect(within(currentWeather).queryByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' })).not.toBeInTheDocument();
+    expect(within(now).getByRole('heading', { name: 'Forbered dette' })).toBeInTheDocument();
+    expect(within(future).queryByRole('heading', { name: 'Forbered dette' })).not.toBeInTheDocument();
+    expect(within(future).getByRole('heading', { name: 'Vær fremover' })).toBeInTheDocument();
+    const forwardWeather = within(future).getByRole('heading', { name: 'Vær fremover' }).closest('section') as HTMLElement;
+    expect(within(forwardWeather).queryByText('Prognose')).not.toBeInTheDocument();
+    expect(within(forwardWeather).getByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' })).toBeInTheDocument();
+    expect(forwardWeather.querySelector('.chart-legend')).toHaveTextContent('TemperaturNedbørSannsynlighetVindKastSkydekke');
+    const chartTable = within(forwardWeather).getByRole('table', { name: 'Værdata' });
+    const secondForecastRow = within(chartTable).getAllByRole('row')[2];
+    const forecastCells = within(secondForecastRow).getAllByRole('cell');
+    expect(forecastCells[3]).toHaveTextContent('40 %');
+    expect(forecastCells[5]).toHaveTextContent('6 m/s');
+    expect(forecastCells[6]).toHaveTextContent('30 %');
+    const today = future.querySelector('.ppf-today') as HTMLElement;
+    expect(within(today).getByRole('heading', { name: 'I dag' })).toBeInTheDocument();
+    expect(within(today).getByText('Handle mat')).toBeInTheDocument();
+  });
 
 describe('MainDashboardPrototype bottom controls', () => {
   it('hides prototype scenario controls unless explicitly requested in the URL', () => {

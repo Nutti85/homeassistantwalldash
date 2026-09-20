@@ -5,7 +5,7 @@ import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
 import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
-import { WeatherOverview } from './WeatherOverview';
+import { WeatherChart, WeatherOverview } from './WeatherOverview';
 import { CameraCard } from './CameraCard';
 import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
 import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
@@ -169,6 +169,34 @@ function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefin
   </Surface>;
 }
 
+function ForwardWeather({ states, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'>) {
+  const now = new Date();
+  const points = forecastPoints(states.weatherHourly).filter((point) => new Date(point.datetime).getTime() >= now.getTime()).slice(0, 6);
+  return <Surface icon="ssid_chart" title="Vær fremover" className="ppf-weather-forward" onClick={showWeather}>
+    {points.length ? <div className="ppf-forward-chart"><WeatherChart points={points} compact/></div> : <p className="ppf-forward-empty">Værprognose ikke tilgjengelig</p>}
+  </Surface>;
+}
+
+type TodayTask = { title: string; detail?: string; time?: string; completed?: boolean };
+const fallbackTodayTasks: TodayTask[] = [
+  { title: 'Handle mat', detail: 'Kiwi', time: '13:00–14:00', completed: true },
+  { title: 'Rydde entré', time: '09:00–10:00', completed: true },
+  { title: 'Vanne planter', detail: 'Stue og terrasse', time: '19:00–19:30' },
+];
+
+function TodayModule({ states, openDetail }: Pick<PrototypeProps, 'states'> & { openDetail: (detail: Detail) => void }) {
+  const now = new Date();
+  const kindergarten = mykidKindergarten(states.mykidKindergarten);
+  const liveTasks = (kindergarten?.today ?? [])
+    .filter((item) => !item.date || dayKey(new Date(item.date)) === dayKey(now))
+    .slice(0, 4)
+    .map((item): TodayTask => ({ title: item.title, detail: item.details, time: planTime(item.time) }));
+  const items = liveTasks.length ? liveTasks : fallbackTodayTasks;
+  return <Surface icon="checklist" title="I dag" className="ppf-today">
+    <div className="ppf-today-list">{items.map((item, index) => <button type="button" className={`ppf-today-item${item.completed ? ' is-complete' : ''}`} key={item.title + '-' + index} onClick={() => openDetail({ title: item.title, icon: 'checklist', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{kindergarten && liveTasks.length ? 'Nicolai' : 'Hjemmeoppgave'}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className="ppf-today-check" aria-hidden="true"><Icon filled={item.completed}>{item.completed ? 'check_circle' : 'radio_button_unchecked'}</Icon></span><span><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{item.time && <time>{item.time}</time>}<Icon>chevron_right</Icon></button>)}</div>
+  </Surface>;
+}
+
 function PrepareCard({ states }: { states: PrototypeProps['states'] }) {
   const tomorrow = agendaItems(states, new Date()).find((item) => dayKey(item.date) === dayKey(new Date(Date.now() + 86_400_000)));
   const snowy = forecastPoints(states.weatherDaily).some((point) => /snow/i.test(point.condition ?? ''));
@@ -284,18 +312,20 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const common = { states: props.states, period, openDetail: setDetail };
   const weather = query.weatherCard === 'v2'
     ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
-    : <WeatherOverview states={props.states} regular onDetails={props.showWeather} className="ppf-weather-v1"/>;
+    : <WeatherOverview states={props.states} regular onDetails={props.showWeather} className="ppf-weather-v1" showChart={false}/>;
   const agenda = <Agenda {...common} completedHomework={completedHomework} completeHomework={completeHomework} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
   const cameras = <CameraPair states={props.states}/>;
   const arrivalEvidence = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
+  const forwardWeather = <ForwardWeather states={props.states} showWeather={props.showWeather}/>;
+  const today = <TodayModule states={props.states} openDetail={setDetail}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
   const alerts = prototypeAlertDescriptors(props.states, query.scenario, now);
   const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
   const closeDetail = () => setDetail(undefined);
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
-    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{cameras}{weather}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
+    <div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{cameras}{weather}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{forwardWeather}{today}</section></div>
     <BottomControls {...props}/>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={closeDetail}/>}

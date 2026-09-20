@@ -67,15 +67,14 @@ function WindReading({ states }: { states: Record<string, HomeAssistantState> })
   </div>;
 }
 
-export function WeatherChart({ points, detailed = false, labelByDay = false }: { points: ForecastPoint[]; detailed?: boolean; labelByDay?: boolean }) {
-  const width = 900;
+export function WeatherChart({ points, detailed = false, labelByDay = false, compact = false }: { points: ForecastPoint[]; detailed?: boolean; labelByDay?: boolean; compact?: boolean }) {
   // Keep the dashboard preview deliberately short so its axis labels can be
   // assessed at the card's compact size. The detailed weather view retains a
   // full day of hourly forecast data.
   const data = points.slice(0, detailed ? 25 : 6);
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [viewport, setViewport] = useState(() => ({ width, height: detailed ? 248 : 178 }));
+  const [viewport, setViewport] = useState(() => ({ width: 900, height: detailed ? 248 : 178 }));
   useEffect(() => {
     const wrap = wrapRef.current;
     const svg = svgRef.current;
@@ -90,6 +89,7 @@ export function WeatherChart({ points, detailed = false, labelByDay = false }: {
     updateViewport();
     return () => observer.disconnect();
   }, [data.length, detailed]);
+  const width = Math.max(320, viewport.width);
   const temperatures = data.map((point) => point.temperature);
   const winds = data.map((point) => point.windSpeed);
   const gusts = data.map((point) => point.windGustSpeed);
@@ -108,7 +108,9 @@ export function WeatherChart({ points, detailed = false, labelByDay = false }: {
   // smaller label type instead of leaving an oversized empty border.
   const plot = detailed
     ? { left: 92, right: 103, top: 31, bottom: 2 }
-    : { left: 175, right: 175, top: 31, bottom: 25 };
+    : compact
+      ? { left: 48, right: 48, top: 16, bottom: 27 }
+      : (() => { const sideGutter = Math.min(175, Math.max(88, width * .26)); return { left: sideGutter, right: sideGutter, top: 31, bottom: 25 }; })();
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
   const pathFor = (values: Array<number | undefined>, rangeMin: number, rangeMax: number) => smoothPath(values.map((value, index) => {
@@ -122,14 +124,14 @@ export function WeatherChart({ points, detailed = false, labelByDay = false }: {
   const gustPath = pathFor(gusts, 0, windMax);
   const probabilityPath = pathFor(probabilities, 0, 100);
   const cloudPath = pathFor(clouds, 0, 100);
-  const ticks = [0, .25, .5, .75, 1];
-  const timeStep = Math.max(1, Math.floor((data.length - 1) / 7));
+  const ticks = compact ? [0, .5, 1] : [0, .25, .5, .75, 1];
+  const timeStep = compact ? Math.max(1, Math.ceil((data.length - 1) / 2)) : Math.max(1, Math.floor((data.length - 1) / 7));
   const timeIndexes = data.map((_, index) => index).filter((index) => index % timeStep === 0 || index === data.length - 1);
   return <div ref={wrapRef} className="weather-chart-wrap">
     <div className="chart-legend" aria-label="Tegnforklaring"><span className="temp">Temperatur</span><span className="rain">Nedbør</span><span className="probability">Sannsynlighet</span><span className="wind">Vind</span><span className="gust">Kast</span><span className="cloud">Skydekke</span></div>
     {data.length ? <svg ref={svgRef} className="weather-chart" role="img" aria-label="Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke" viewBox={`0 0 ${width} ${height + 28}`} preserveAspectRatio="xMidYMid meet">
       <defs><linearGradient id={`temperature-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f4b17b" stopOpacity=".62"/><stop offset="1" stopColor="#f4b17b" stopOpacity=".08"/></linearGradient><linearGradient id={`cloud-fill-${detailed}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#aeb4b3" stopOpacity=".2"/><stop offset="1" stopColor="#aeb4b3" stopOpacity=".02"/></linearGradient></defs>
-      {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" textAnchor="start" x={10} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan><tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan></text>{detailed ? <text className="axis-label axis-right" textAnchor="end" x={width - 10} y={y + 4}><tspan>{percent}%</tspan><tspan className="axis-wind-value"> · {wind.toFixed(1)} m/s</tspan></text> : <><text className="axis-label axis-right" textAnchor="start" x={width - plot.right + 10} y={y + 4}>{percent}%</text><text className="axis-label axis-wind-label" textAnchor="end" x={width - 10} y={y + 4}>· {wind.toFixed(1)} m/s</text></>}</g>; })}
+      {ticks.map((ratio) => { const y = plot.top + ratio * plotHeight; const temperature = max - ratio * (max - min); const rain = precipitationMax * (1 - ratio); const percent = Math.round(100 - ratio * 100); const wind = windMax * (1 - ratio); return <g key={ratio}><line x1={plot.left} x2={width - plot.right} y1={y} y2={y} className="gridline" /><text className="axis-label axis-left" textAnchor="start" x={compact ? 7 : 10} y={y + 4}><tspan>{temperature.toFixed(0)}°</tspan>{!compact && <tspan className="axis-rain-value"> · {rain.toFixed(1)} mm</tspan>}</text>{detailed ? <text className="axis-label axis-right" textAnchor="end" x={width - 10} y={y + 4}><tspan>{percent}%</tspan><tspan className="axis-wind-value"> · {wind.toFixed(1)} m/s</tspan></text> : compact ? <text className="axis-label axis-right" textAnchor="end" x={width - 7} y={y + 4}>{wind.toFixed(1)}</text> : <><text className="axis-label axis-right" textAnchor="start" x={width - plot.right + 10} y={y + 4}>{percent}%</text><text className="axis-label axis-wind-label" textAnchor="end" x={width - 10} y={y + 4}>· {wind.toFixed(1)} m/s</text></>}</g>; })}
       {cloudPath && <><path className="cloud-area" fill={`url(#cloud-fill-${detailed})`} d={`${cloudPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`}/><path className="cloud-line" d={cloudPath}/></>}
       {data.map((point, index) => point.precipitation !== undefined && <rect key={point.datetime} className="rainbar" x={plot.left + index * plotWidth / data.length + 2} y={plot.top + plotHeight - Math.min(point.precipitation / precipitationMax * plotHeight, plotHeight)} width={Math.max(4, plotWidth / data.length - 5)} height={Math.min(point.precipitation / precipitationMax * plotHeight, plotHeight)} />)}
       {tempPath && <><path className="temperature-area" d={`${tempPath} L ${width - plot.right} ${plot.top + plotHeight} L ${plot.left} ${plot.top + plotHeight} Z`} /><path className="temperature-line" d={tempPath} /></>}
@@ -147,7 +149,7 @@ function ForecastStrip({ points }: { points: ForecastPoint[] }) {
   return <div className="forecast-strip">{days.length ? days.map((point) => <div className="forecast-day" key={point.datetime}><span>{new Date(point.datetime).toLocaleDateString('nb-NO', { weekday: 'short' })}</span><WeatherGlyph condition={point.condition}/><strong>{fmt(point.temperature, '°')}</strong><small>{fmt(point.templow, '°')}</small></div>) : <div className="unavailable">— Prognose ikke tilgjengelig</div>}</div>;
 }
 
-export function WeatherOverview({ states, regular, onDetails, className = '' }: { states: Record<string, HomeAssistantState>; regular?: boolean; onDetails?: () => void; className?: string }) {
+export function WeatherOverview({ states, regular, onDetails, className = '', showChart = true }: { states: Record<string, HomeAssistantState>; regular?: boolean; onDetails?: () => void; className?: string; showChart?: boolean }) {
   const daily = forecastPoints(states.weatherDaily);
   const hourly = forecastPoints(states.weatherHourly);
   const current = currentTemperatureNumber(states.weatherDaily) ?? currentTemperatureNumber(states.outdoor);
@@ -158,6 +160,6 @@ export function WeatherOverview({ states, regular, onDetails, className = '' }: 
       {regular && <WindReading states={states}/>}
       {!regular && <ForecastStrip points={daily}/>} 
     </div>
-    {regular && <WeatherChart points={hourly}/>} 
+    {regular && showChart && <WeatherChart points={hourly}/>}
   </section>;
 }
