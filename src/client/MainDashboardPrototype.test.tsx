@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
+import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
+import { departureBriefingFixturePayload } from './departureBriefingFixtures';
 import { familyReceiptStorageKey } from './familyInbox';
 import { homeworkCompletionStorageKey } from './homeworkAgenda';
 
@@ -11,6 +13,7 @@ const renderPrototype = (
   states: Record<string, HomeAssistantState> = {},
   action = vi.fn(),
   openMode = vi.fn(),
+  departureBriefings?: DepartureBriefingPayload,
 ) => render(<MainDashboardPrototype
   states={states}
   showWeather={() => {}}
@@ -21,7 +24,8 @@ const renderPrototype = (
   openMode={openMode}
   openKlaraAi={() => {}}
   openDeparture={() => {}}
-  hasDepartureBriefing={false}
+  hasDepartureBriefing={Boolean(departureBriefings?.briefings.length)}
+  departureBriefings={departureBriefings}
   action={action}
 />);
 
@@ -237,6 +241,59 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(agenda.queryByText('Bursdags samling')).not.toBeInTheDocument();
     expect(agenda.queryByText('Middag: fiskekaker')).not.toBeInTheDocument();
     expect(agenda.queryByText('Bursdag Ada')).not.toBeInTheDocument();
+  });
+
+  it('places a generated departure briefing on its matching calendar event', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
+    const departureBriefings = departureBriefingFixturePayload('short');
+    const openDeparture = vi.fn();
+
+    render(<MainDashboardPrototype
+      states={{
+        calendar: state('calendar.family', 'on', {
+          events: [{ summary: 'Turntrening', start: departureBriefings.briefings[0].eventStartAt, end: departureBriefings.briefings[0].eventEndAt }],
+        }),
+      }}
+      showWeather={() => {}}
+      openLights={() => {}}
+      openHeatPump={() => {}}
+      openVacuum={() => {}}
+      openVehicles={() => {}}
+      openMode={() => {}}
+      openKlaraAi={() => {}}
+      openDeparture={openDeparture}
+      hasDepartureBriefing
+      departureBriefings={departureBriefings}
+      action={() => {}}
+    />);
+
+    const agenda = document.querySelector('.ppf-agenda') as HTMLElement;
+    const event = within(agenda).getByRole('button', { name: /Turntrening/ });
+
+    expect(document.querySelector('.ppf-departure-preview')).not.toBeInTheDocument();
+    expect(event.querySelector('[title="Avreisebriefing tilgjengelig"]')).toBeInTheDocument();
+
+    fireEvent.click(event);
+    expect(openDeparture).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mark a non-matching tur event as having a departure briefing', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00+02:00'));
+    const departureBriefings = departureBriefingFixturePayload('short');
+
+    renderPrototype({
+      calendar: state('calendar.family', 'on', {
+        events: [{ summary: 'Turdag', start: departureBriefings.briefings[0].eventStartAt, end: departureBriefings.briefings[0].eventEndAt }],
+      }),
+    }, vi.fn(), vi.fn(), departureBriefings);
+
+    const agenda = document.querySelector('.ppf-agenda') as HTMLElement;
+    const event = within(agenda).getByRole('button', { name: /Turdag/ });
+
+    expect(document.querySelector('.ppf-departure-preview')).not.toBeInTheDocument();
+    expect(event.querySelector('[title="Avreisebriefing tilgjengelig"]')).not.toBeInTheDocument();
   });
 
   it('shows tomorrow events when the rest of today is empty', () => {

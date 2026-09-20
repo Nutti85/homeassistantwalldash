@@ -953,11 +953,6 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-future-horizon{display:grid;grid-template-columns:repeat(3,minmax(0,auto));align-items:center;gap:3px;min-width:0}
 .ppf-future-horizon button{min-height:32px;padding:4px 8px;border-radius:8px;color:#9faaa4;font-size:9px;font-weight:650;white-space:nowrap}
 .ppf-future-horizon button.is-active{border:1px solid rgba(239,178,118,.35);background:rgba(239,178,118,.11);color:#f2c393}
-.ppf-departure-preview{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;min-height:76px;padding:10px 12px;border:1px solid rgba(142,226,178,.18);border-radius:13px;background:#182621;text-align:left}
-.ppf-departure-preview>span:nth-child(2){display:grid;min-width:0;gap:2px}
-.ppf-departure-preview small{color:#8ee2b2;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.ppf-departure-preview strong,.ppf-departure-preview em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ppf-departure-preview strong{font-size:13px}.ppf-departure-preview em{color:#a7b1ac;font-size:10px;font-style:normal}
 .ppf-camera-activity{border-color:rgba(244,177,123,.2);background:#1a2421}
 .ppf-clothing-tile{grid-template-rows:auto auto;align-content:center}
 .ppf-clothing-icons{display:flex;align-items:center;justify-content:center;gap:5px;color:var(--ppf-warm)}
