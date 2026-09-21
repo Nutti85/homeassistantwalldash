@@ -78,6 +78,12 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       states={{
         weatherDaily: state('sensor.daily', 'rainy', { temperature: 17, forecast: [] }),
         weatherHourly: state('sensor.hourly', 'rainy', { forecast: [{ datetime: '2026-09-09T10:00:00Z', temperature: 17, precipitation: 0, wind_speed: 2 }] }),
+        netatmoPressure: state('sensor.indoor_atmospheric_pressure', '1018'),
+        netatmoPressureTrend: state('sensor.indoor_pressure_trend', 'rising'),
+        netatmoOutdoorHumidity: state('sensor.indoor_ute_humidity', '82'),
+        netatmoRainToday: state('sensor.indoor_regn_precipitation_today', '1.8'),
+        netatmoRainLastHour: state('sensor.indoor_regn_precipitation_last_hour', '0.4'),
+        netatmoOutdoorTemperatureTrend: state('sensor.indoor_ute_temperature_trend', 'falling'),
         netatmoWindSpeed: state('sensor.wind', '2'),
         netatmoWindGust: state('sensor.gust', '4'),
         netatmoWindDirection: state('sensor.direction', 'N'),
@@ -98,6 +104,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(weather).toHaveClass('weather-regular');
     expect(weather.querySelector('.weather-chart')).not.toBeInTheDocument();
     expect(weather.querySelector('.weather-top')).toBeInTheDocument();
+    expect(within(weather).getByLabelText('Lokale værmålinger')).toHaveTextContent('Trykk1 018 hPaTrykktrendStigendeUtefukt82 %Regn i dag1,8 mmRegn siste time0,4 mmTemperaturtrendSynkende');
     expect(weather.querySelector('.ppf-weather-tiles')).not.toBeInTheDocument();
     fireEvent.click(weather);
     expect(showWeather).toHaveBeenCalledTimes(1);

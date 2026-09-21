@@ -50,6 +50,43 @@ const numberState = (state?: HomeAssistantState) => {
   return Number.isFinite(value) ? value : undefined;
 };
 
+const sensorUnit = (state: HomeAssistantState | undefined, fallback: string) => (
+  typeof state?.attributes.unit_of_measurement === 'string' ? state.attributes.unit_of_measurement : fallback
+);
+
+const sensorReading = (state: HomeAssistantState | undefined, fallbackUnit: string) => {
+  const value = numberState(state);
+  return fmt(value, value === undefined ? '' : ` ${sensorUnit(state, fallbackUnit)}`);
+};
+
+const trendReading = (state?: HomeAssistantState) => {
+  const value = stateValue(state);
+  if (!value || ['unknown', 'unavailable', 'none'].includes(value.toLowerCase())) return '—';
+  const labels: Record<string, string> = {
+    up: 'Stigende',
+    rising: 'Stigende',
+    increasing: 'Stigende',
+    down: 'Synkende',
+    falling: 'Synkende',
+    decreasing: 'Synkende',
+    stable: 'Stabil',
+    steady: 'Stabil',
+  };
+  return labels[value.toLowerCase()] ?? value;
+};
+
+function LocalWeatherReadings({ states }: { states: Record<string, HomeAssistantState> }) {
+  const readings = [
+    ['Trykk', sensorReading(states.netatmoPressure, 'hPa')],
+    ['Trykktrend', trendReading(states.netatmoPressureTrend)],
+    ['Utefukt', sensorReading(states.netatmoOutdoorHumidity, '%')],
+    ['Regn i dag', sensorReading(states.netatmoRainToday, 'mm')],
+    ['Regn siste time', sensorReading(states.netatmoRainLastHour, 'mm')],
+    ['Temperaturtrend', trendReading(states.netatmoOutdoorTemperatureTrend)],
+  ];
+  return <div className="weather-local-readings" aria-label="Lokale værmålinger">{readings.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>;
+}
+
 function WindReading({ states }: { states: Record<string, HomeAssistantState> }) {
   const speed = numberState(states.netatmoWindSpeed);
   const gust = numberState(states.netatmoWindGust);
@@ -160,6 +197,7 @@ export function WeatherOverview({ states, regular, onDetails, className = '', sh
       {regular && <WindReading states={states}/>}
       {!regular && <ForecastStrip points={daily}/>} 
     </div>
+    {regular && <LocalWeatherReadings states={states}/>}
     {regular && showChart && <WeatherChart points={hourly}/>}
   </section>;
 }

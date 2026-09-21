@@ -1027,6 +1027,15 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-bottom-controls .ppf-home-controls button{width:auto;min-width:0}
 }
 
+/* Netatmo readings sit between the current conditions and the forecast chart
+   so the card keeps one clear weather hierarchy in every regular layout. */
+.weather-regular{grid-template-rows:auto auto minmax(0,1fr)}
+.weather-regular .weather-local-readings{grid-column:1 / -1;grid-row:2;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.09)}
+.weather-regular .weather-local-readings>span{display:grid;gap:3px;min-width:0;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.035)}
+.weather-regular .weather-local-readings small{overflow:hidden;color:var(--text-muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.weather-regular .weather-local-readings strong{overflow:hidden;font-size:14px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}
+.weather-regular .weather-chart-wrap{grid-column:1 / -1;grid-row:3}
+
 /* Temporary V2 test: fit the V1 weather overview into the current lane while
    keeping the original V2 tile card available through ?weather-card=v2. */
 .main-dashboard-prototype .ppf-weather-v1{display:grid;grid-column:auto;grid-template-rows:auto;align-content:start;min-width:0;min-height:0;padding:13px 16px;border-color:var(--ppf-line);border-radius:15px;background:#1a2421;box-shadow:none;overflow:hidden;cursor:pointer;text-align:left}
@@ -1046,6 +1055,11 @@ body.prototype-active{min-width:0;background:#07100f}
 .main-dashboard-prototype .ppf-weather-v1 .chart-legend span{white-space:nowrap}
 .main-dashboard-prototype .ppf-weather-v1 .weather-chart .axis-label{font-size:clamp(15px,1.2vw,18px);font-weight:600}
 .main-dashboard-prototype .ppf-weather-v1 .weather-chart .time-label{font-size:clamp(17px,1.35vw,20px)}
+.main-dashboard-prototype .ppf-weather-v1 .weather-local-readings{grid-column:1;grid-row:2;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--ppf-line)}
+.main-dashboard-prototype .ppf-weather-v1 .weather-local-readings>span{display:grid;gap:2px;min-width:0;padding:5px 7px;border-radius:8px;background:rgba(255,255,255,.035)}
+.main-dashboard-prototype .ppf-weather-v1 .weather-local-readings small{overflow:hidden;color:#8f9d96;font-size:9px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}
+.main-dashboard-prototype .ppf-weather-v1 .weather-local-readings strong{overflow:hidden;font-size:12px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}
+.main-dashboard-prototype .ppf-weather-v1 .weather-chart-wrap{grid-row:3}
 
 @media(min-width:1101px) and (min-height:700px){
   .main-dashboard-prototype .ppf-weather-v1{grid-template-rows:auto;padding:10px 14px}
