@@ -109,7 +109,7 @@ export function WeatherChart({ points, detailed = false, labelByDay = false, com
   const plot = detailed
     ? { left: 92, right: 103, top: 31, bottom: 2 }
     : compact
-      ? (() => { const leftGutter = Math.min(152, Math.max(112, width * .195)); const rightGutter = Math.min(152, Math.max(144, width * .195)); return { left: leftGutter, right: rightGutter, top: 16, bottom: 27 }; })()
+      ? (() => { const sideGutter = Math.min(152, Math.max(76, width * .195)); return { left: sideGutter, right: sideGutter, top: 16, bottom: 27 }; })()
       : (() => { const sideGutter = Math.min(175, Math.max(88, width * .26)); return { left: sideGutter, right: sideGutter, top: 31, bottom: 25 }; })();
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
