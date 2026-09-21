@@ -470,6 +470,13 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(within(forwardWeather).queryByText('Prognose')).not.toBeInTheDocument();
     expect(within(forwardWeather).getByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' })).toBeInTheDocument();
     expect(forwardWeather.querySelector('.chart-legend')).toHaveTextContent('TemperaturNedbørSannsynlighetVindKastSkydekke');
+    const chart = within(forwardWeather).getByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' });
+    expect(chart).toHaveClass('compact');
+    expect(chart.querySelectorAll('.axis-left')).toHaveLength(5);
+    expect(chart.querySelectorAll('.axis-right')).toHaveLength(5);
+    expect(chart.querySelectorAll('.time-label')).toHaveLength(6);
+    expect(chart.querySelectorAll('.axis-left')[4]).toHaveTextContent('0.0 mm');
+    expect(chart.querySelector('.axis-right')).toHaveTextContent('100%');
     const chartTable = within(forwardWeather).getByRole('table', { name: 'Værdata' });
     const secondForecastRow = within(chartTable).getAllByRole('row')[2];
     const forecastCells = within(secondForecastRow).getAllByRole('cell');
