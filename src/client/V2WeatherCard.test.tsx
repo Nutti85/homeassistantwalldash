@@ -70,6 +70,21 @@ describe('V2WeatherCard', () => {
     expect(card.getAttribute('aria-label')).toContain('Pilen peker mot NØ');
   });
 
+  it('places pressure, humidity, and rain before the AQI and seasonal row', () => {
+    const { container } = renderCard();
+    const card = container.querySelector('.ppf-weather-j')!;
+    const rowOrder = Array.from(card.children, (row) => {
+      if (row.classList.contains('ppf-weather-j-top')) return 'current';
+      if (row.classList.contains('ppf-weather-j-measurements')) return 'measurements';
+      if (row.classList.contains('ppf-weather-j-signals')) return 'signals';
+      return 'unknown';
+    });
+    const accessibleLabel = card.getAttribute('aria-label')!;
+
+    expect(rowOrder).toEqual(['current', 'measurements', 'signals']);
+    expect(accessibleLabel.indexOf('Trykk ')).toBeLessThan(accessibleLabel.indexOf('US AQI '));
+  });
+
   it('shows US AQI value, Norwegian category, six bands, and a marker at the live position', async () => {
     setFetch(vi.fn(async () => jsonResponse(reading(225, 'very-unhealthy'))));
     renderCard();

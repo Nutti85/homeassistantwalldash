@@ -200,12 +200,12 @@ export function V2WeatherCard({ states, onDetails }: V2WeatherCardProps) {
     'Følt som ' + formatTemperature(model.feelsLike) + '.',
     'Vindretning ' + fromDirection + '.' + (toDirection ? ' Pilen peker mot ' + toDirection + '.' : ''),
     'Vind ' + formatValue(model.windSpeed, 'm/s') + '. Kast ' + formatValue(model.windGust, 'm/s') + '.',
-    aqiText + '.',
-    seasonalDescription(model.seasonalSignal),
     'Trykk ' + formatValue(model.pressure, 'hPa') + (model.pressureClass ? ', ' + model.pressureClass : '') + '.',
     'Trykktrend: ' + trendLabel(model.pressureTrend) + '.',
     'Utendørs fuktighet ' + formatValue(model.humidity, '%') + '.',
     'Regn siste time ' + formatValue(model.rainLastHour, 'mm') + '. I dag ' + formatValue(model.rainToday, 'mm') + '.',
+    aqiText + '.',
+    seasonalDescription(model.seasonalSignal),
   ].join(' ');
 
   return <section
@@ -244,11 +244,6 @@ export function V2WeatherCard({ states, onDetails }: V2WeatherCardProps) {
       </div>
     </div>
 
-    <div className="ppf-weather-j-signals">
-      <AirQualitySignal reading={airQuality}/>
-      <SeasonalSignalView signal={model.seasonalSignal}/>
-    </div>
-
     <div className="ppf-weather-j-measurements">
       <div className="ppf-weather-j-metric ppf-weather-j-pressure">
         <small className="ppf-weather-j-metric-label">Trykk</small>
@@ -270,6 +265,11 @@ export function V2WeatherCard({ states, onDetails }: V2WeatherCardProps) {
         <strong className="ppf-weather-j-metric-value">{model.rainLastHour === undefined ? '—' : <>{formatNumber(model.rainLastHour)} <small>mm</small></>}</strong>
         <span className="ppf-weather-j-metric-note">I dag: {formatValue(model.rainToday, 'mm')}</span>
       </div>
+    </div>
+
+    <div className="ppf-weather-j-signals">
+      <AirQualitySignal reading={airQuality}/>
+      <SeasonalSignalView signal={model.seasonalSignal}/>
     </div>
   </section>;
 }
