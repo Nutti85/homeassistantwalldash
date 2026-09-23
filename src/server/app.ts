@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import express, { type Express, type Request, type Response } from 'express';
 import type { HomeAssistantClient, VacuumAction } from './homeAssistant';
+import type { AirQualityService } from './airQuality';
 import { isActivityMediaId, type ActivityService } from './activity';
 import { lightControlKeys, type DashboardAction, type FanSpeed, type HeatPumpMode, type LightCommand, type LightControlKey } from '../shared/entities';
 
@@ -30,6 +31,7 @@ export interface AiReport {
 
 export interface AppServices {
   activity?: ActivityService;
+  airQuality?: Pick<AirQualityService, 'getCurrent'>;
   activityUpdates?: { subscribe(listener: () => void): () => void };
   aiReportSecret?: string;
   aiReportSourceUrl?: string;
@@ -186,7 +188,7 @@ const proxyActivityMedia = async (
 };
 
 export const createApp = (client: DashboardClient, services: AppServices = {}): Express => {
-  const { activity, activityUpdates, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '' } = services;
+  const { activity, airQuality, activityUpdates, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '' } = services;
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   let aiReport: AiReport | undefined = aiReportStorePath ? loadAiReport(aiReportStorePath) : undefined;
@@ -315,6 +317,14 @@ export const createApp = (client: DashboardClient, services: AppServices = {}): 
     } catch { response.status(502).json({ error: 'Kunne ikke starte AI-oppdateringen. Prøv igjen.' }); }
   });
 
+  app.get('/api/air-quality', async (_request: Request, response: Response) => {
+    response.set('Cache-Control', 'private, max-age=60');
+    try {
+      response.json(await airQuality?.getCurrent() ?? { value: null });
+    } catch {
+      response.json({ value: null });
+    }
+  });
   app.get('/api/states', async (_request: Request, response: Response) => {
     try {
       response.json(await client.getDashboardStates());

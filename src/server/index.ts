@@ -7,7 +7,26 @@ import { defaultDashboardEntityIds } from '../shared/entities';
 import { ActivityService } from './activity';
 import { FrigateClient } from './frigate';
 import { FrigateUpdateService, parseFrigateUpdateConfig } from './frigateUpdates';
+import { AirQualityService } from './airQuality';
 
+export const parseAqiCoordinates = (latitudeValue?: string, longitudeValue?: string): { latitude: number; longitude: number } => {
+  const latitudeText = latitudeValue?.trim() ?? '';
+  const longitudeText = longitudeValue?.trim() ?? '';
+  if (!latitudeText && !longitudeText) return { latitude: 59.1, longitude: 10.2 };
+  if (!latitudeText || !longitudeText) {
+    throw new Error('AQI_LATITUDE and AQI_LONGITUDE must be set together');
+  }
+
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    throw new Error('AQI_LATITUDE must be a finite number between -90 and 90');
+  }
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new Error('AQI_LONGITUDE must be a finite number between -180 and 180');
+  }
+  return { latitude, longitude };
+};
 export const parseActivityEntityConfig = (
   doorbellVisitorValue?: string,
   frigateEventsValue?: string,
@@ -40,6 +59,7 @@ const activityEntities = parseActivityEntityConfig(
   process.env.HA_FRIGATE_EVENT_ENTITY_IDS,
   process.env.HA_SECURITY_MODE_ENTITY_ID,
 );
+const aqiCoordinates = parseAqiCoordinates(process.env.AQI_LATITUDE, process.env.AQI_LONGITUDE);
 
 if (!haUrl || !haToken) {
   throw new Error('HA_URL og HA_TOKEN må være satt');
@@ -90,6 +110,7 @@ const entities = {
 };
 const guestVoucherCreateButtonId = process.env.HA_GUEST_VOUCHER_CREATE_BUTTON_ID?.trim();
 const homeAssistant = new HomeAssistantClient(haUrl, haToken, fetch, entities, guestVoucherCreateButtonId, activityEntities);
+const airQuality = new AirQualityService(aqiCoordinates);
 const frigateUrl = process.env.FRIGATE_URL?.trim();
 const frigateUpdateConfig = parseFrigateUpdateConfig(
   process.env.FRIGATE_MQTT_URL,
@@ -101,7 +122,7 @@ const frigateUpdates = new FrigateUpdateService(frigateUpdateConfig);
 export const activityService = new ActivityService(homeAssistant, frigateUrl ? new FrigateClient(frigateUrl) : undefined, {
   ...activityEntities, home: entities.home, frontDoorLock: entities.frontDoorLock,
 });
-const app = createApp(homeAssistant, { activity: activityService, activityUpdates: frigateUpdateConfig ? frigateUpdates : undefined, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath });
+const app = createApp(homeAssistant, { activity: activityService, airQuality, activityUpdates: frigateUpdateConfig ? frigateUpdates : undefined, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath });
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

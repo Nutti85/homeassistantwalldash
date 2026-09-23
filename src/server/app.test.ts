@@ -487,3 +487,46 @@ describe('dashboard API', () => {
     expect(response.listenerCount('close')).toBe(0);
   });
 });
+
+describe('air quality API', () => {
+  const reading = {
+    value: 42,
+    category: 'good',
+    observedAt: '2026-09-23T11:45:00.000Z',
+    source: 'open-meteo',
+  };
+
+  it('returns the configured current AQI reading with a short private cache header', async () => {
+    const airQuality = { getCurrent: vi.fn().mockResolvedValue(reading) };
+
+    const response = await request(createApp(createClient(), { airQuality })).get('/api/air-quality');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(reading);
+    expect(response.headers['cache-control']).toBe('private, max-age=60');
+    expect(airQuality.getCurrent).toHaveBeenCalledOnce();
+  });
+
+  it('returns a deliberate unavailable value when no AQI service is configured', async () => {
+    const response = await request(createApp(createClient())).get('/api/air-quality');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ value: null });
+  });
+
+  it('keeps dashboard states available when the AQI service fails', async () => {
+    const client = createClient();
+    vi.mocked(client.getDashboardStates).mockResolvedValue(dashboardStates);
+    const airQuality = { getCurrent: vi.fn(async () => { throw new Error('upstream unavailable'); }) };
+    const app = createApp(client, { airQuality });
+
+    await expect(request(app).get('/api/air-quality')).resolves.toMatchObject({
+      status: 200,
+      body: { value: null },
+    });
+    await expect(request(app).get('/api/states')).resolves.toMatchObject({
+      status: 200,
+      body: dashboardStates,
+    });
+  });
+});
