@@ -254,7 +254,7 @@ export function V2WeatherCard({ states, onDetails }: V2WeatherCardProps) {
         </span>
       </div>
       <div className="ppf-weather-j-metric ppf-weather-j-humidity">
-        <small className="ppf-weather-j-metric-label">Utefukt</small>
+        <small className="ppf-weather-j-metric-label">Luftfuktighet</small>
         <strong className="ppf-weather-j-metric-value">{formatValue(model.humidity, '%')}</strong>
         <span className="ppf-weather-j-humidity-track" aria-hidden="true">
           {model.humidity !== undefined && <i style={{ width: model.humidity + '%' }}/>}

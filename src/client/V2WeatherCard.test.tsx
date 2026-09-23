@@ -161,6 +161,7 @@ describe('V2WeatherCard', () => {
   it('makes last-hour rain primary and today secondary', () => {
     renderCard();
 
+    expect(screen.getByText('Luftfuktighet')).toBeInTheDocument();
     expect(screen.getByText('Regn siste time')).toBeInTheDocument();
     expect(document.querySelector('.ppf-weather-j-rain .ppf-weather-j-metric-value')).toHaveTextContent('0,4 mm');
     expect(screen.getByText('I dag: 1,8 mm')).toBeInTheDocument();
