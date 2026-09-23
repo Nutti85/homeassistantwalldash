@@ -51,7 +51,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
         }),
       });
 
-      const alert = screen.getByRole('button', { name: /Skogbrannfare/ });
+      const alert = within(screen.getByLabelText('Aktive varsler')).getByRole('button', { name: /Skogbrannfare/ });
       expect(screen.getByLabelText('Aktive varsler')).toContainElement(alert);
       alert.focus();
       fireEvent.keyDown(alert, { key: 'Enter' });
@@ -72,7 +72,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     }
   });
 
-  it('uses the V1 weather overview in the V2 now lane while retaining the V2 weather implementation', () => {
+  it('uses the J weather card in the V2 now lane while retaining the old card behind the comparison switch', () => {
     const showWeather = vi.fn();
     render(<MainDashboardPrototype
       states={{
@@ -100,12 +100,11 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
       action={() => {}}
     />);
 
-    const weather = screen.getByRole('button', { name: 'Åpne detaljert vær' });
-    expect(weather).toHaveClass('weather-regular');
-    expect(weather.querySelector('.weather-chart')).not.toBeInTheDocument();
-    expect(weather.querySelector('.weather-top')).toBeInTheDocument();
-    expect(within(weather).getByLabelText('Lokale værmålinger')).toHaveTextContent('Trykk1 018 hPaTrykktrendStigendeUtefukt82 %Regn i dag1,8 mmRegn siste time0,4 mmTemperaturtrendSynkende');
-    expect(weather.querySelector('.ppf-weather-tiles')).not.toBeInTheDocument();
+    const weather = screen.getByRole('button', { name: /Åpne detaljert vær/ });
+    expect(weather).toHaveClass('ppf-weather-j');
+    expect(within(weather).getByText('Trykk')).toBeInTheDocument();
+    expect(within(weather).getByText('Regn siste time')).toBeInTheDocument();
+    expect(weather.querySelector('.ppf-weather-j-seasonal')).toBeInTheDocument();
     fireEvent.click(weather);
     expect(showWeather).toHaveBeenCalledTimes(1);
   });
@@ -122,7 +121,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(cameraPair).toBeInTheDocument();
     expect(within(cameraPair as HTMLElement).getByRole('region', { name: 'Ringeklokke' })).toBeInTheDocument();
     expect(within(cameraPair as HTMLElement).getByRole('region', { name: 'Gårdsplassen' })).toBeInTheDocument();
-    expect(cameraPair?.nextElementSibling).toHaveClass('weather-card');
+    expect(cameraPair?.nextElementSibling).toHaveClass('ppf-weather-j');
   });
 
   it('keeps the V1 scene controls in the bottom navigation', () => {
@@ -467,8 +466,8 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     const future = screen.getByRole('heading', { name: 'Dette skjer' }).closest('section') as HTMLElement;
     const now = screen.getByRole('heading', { name: 'Akkurat nå' }).closest('section') as HTMLElement;
-    const currentWeather = now.querySelector('.ppf-weather-v1') as HTMLElement;
-    expect(currentWeather.querySelector('.weather-top')).toBeInTheDocument();
+    const currentWeather = now.querySelector('.ppf-weather-j') as HTMLElement;
+    expect(currentWeather).toBeInTheDocument();
     expect(within(currentWeather).queryByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' })).not.toBeInTheDocument();
     expect(within(now).getByRole('heading', { name: 'Forbered dette' })).toBeInTheDocument();
     expect(within(future).queryByRole('heading', { name: 'Forbered dette' })).not.toBeInTheDocument();
