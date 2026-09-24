@@ -977,7 +977,7 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-scene-controls .scene.morning .material-symbols-outlined{color:#f3c653}.ppf-scene-controls .scene.evening .material-symbols-outlined{color:#f4b17b}.ppf-scene-controls .scene.night .material-symbols-outlined{color:#b9a2ff}
 .ppf-scene-controls .scene-confirm-wrap{top:auto;bottom:calc(100% + 10px)}
 .ppf-scene-controls .scene-confirm{min-height:48px}
-.ppf-home-control-rail{grid-template-columns:minmax(0,1fr);align-content:start;gap:5px;min-width:0;padding:4px;border-radius:12px;box-shadow:none;backdrop-filter:none}
+.ppf-home-control-rail{grid-template-columns:minmax(0,1fr);align-content:center;gap:5px;min-width:0;padding:4px;border-radius:12px;box-shadow:none;backdrop-filter:none}
 .ppf-home-control-rail button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;min-height:58px;padding:6px 3px;border:1px solid transparent;border-radius:9px;color:#b7c2bd}
 .ppf-home-control-rail button:hover{background:rgba(142,226,178,.09);color:#fff}
 .ppf-home-control-rail button.is-active{border-color:rgba(239,178,118,.35);background:rgba(239,178,118,.11);color:#f2c393}
@@ -1003,7 +1003,7 @@ body.prototype-active{min-width:0;background:#07100f}
 }
 
 @media(min-width:701px){
-  .main-dashboard-prototype .ppf-bottom-controls{height:70px}
+  .main-dashboard-prototype .ppf-bottom-controls{height:56px}
   .ppf-scene-controls{padding:2px}
   .ppf-scene-controls{grid-template-columns:repeat(3,92px)}
   .ppf-scene-controls .scene-action,.ppf-scene-controls .scene{height:48px;min-height:48px}
