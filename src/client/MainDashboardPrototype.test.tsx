@@ -125,11 +125,12 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(cameraPair?.nextElementSibling).toHaveClass('weather-card');
   });
 
-  it('keeps the V1 scene controls in the bottom navigation', () => {
+  it('keeps the V1 scene controls in their own bottom navigation', () => {
     const action = vi.fn();
     renderPrototype({}, action);
 
-    const scenes = screen.getByRole('group', { name: 'Scener' });
+    const sceneNavigation = screen.getByRole('navigation', { name: 'Scenekontroller' });
+    const scenes = within(sceneNavigation).getByRole('group', { name: 'Scener' });
     expect(within(scenes).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(within(scenes).getByRole('button', { name: 'Kveld' })).toBeInTheDocument();
     expect(within(scenes).getByRole('button', { name: 'Natt' })).toBeInTheDocument();
@@ -520,16 +521,22 @@ describe('MainDashboardPrototype bottom controls', () => {
     }
   });
 
-  it('keeps scenes separate and groups all daily controls together', () => {
+  it('places the home shortcuts beside Siden sist, separate from the scenes', () => {
     const openMode = vi.fn();
     renderPrototype({
       frontDoorLock: state('lock.front_door', 'locked'),
       securityMode: state('input_number.security_mode', '1'),
     }, vi.fn(), openMode);
 
-    const nav = screen.getByRole('navigation', { name: 'Hjemkontroller' });
-    const scenes = within(nav).getByRole('group', { name: 'Scener' });
-    const home = within(nav).getByRole('group', { name: 'Hjemmekontroller' });
+    const home = screen.getByRole('navigation', { name: 'Hjemkontroller' });
+    const sceneNavigation = screen.getByRole('navigation', { name: 'Scenekontroller' });
+    const scenes = within(sceneNavigation).getByRole('group', { name: 'Scener' });
+    const past = screen.getByRole('region', { name: 'SIDEN SIST' });
+
+    expect(home.parentElement).toHaveClass('ppf-past-layout');
+    expect(home.nextElementSibling).toBe(past);
+    expect(within(home).queryByRole('group', { name: 'Scener' })).not.toBeInTheDocument();
+    expect(within(sceneNavigation).queryByRole('button', { name: 'Modus' })).not.toBeInTheDocument();
 
     expect(within(scenes).getAllByRole('button')).toHaveLength(3);
     ['Morgen', 'Kveld', 'Natt'].forEach((name) => expect(within(scenes).getByRole('button', { name })).toBeInTheDocument());
@@ -547,7 +554,7 @@ describe('MainDashboardPrototype bottom controls', () => {
       securityMode: state('input_number.security_mode', '1'),
     }, action);
 
-    const home = screen.getByRole('group', { name: 'Hjemmekontroller' });
+    const home = screen.getByRole('navigation', { name: 'Hjemkontroller' });
     fireEvent.click(within(home).getByRole('button', { name: 'Låst' }));
     fireEvent.click(within(home).getByRole('button', { name: 'Overvåket' }));
 
