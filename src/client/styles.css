@@ -1026,7 +1026,7 @@ body.prototype-active{min-width:0;background:#07100f}
 @media(max-width:700px){
   .main-dashboard-prototype{padding-bottom:210px}
   .ppf-c-zones .ppf-past-layout{order:0}
-  .main-dashboard-prototype .ppf-bottom-controls{bottom:76px;border:0;overflow:visible;padding:0;background:transparent}
+  .main-dashboard-prototype .ppf-bottom-controls{bottom:calc(86px + env(safe-area-inset-bottom));border:0;overflow:visible;padding:0;background:transparent}
   .ppf-prototype-switcher{bottom:150px}
 }
 
