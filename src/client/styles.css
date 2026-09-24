@@ -997,7 +997,7 @@ body.prototype-active{min-width:0;background:#07100f}
 }
 
 @media(min-width:1101px) and (min-height:700px){
-  .main-dashboard-prototype .ppf-bottom-controls{right:40px;width:auto}
+  .main-dashboard-prototype .ppf-bottom-controls{right:40px;width:auto;transform:none}
   .main-dashboard-prototype .ppf-prototype-switcher{bottom:88px}
 }
 
@@ -1014,7 +1014,7 @@ body.prototype-active{min-width:0;background:#07100f}
 @media(max-width:1100px){
   .main-dashboard-prototype{padding-bottom:160px}
   .ppf-past-layout{grid-template-columns:minmax(0,1fr)}
-  .main-dashboard-prototype .ppf-bottom-controls{right:0;bottom:76px;left:0;grid-template-columns:minmax(0,1fr);width:100%;height:auto;transform:none}
+  .main-dashboard-prototype .ppf-bottom-controls{right:0;bottom:76px;left:0;grid-template-columns:minmax(0,1fr);width:100%;height:auto;transform:none;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
   .ppf-scene-controls{justify-self:center;width:min(300px,calc(100vw - 16px));padding:2px}
   .ppf-scene-controls .scene{min-height:48px}
   .ppf-home-control-rail{position:fixed;z-index:30;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(8,minmax(64px,1fr));gap:2px;width:100%;padding:4px 6px max(6px,env(safe-area-inset-bottom));border-radius:12px 12px 0 0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;box-shadow:0 10px 30px rgba(0,0,0,.45)}
