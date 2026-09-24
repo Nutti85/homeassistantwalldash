@@ -251,8 +251,10 @@ function HomeControlRail(props: PrototypeProps) {
   const [scenesOpen, setScenesOpen] = useState(false);
   const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi]];
   return <nav className="ppf-home-controls ppf-home-control-rail" aria-label="Hjemkontroller">
-    <button type="button" className="ppf-scenes-toggle" aria-expanded={scenesOpen} aria-controls="ppf-scenes-panel" onClick={() => setScenesOpen((open) => !open)}><Icon>wb_twilight</Icon><span>Scener</span></button>
-    {scenesOpen && <SceneControls action={props.action} pending={props.pending} errors={props.errors}/>}
+    <div className="ppf-scenes-menu">
+      <button type="button" className="ppf-scenes-toggle" aria-expanded={scenesOpen} aria-controls="ppf-scenes-panel" onClick={() => setScenesOpen((open) => !open)}><Icon>wb_twilight</Icon><span>Scener</span></button>
+      {scenesOpen && <SceneControls action={props.action} pending={props.pending} errors={props.errors}/>}
+    </div>
     {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
     <button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button>
     <button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button>

@@ -131,6 +131,8 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     const home = screen.getByRole('navigation', { name: 'Hjemkontroller' });
     const sceneToggle = within(home).getByRole('button', { name: 'Scener' });
+    const sceneMenu = sceneToggle.parentElement;
+    expect(sceneMenu).toHaveClass('ppf-scenes-menu');
     expect(sceneToggle).toHaveAttribute('aria-expanded', 'false');
     expect(within(home).queryByRole('group', { name: 'Scener' })).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Scenekontroller' })).not.toBeInTheDocument();
@@ -138,6 +140,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     fireEvent.click(sceneToggle);
     const scenes = within(home).getByRole('group', { name: 'Scener' });
     expect(sceneToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(scenes.parentElement).toBe(sceneMenu);
     expect(within(scenes).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(within(scenes).getByRole('button', { name: 'Kveld' })).toBeInTheDocument();
     expect(within(scenes).getByRole('button', { name: 'Natt' })).toBeInTheDocument();
