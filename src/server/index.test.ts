@@ -58,3 +58,33 @@ describe('parseActivityEntityConfig', () => {
       .toThrow(/HA_SECURITY_MODE_ENTITY_ID/);
   });
 });
+
+describe('parseAqiCoordinates', () => {
+  it('uses coarse Sandefjord defaults when both values are absent', async () => {
+    const { parseAqiCoordinates } = await import('./index');
+
+    expect(parseAqiCoordinates(undefined, undefined)).toEqual({ latitude: 59.1, longitude: 10.2 });
+  });
+
+  it('accepts a configured latitude and longitude pair', async () => {
+    const { parseAqiCoordinates } = await import('./index');
+
+    expect(parseAqiCoordinates('59.2', '10.3')).toEqual({ latitude: 59.2, longitude: 10.3 });
+  });
+
+  it('requires both coordinates to be configured together', async () => {
+    const { parseAqiCoordinates } = await import('./index');
+
+    expect(() => parseAqiCoordinates('59.2', undefined)).toThrow(/AQI_LATITUDE.*AQI_LONGITUDE/);
+  });
+
+  it.each([
+    ['non-numeric latitude', 'north', '10.2'],
+    ['latitude outside its range', '91', '10.2'],
+    ['longitude outside its range', '59.1', '181'],
+  ])('rejects a %s', async (_description, latitude, longitude) => {
+    const { parseAqiCoordinates } = await import('./index');
+
+    expect(() => parseAqiCoordinates(latitude, longitude)).toThrow(/AQI/);
+  });
+});

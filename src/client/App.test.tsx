@@ -803,7 +803,11 @@ describe('redesigned dashboard', () => {
     expect(screen.getAllByText(/i morgen/)).toHaveLength(2);
     expect(screen.getByText('Nærmeste 8,2 km')).toBeInTheDocument();
     expect(screen.getByText('Bjørk')).toBeInTheDocument();
+    expect(screen.getByText('Or')).toBeInTheDocument();
+    expect(screen.getByText(/Open-Meteo \/ CAMS/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Time for time' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Neste 7 dager' }));
+    expect(await screen.findByText(/Open-Meteo \/ CAMS/)).toBeInTheDocument();
   });
 
   it('shows all weather series together in one accessible graph', async () => {

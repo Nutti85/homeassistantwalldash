@@ -6,6 +6,7 @@ import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, sta
 import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
 import { WeatherChart, WeatherOverview } from './WeatherOverview';
+import { V2WeatherCard } from './V2WeatherCard';
 import { CameraCard } from './CameraCard';
 import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
 import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
@@ -316,7 +317,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const common = { states: props.states, period, openDetail: setDetail };
   const weather = query.weatherCard === 'v2'
     ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
-    : <WeatherOverview states={props.states} regular onDetails={props.showWeather} className="ppf-weather-v1" showChart={false}/>;
+    : <V2WeatherCard states={props.states} onDetails={props.showWeather}/>;
   const agenda = <Agenda {...common} completedHomework={completedHomework} completeHomework={completeHomework} openDeparture={props.openDeparture} departureBriefings={props.departureBriefings}/>;
   const cameras = <CameraPair states={props.states}/>;
   const arrivalEvidence = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
