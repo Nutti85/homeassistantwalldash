@@ -1144,6 +1144,9 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-since-last{display:grid;gap:12px;min-width:0;min-height:0}
 .ppf-since-module{min-height:0;background:#1a2421}
 .ppf-since-module>header h3{margin:0;font-size:18px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.ppf-inbox-card>header,.ppf-activity-card>header{display:flex;flex-wrap:wrap;gap:8px}
+.ppf-inbox-card>header h3,.ppf-activity-card>header h3{flex:1 0 auto;overflow-wrap:normal}
+.ppf-since-module>header .ppf-since-more{margin-left:auto}
 .ppf-away-capture>header h3{font-size:13px;letter-spacing:.055em;line-height:1.4}
 .ppf-since-module button,.ppf-activity-modal button{min-width:48px;min-height:48px;font:inherit;cursor:pointer;color:inherit}
 .ppf-since-module button:focus-visible,.ppf-since-module video:focus-visible,.ppf-activity-modal :focus-visible{outline:3px solid #8ee2b2;outline-offset:-3px}
