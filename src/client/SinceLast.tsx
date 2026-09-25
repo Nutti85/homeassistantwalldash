@@ -90,7 +90,7 @@ export function FamilyInboxCard({ messages, receipts, onOpen, loading = false }:
     Number(right.source === 'Nicolai' && right.title === 'Dagen min') - Number(left.source === 'Nicolai' && left.title === 'Dagen min')
     || (validTime(right.publishedAt) ?? 0) - (validTime(left.publishedAt) ?? 0)
   ));
-  return <Module title="Beskjeder" icon="mark_email_unread" className="ppf-inbox-card" loading={loading} action={<button type="button" className="ppf-since-more" aria-label="Se alle beskjeder" onClick={() => onOpen()}>Se alle</button>}>
+  return <Module title="Beskjeder" icon="mark_email_unread" className="ppf-inbox-card" loading={loading} action={<button type="button" className="ppf-surface-open" aria-label="Se alle beskjeder" onClick={() => onOpen()}><Icon>arrow_outward</Icon></button>}>
     {loading && !unread.length ? <Loading rows={2} label="Henter beskjeder"/> : <>
     <p className="ppf-unread-count" aria-live="polite">{unread.length} {unread.length === 1 ? 'ulest' : 'uleste'}</p>
     {unread.length ? <ol className="ppf-inbox-preview" aria-label="Uleste beskjeder">{unread.slice(0, 2).map((message) => <li key={message.id}><button type="button" aria-label={`Åpne beskjed: ${message.title} · ${message.source}`} onClick={() => onOpen(message.id)}><span className={`ppf-source ppf-source-${message.source.toLowerCase()}`}>{message.source}</span><strong>{message.title}</strong><time dateTime={validTime(message.publishedAt) === undefined ? undefined : message.publishedAt}>{formatFamilyMessageDate(message.publishedAt)}</time><Icon>chevron_right</Icon></button></li>)}</ol> : <p className="ppf-since-state">Ingen uleste beskjeder</p>}
@@ -133,7 +133,7 @@ function TimelineDialog({ events, onClose }: { events: ActivityEvent[]; onClose:
 export function ActivityTimeline({ events, loading = false }: { events: ActivityEvent[]; loading?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const sorted = [...events].sort((left, right) => (validTime(right.occurredAt) ?? 0) - (validTime(left.occurredAt) ?? 0));
-  return <><Module title="Tidslinje" icon="format_list_bulleted" className="ppf-activity-card" loading={loading} action={sorted.length > 5 && <button type="button" className="ppf-since-more" aria-label="Se alle hendelser" onClick={() => setExpanded(true)}>Se alle</button>}>
+  return <><Module title="Tidslinje" icon="format_list_bulleted" className="ppf-activity-card" loading={loading} action={<button type="button" className="ppf-surface-open" aria-label="Se alle hendelser" onClick={() => setExpanded(true)}><Icon>arrow_outward</Icon></button>}>
     {loading && !events.length ? <Loading rows={3}/> : sorted.length ? <TimelineRows events={sorted.slice(0, 5)}/> : <p className="ppf-since-state">Ingen nye hendelser</p>}
   </Module>{expanded && <TimelineDialog events={sorted} onClose={() => setExpanded(false)}/>}</>;
 }

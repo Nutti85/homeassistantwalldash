@@ -147,6 +147,7 @@ describe('FamilyInboxCard', () => {
     expect(screen.queryByText('Eldre beskjed')).not.toBeInTheDocument();
     fireEvent.click(within(rows[0]).getByRole('button'));
     expect(open).toHaveBeenCalledWith('new');
+    expect(screen.getByRole('button', { name: 'Se alle beskjeder' }).querySelector('.material-symbols-outlined')).toHaveTextContent('arrow_outward');
     fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
     expect(open).toHaveBeenLastCalledWith();
   });
@@ -189,6 +190,7 @@ describe('ActivityTimeline', () => {
     expect(screen.queryByText('Hendelse 0')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Spill av/ })).not.toBeInTheDocument();
     const opener = screen.getByRole('button', { name: 'Se alle hendelser' });
+    expect(opener.querySelector('.material-symbols-outlined')).toHaveTextContent('arrow_outward');
     opener.focus();
     fireEvent.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Tidslinje' });
@@ -205,10 +207,12 @@ describe('ActivityTimeline', () => {
 
   it('only offers playback on matched Frigate rows and never on informational events', () => {
     const { container } = render(<ActivityTimeline events={[event, { ...event, id: 'no-media', title: 'Person registrert', mediaPath: undefined }, events[0]]}/>);
-    expect(screen.queryByRole('button', { name: 'Se alle hendelser' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Se alle hendelser' })).toBeEnabled();
     expect(screen.getAllByRole('button', { name: /Spill av/ })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: /Spill av/ }));
     expect(container.querySelector('video')).toHaveAttribute('src', mediaPath);
+    fireEvent.click(screen.getByRole('button', { name: 'Se alle hendelser' }));
+    expect(screen.getByRole('dialog', { name: 'Tidslinje' })).toBeInTheDocument();
   });
 
   it('distinguishes initial loading from confirmed empty events', () => {
