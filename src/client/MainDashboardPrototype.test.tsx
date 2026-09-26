@@ -109,19 +109,27 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(showWeather).toHaveBeenCalledTimes(1);
   });
 
-  it('permanently shows the configured V1 cameras above weather in the now lane', () => {
+  it('opens both live cameras from the home navigation modal', () => {
     renderPrototype({
       doorbellCamera: state('camera.ringeklokke_fluent', 'idle'),
       courtyardCamera: state('camera.gaardsplass_fluent_lens_0', 'idle'),
     });
 
     const nowLane = screen.getByRole('heading', { name: 'Akkurat nå' }).closest('section')!;
-    const cameraPair = nowLane.querySelector('.ppf-camera-pair');
+    const cameraButton = within(screen.getByRole('navigation', { name: 'Hjemkontroller' })).getByRole('button', { name: 'Kameraer' });
+    expect(nowLane.querySelector('.ppf-camera-pair')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Kameraer' })).not.toBeInTheDocument();
 
-    expect(cameraPair).toBeInTheDocument();
-    expect(within(cameraPair as HTMLElement).getByRole('region', { name: 'Ringeklokke' })).toBeInTheDocument();
-    expect(within(cameraPair as HTMLElement).getByRole('region', { name: 'Gårdsplassen' })).toBeInTheDocument();
-    expect(cameraPair?.nextElementSibling).toHaveClass('ppf-weather-j');
+    fireEvent.click(cameraButton);
+    const dialog = screen.getByRole('dialog', { name: 'Kameraer' });
+    expect(dialog).toHaveClass('ppf-camera-modal');
+    expect(within(dialog).getByRole('region', { name: 'Ringeklokke' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('region', { name: 'Gårdsplassen' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('img', { name: 'Direktevideo fra ringeklokke' })).toHaveAttribute('src', '/api/camera/stream?attempt=0');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lukk' }));
+    expect(screen.queryByRole('dialog', { name: 'Kameraer' })).not.toBeInTheDocument();
+    expect(cameraButton).toHaveFocus();
   });
 
   it('reveals the scene choices from the home navigation and still requires confirmation', () => {

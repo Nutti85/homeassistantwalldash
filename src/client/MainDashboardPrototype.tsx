@@ -23,7 +23,7 @@ const timeLabel = (value?: string) => value && !Number.isNaN(Date.parse(value)) 
 
 type Scenario = 'calm' | 'arrival' | 'doorbell' | 'warning';
 type Period = 'now' | 'later' | 'tomorrow' | 'week';
-type Detail = { title: string; icon: string; body: ReactNode; onComplete?: () => void };
+type Detail = { title: string; icon: string; body: ReactNode; className?: string; onComplete?: () => void };
 type PrototypeProps = {
   states: Record<string, HomeAssistantState>;
   showWeather: () => void;
@@ -246,7 +246,7 @@ function SceneControls({ action, pending = {}, errors = {} }: Pick<PrototypeProp
   })}</div>;
 }
 
-function HomeControlRail(props: PrototypeProps) {
+function HomeControlRail({ openCameras, ...props }: PrototypeProps & { openCameras: (invoker: HTMLButtonElement) => void }) {
   const locked = stateValue(props.states.frontDoorLock) === 'locked';
   const securityOn = Number(stateValue(props.states.securityMode)) > 0;
   const [scenesOpen, setScenesOpen] = useState(false);
@@ -257,6 +257,7 @@ function HomeControlRail(props: PrototypeProps) {
       {scenesOpen && <SceneControls action={props.action} pending={props.pending} errors={props.errors}/>}
     </div>
     {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
+    <button type="button" onClick={(event) => openCameras(event.currentTarget)}><Icon>videocam</Icon><span>Kameraer</span></button>
     <button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button>
     <button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button>
   </nav>;
@@ -269,7 +270,7 @@ function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
 }
 
 function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="ppf-modal" role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className={`ppf-modal ${detail.className ?? ''}`} role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
@@ -319,7 +320,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
     ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
     : <V2WeatherCard states={props.states} onDetails={props.showWeather}/>;
   const agenda = <Agenda {...common} completedHomework={completedHomework} completeHomework={completeHomework} openDeparture={props.openDeparture} departureBriefings={props.departureBriefings}/>;
-  const cameras = <CameraPair states={props.states}/>;
+  const openCameras = (invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: 'Kameraer', icon: 'videocam', className: 'ppf-camera-modal', body: <CameraPair states={props.states}/> }); };
   const arrivalEvidence = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
@@ -330,7 +331,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
   const closeDetail = () => setDetail(undefined);
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
-    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{cameras}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
+    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props} openCameras={openCameras}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={closeDetail}/>}
     {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}
