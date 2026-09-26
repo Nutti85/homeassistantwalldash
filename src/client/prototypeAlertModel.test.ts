@@ -6,6 +6,10 @@ const state = (entity_id: string, value: string, attributes: Record<string, unkn
 const now = new Date('2026-09-16T10:00:00+02:00');
 
 describe('prototypeAlertDescriptors', () => {
+  it('does not show a MET alert for Home Assistant’s no-alert state', () => {
+    expect(prototypeAlertDescriptors({ meteoAlarm: state('sensor.met', 'Ingen varsler') }, 'calm', now)).toHaveLength(0);
+  });
+
   it('derives event-specific MET alerts and filters expired warnings', () => {
     const alerts = prototypeAlertDescriptors({ meteoAlarm: state('sensor.met', 'on', { alerts: [
       { event: 'rainFlood', eventAwarenessName: 'Styrtregn', riskMatrixColor: 'Orange', expires: '2026-09-16T12:00:00+02:00' },

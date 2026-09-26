@@ -237,7 +237,7 @@ export const meteoAlarmEntries = (
   period?: { startAt: string; endAt: string },
   now = new Date(),
 ): MeteoAlert[] => {
-  if (!state || !state.state || ['0', 'ingen farevarsel', 'unavailable', 'unknown'].includes(state.state.trim().toLocaleLowerCase('nb-NO'))) return [];
+  if (!state || !state.state || ['0', 'ingen farevarsel', 'ingen varsler', 'unavailable', 'unknown'].includes(state.state.trim().toLocaleLowerCase('nb-NO'))) return [];
   const alerts = state.attributes.alerts;
   const parsedAlerts = Array.isArray(alerts)
     ? alerts.filter((alert): alert is Record<string, unknown> => typeof alert === 'object' && alert !== null && !Array.isArray(alert)).map((alert) => parseMeteoAlert(alert))
