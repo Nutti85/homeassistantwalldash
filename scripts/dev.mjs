@@ -37,9 +37,26 @@ let backendRestartTimer;
 let backendStableTimer;
 let consecutiveBackendFailures = 0;
 let stopping = false;
+const frontendArguments = process.argv.slice(2);
+const frontendPortArgumentIndex = frontendArguments.findIndex((argument) => argument === '--port' || argument === '-p');
+const frontendPort = frontendPortArgumentIndex >= 0
+  ? frontendArguments[frontendPortArgumentIndex + 1]
+  : frontendArguments.find((argument) => argument.startsWith('--port=') || argument.startsWith('-p='))?.split('=')[1] ?? '5173';
 
 const stopChild = (child) => {
-  if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+
+  // On Windows, killing a Node child with SIGTERM can leave the process (and
+  // its listening socket) behind when the parent exits immediately after it.
+  // Kill the complete process tree so a failed frontend startup cannot leave
+  // a stale backend blocking the next `npm run dev` invocation.
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
+    killer.once('error', () => child.kill('SIGTERM'));
+    return;
+  }
+
+  child.kill('SIGTERM');
 };
 
 const stop = (code = 0) => {
@@ -86,8 +103,12 @@ const startBackend = () => {
 };
 
 startBackend();
-frontend = spawn(node, ['node_modules/vite/bin/vite.js', ...process.argv.slice(2)], {
+frontend = spawn(node, ['node_modules/vite/bin/vite.js', ...frontendArguments], {
   stdio: ['inherit', 'pipe', 'pipe'],
+  env: {
+    ...process.env,
+    ...(frontendPort === '5174' ? { VITE_DASHBOARD_VERSION: 'v2' } : {}),
+  },
 });
 writeLog(`Frontend started (PID ${frontend.pid}).`);
 pipeOutput(frontend.stdout, process.stdout, 'frontend');

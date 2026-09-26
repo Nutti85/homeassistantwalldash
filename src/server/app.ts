@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import express, { type Express, type Request, type Response } from 'express';
 import type { HomeAssistantClient, VacuumAction } from './homeAssistant';
+import type { AirQualityService } from './airQuality';
+import { isActivityMediaId, type ActivityService } from './activity';
 import { lightControlKeys, type DashboardAction, type FanSpeed, type HeatPumpMode, type LightCommand, type LightControlKey } from '../shared/entities';
 
 type DashboardActionResult = Awaited<ReturnType<HomeAssistantClient['execute']>>;
@@ -25,6 +27,16 @@ export interface AiReport {
   title?: string;
   mode?: 'full' | 'morning' | 'midday' | 'afternoon' | 'evening';
   publishedAt: string;
+}
+
+export interface AppServices {
+  activity?: ActivityService;
+  airQuality?: Pick<AirQualityService, 'getCurrent'>;
+  activityUpdates?: { subscribe(listener: () => void): () => void };
+  aiReportSecret?: string;
+  aiReportSourceUrl?: string;
+  aiReportRefreshUrl?: string;
+  aiReportStorePath?: string;
 }
 
 const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
@@ -122,7 +134,61 @@ const proxyCameraStream = async (
   }
 };
 
-export const createApp = (client: DashboardClient, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = ''): Express => {
+const sendActivityError = (response: Response, status: number): void => {
+  response.set('Cache-Control', 'no-store').status(status).json({ error: 'Aktivitet er ikke tilgjengelig' });
+};
+
+const proxyActivityMedia = async (
+  request: Request,
+  response: Response,
+  contentType: 'video/mp4' | 'image/webp',
+  getMedia: (signal: AbortSignal) => Promise<globalThis.Response>,
+): Promise<void> => {
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  const cancel = () => {
+    controller.abort();
+    void reader?.cancel().catch(() => undefined);
+  };
+  request.once('aborted', cancel);
+  response.once('close', cancel);
+  try {
+    const upstream = await getMedia(controller.signal);
+    if (!upstream.ok || !upstream.body || upstream.headers.get('content-type')?.split(';')[0].trim() !== contentType) {
+      await upstream.body?.cancel().catch(() => undefined);
+      throw new Error('Unavailable media');
+    }
+    reader = upstream.body.getReader();
+    if (response.destroyed || controller.signal.aborted) return;
+    // Read before sending headers so an initial upstream failure remains a generic JSON error.
+    let chunk = await reader.read();
+    if (response.destroyed || controller.signal.aborted) return;
+    response.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'private, max-age=30',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    while (!chunk.done && !response.destroyed) {
+      if (!response.write(chunk.value)) await waitForWritable(response);
+      if (response.destroyed) break;
+      chunk = await reader.read();
+    }
+    if (!response.destroyed) response.end();
+  } catch {
+    if (!response.destroyed) {
+      if (!response.headersSent) sendActivityError(response, 502);
+      else response.destroy();
+    }
+  } finally {
+    request.off('aborted', cancel);
+    response.off('close', cancel);
+    controller.abort();
+    await reader?.cancel().catch(() => undefined);
+  }
+};
+
+export const createApp = (client: DashboardClient, services: AppServices = {}): Express => {
+  const { activity, airQuality, activityUpdates, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '' } = services;
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   let aiReport: AiReport | undefined = aiReportStorePath ? loadAiReport(aiReportStorePath) : undefined;
@@ -131,6 +197,52 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
   app.get('/health', (_request: Request, response: Response) => {
     response.json({ status: 'ok' });
   });
+
+  app.get('/api/activity', async (_request: Request, response: Response) => {
+    if (!activity) { sendActivityError(response, 503); return; }
+    try { response.set('Cache-Control', 'no-store').json(await activity.getActivity()); }
+    catch { sendActivityError(response, 502); }
+  });
+
+  app.get('/api/activity/updates', (request: Request, response: Response) => {
+    if (!activityUpdates) { sendActivityError(response, 503); return; }
+    response.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    response.flushHeaders();
+    let closed = false;
+    const unsubscribe = activityUpdates.subscribe(() => {
+      if (!closed && !response.destroyed) response.write('event: activity\ndata: {}\n\n');
+    });
+    const heartbeat = setInterval(() => {
+      if (!closed && !response.destroyed) response.write(': heartbeat\n\n');
+    }, 25_000);
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+    };
+    request.once('close', cleanup);
+    response.once('close', cleanup);
+  });
+
+  for (const { route, method, contentType } of [
+    { route: 'preview', method: 'getReviewMedia', contentType: 'video/mp4' },
+    { route: 'thumbnail', method: 'getReviewThumbnail', contentType: 'image/webp' },
+  ] as const) {
+    app.get(`/api/activity/review/:id/${route}`, async (request: Request, response: Response) => {
+      const id = request.params.id;
+      if (typeof id !== 'string' || !isActivityMediaId(id) || Object.keys(request.query).length > 0) {
+        sendActivityError(response, 400); return;
+      }
+      if (!activity) { sendActivityError(response, 503); return; }
+      await proxyActivityMedia(request, response, contentType, (signal) => activity[method](id, signal));
+    });
+  }
 
   app.post('/api/ai-report', (request: Request, response: Response) => {
     if (!aiReportSecret || request.get('X-AI-Report-Secret') !== aiReportSecret) { response.sendStatus(401); return; }
@@ -205,6 +317,14 @@ export const createApp = (client: DashboardClient, aiReportSecret = '', aiReport
     } catch { response.status(502).json({ error: 'Kunne ikke starte AI-oppdateringen. Prøv igjen.' }); }
   });
 
+  app.get('/api/air-quality', async (_request: Request, response: Response) => {
+    response.set('Cache-Control', 'private, max-age=60');
+    try {
+      response.json(await airQuality?.getCurrent() ?? { value: null });
+    } catch {
+      response.json({ value: null });
+    }
+  });
   app.get('/api/states', async (_request: Request, response: Response) => {
     try {
       response.json(await client.getDashboardStates());

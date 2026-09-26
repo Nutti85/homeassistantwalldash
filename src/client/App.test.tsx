@@ -1,9 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActivityPayload } from '../shared/activity';
 import type { HomeAssistantState } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import App, { type DashboardApi } from './App';
 import { departureBriefingFixturePayload } from './departureBriefingFixtures';
+import { WeatherOverview } from './WeatherOverview';
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown> = {}): HomeAssistantState => ({ entity_id, state: value, attributes });
 const baseStates: Record<string, HomeAssistantState> = {
@@ -18,9 +20,249 @@ const createApi = (overrides: Record<string, HomeAssistantState> = {}): Dashboar
   getStates: vi.fn().mockResolvedValue({ states: { ...baseStates, ...overrides } }), getAiReport: vi.fn().mockResolvedValue({ report: '## Personlig oversikt\n## Vær\n### Kveld · lør. 22.08. · 18:00–24:00\n• Regn i kveld.\n## Kort oppsummert\n• Ta med paraply.\n## Anbefalinger\n• Kle deg varmt.\n## Senere i dag\n• Avtale kl. 17:30.', publishedAt: '2026-08-22T08:00:00.000Z' }), requestAiReportRefresh: vi.fn().mockResolvedValue(undefined), runAction: vi.fn(), runLightCommand: vi.fn().mockResolvedValue({ states: {} }), setTemperature: vi.fn(),
 });
 const selectMode = async (name: 'Gjest' | 'Barn' | 'Full') => { fireEvent.click(await screen.findByRole('button', { name: 'Innstillinger' })); fireEvent.click(await screen.findByRole('tab', { name })); };
-afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); localStorage.clear(); });
+
+describe('V2 activity lifecycle', () => {
+  const payload = (title = 'Døren ble låst'): ActivityPayload => ({
+    generatedAt: '2026-09-12T10:00:00Z',
+    cameraEvents: { status: 'none', groups: [] },
+    awayCapture: { status: 'none' },
+    timeline: [{ id: title, kind: 'lock', occurredAt: '2026-09-12T09:59:00Z', title, tone: 'safe' }],
+  });
+  const activityApi = () => ({ ...createApi(), getActivity: vi.fn<[], Promise<ActivityPayload>>().mockResolvedValue(payload()) });
+  const settle = async () => { await act(async () => { await Promise.resolve(); }); };
+  const advance = async (milliseconds: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); }); };
+  const dispatch = async (target: Window | Document, event: string) => {
+    await act(async () => { target.dispatchEvent(new Event(event)); await Promise.resolve(); });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T10:00:00Z'));
+    vi.stubEnv('VITE_DASHBOARD_VERSION', 'v2');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  });
+
+  it('uses the V2 dashboard at the base URL when no version is configured', async () => {
+    vi.stubEnv('VITE_DASHBOARD_VERSION', '');
+
+    render(<App api={createApi()} />);
+    await settle();
+
+    expect(screen.getByRole('heading', { name: 'SIDEN SIST' })).toBeInTheDocument();
+  });
+
+  it('loads activity independently while confirmed family messages remain usable', async () => {
+    const api = activityApi();
+    let confirm!: (value: ActivityPayload) => void;
+    api.getActivity.mockReturnValue(new Promise((resolve) => { confirm = resolve; }));
+    vi.mocked(api.getStates).mockResolvedValue({ states: { ...baseStates,
+      jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 37', { messages: ['Husk tursekk'] }),
+    } });
+    render(<App api={api}/>);
+    await settle();
+
+    expect(screen.getAllByText('Henter hendelser')).toHaveLength(1);
+    expect(screen.queryByText('Ingen nye hendelser')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Åpne beskjed: Husk tursekk/ }));
+    expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toHaveTextContent('Husk tursekk');
+    await act(async () => { confirm(payload()); });
+    expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+    expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('polls at exactly 30-second intervals while visible', async () => {
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockResolvedValue(payload('Døren ble åpnet'));
+    await advance(29_999);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+    await advance(1);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Døren ble åpnet')).toBeInTheDocument();
+    await advance(30_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(3);
+  });
+
+  it('skips hidden polling and refreshes immediately when visible again', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    visibility.mockReturnValue('hidden');
+    await dispatch(document, 'visibilitychange');
+    await advance(90_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    api.getActivity.mockResolvedValue(payload('Huset er hjemme'));
+    visibility.mockReturnValue('visible');
+    await dispatch(document, 'visibilitychange');
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Huset er hjemme')).toBeInTheDocument();
+  });
+
+  it.each(['focus', 'online'])('refreshes immediately on browser %s', async (event) => {
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockResolvedValue(payload('Ny bekreftet hendelse'));
+    await dispatch(window, event);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Ny bekreftet hendelse')).toBeInTheDocument();
+  });
+
+  it('removes the activity timer while hidden and starts a fresh 30-second interval on return', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    await advance(15_000);
+    const visibleTimers = vi.getTimerCount();
+    visibility.mockReturnValue('hidden');
+    await dispatch(document, 'visibilitychange');
+    expect(vi.getTimerCount()).toBe(visibleTimers - 1);
+    await advance(60_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    await dispatch(document, 'visibilitychange');
+    expect(vi.getTimerCount()).toBe(visibleTimers);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    await advance(29_999);
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+    await advance(1);
+    expect(api.getActivity).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([2, 3])('preserves %i consecutive failures across API replacement until a successful response', async (failures) => {
+    const api = activityApi();
+    const view = render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockRejectedValue(new Error('offline'));
+    await advance(failures * 30_000);
+    const replacement = activityApi();
+    replacement.getActivity.mockRejectedValue(new Error('still offline'));
+    view.rerender(<App api={replacement}/>);
+    await settle();
+    expect(screen.getByText('Hendelsene kan være utdaterte')).toBeInTheDocument();
+    expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+    replacement.getActivity.mockResolvedValueOnce(payload('Oppdatert etter gjenoppretting'));
+    await dispatch(window, 'online');
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+    expect(screen.getByText('Oppdatert etter gjenoppretting')).toBeInTheDocument();
+    await advance(60_000);
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+  });
+
+  it('preserves confirmed activity through failures, warns at three, and resets after success', async () => {
+    const api = activityApi();
+    render(<App api={api}/>);
+    await settle();
+    api.getActivity.mockRejectedValue(new Error('offline'));
+    for (let failure = 1; failure <= 3; failure += 1) {
+      await advance(30_000);
+      expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
+      expect(screen.queryByText('Hendelsene kan være utdaterte') !== null).toBe(failure === 3);
+      expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
+    }
+    api.getActivity.mockResolvedValueOnce(payload('Ny bekreftet hendelse'));
+    await dispatch(window, 'online');
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+    expect(screen.getByText('Ny bekreftet hendelse')).toBeInTheDocument();
+    await advance(60_000);
+    expect(screen.queryByText('Hendelsene kan være utdaterte')).not.toBeInTheDocument();
+    await advance(30_000);
+    expect(screen.getByRole('status')).toHaveTextContent('Hendelsene kan være utdaterte');
+  });
+
+  it('ends initial loading after a failure and keeps Home Assistant controls confirmed', async () => {
+    const api = activityApi();
+    api.getActivity.mockRejectedValue(new Error('offline'));
+    render(<App api={api}/>);
+    await settle();
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
+    expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
+    expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toBeInTheDocument();
+    expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
+  });
+
+  it('coalesces in-flight refreshes and removes polling and event handlers on unmount', async () => {
+    const api = activityApi();
+    let confirm!: (value: ActivityPayload) => void;
+    api.getActivity.mockReturnValue(new Promise((resolve) => { confirm = resolve; }));
+    const view = render(<App api={api}/>);
+    await settle();
+    await dispatch(window, 'focus');
+    await dispatch(window, 'online');
+    await advance(30_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+    view.unmount();
+    await act(async () => { confirm(payload()); });
+    await dispatch(window, 'focus');
+    await dispatch(window, 'online');
+    await dispatch(document, 'visibilitychange');
+    await advance(60_000);
+    expect(api.getActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes once for a burst of camera notifications and disconnects the stream when hidden', async () => {
+    const api = activityApi();
+    let notify!: () => void;
+    const unsubscribe = vi.fn();
+    api.subscribeToActivityUpdates = vi.fn((listener: () => void) => { notify = listener; return unsubscribe; });
+    render(<App api={api}/>);
+    await settle();
+    notify();
+    notify();
+    await settle();
+    expect(api.getActivity).toHaveBeenCalledTimes(2);
+
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await dispatch(document, 'visibilitychange');
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    await dispatch(document, 'visibilitychange');
+    expect(api.subscribeToActivityUpdates).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('redesigned dashboard', () => {
+  it('preserves the V1 weather overview contract as a reusable card', () => {
+    const onDetails = vi.fn();
+    render(<WeatherOverview
+      states={{
+        outdoor: state('sensor.outdoor', '17'),
+        weatherDaily: state('sensor.daily', 'rainy', { temperature: 17, forecast: [] }),
+        weatherHourly: state('sensor.hourly', 'rainy', { forecast: [{ datetime: '2026-09-09T10:00:00Z', temperature: 17, precipitation: 0, wind_speed: 2 }] }),
+        netatmoWindSpeed: state('sensor.wind', '2'),
+        netatmoWindGust: state('sensor.gust', '4'),
+        netatmoWindDirection: state('sensor.direction', 'N'),
+      }}
+      regular
+      onDetails={onDetails}
+    />);
+
+    const card = screen.getByRole('button', { name: 'Åpne detaljert vær' });
+    expect(card).toHaveClass('weather-regular');
+    expect(card.querySelector('.weather-chart')).toBeInTheDocument();
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(onDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the test departure briefing out of V2 builds', async () => {
+    vi.stubEnv('VITE_DASHBOARD_VERSION', 'v2');
+
+    render(<App api={createApi()} />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.queryByText('Avreisebriefing klar')).not.toBeInTheDocument();
+  });
+
   it('shows Calendar first, switches to Jacob plan manually, and rotates after 3 seconds', async () => {
     vi.useFakeTimers();
     render(<App api={createApi({ calendar: state('calendar.family', 'on', { events: [] }), jacobWeeklyPlan: state('sensor.jacob_weekly_plan', 'Uke 35', { summary: 'Prøve på tirsdag.', week_start: '2026-08-24', events: [{ date: '2026-08-25', title: 'Matteprøve' }], reminders: [{ weekday: 'fredag', title: 'Ta med gymtøy' }, { title: 'Bestill skolemelk' }] }) })} />);
@@ -561,7 +803,11 @@ describe('redesigned dashboard', () => {
     expect(screen.getAllByText(/i morgen/)).toHaveLength(2);
     expect(screen.getByText('Nærmeste 8,2 km')).toBeInTheDocument();
     expect(screen.getByText('Bjørk')).toBeInTheDocument();
+    expect(screen.getByText('Or')).toBeInTheDocument();
+    expect(screen.getByText(/Open-Meteo \/ CAMS/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Time for time' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Neste 7 dager' }));
+    expect(await screen.findByText(/Open-Meteo \/ CAMS/)).toBeInTheDocument();
   });
 
   it('shows all weather series together in one accessible graph', async () => {
@@ -624,7 +870,7 @@ describe('redesigned dashboard', () => {
     expect(alerts).toHaveTextContent('Gult nivå');
     expect(alerts.querySelector('.weather-alert-meteoalarm')).toHaveClass('weather-alert-yellow');
     expect(alerts).toHaveClass('weather-alerts-meteoalarm-yellow');
-    expect(alerts.querySelector('.weather-alert-meteoalarm .material-symbols-outlined')).toHaveTextContent('local_fire_department');
+    expect(alerts.querySelector('.weather-alert-meteoalarm .material-symbols-outlined')).toHaveTextContent('forest');
     expect(alerts).toHaveTextContent('Lyn8,2 km');
     expect(alerts).toHaveTextContent('Vindkast11,8 m/s');
     expect(alerts).toHaveTextContent('Nordlys');

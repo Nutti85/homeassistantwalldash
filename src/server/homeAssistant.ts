@@ -1,8 +1,15 @@
 import { type DashboardAction, type DashboardEntityIds, type DashboardStateKey, defaultDashboardEntityIds, guestVoucherCreateButtonEntityId, type FanSpeed, type HeatPumpMode, type HomeAssistantState, type LightCommand, type LightControlKey } from '../shared/entities';
+import { type HomeHistoryPoint } from '../shared/activity';
 
 type DashboardStates = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 type CommandResult = { states: Partial<Record<DashboardStateKey, HomeAssistantState>> };
 export type VacuumAction = 'start' | 'pause' | 'dock' | 'locate' | 'full' | 'gang' | 'kjokken' | 'lounge' | 'stue' | 'morgen' | 'natt' | 'vacMop' | 'kitchenRefill' | 'cleaningMode' | 'mopMode' | 'mopIntensity' | 'volume';
+
+export interface ActivityEntityConfig {
+  doorbellVisitor: string;
+  frigateEvents: string[];
+  securityMode?: string;
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -177,7 +184,72 @@ export class HomeAssistantClient {
     private readonly fetcher: typeof fetch = fetch,
     private readonly entities: DashboardEntityIds = defaultDashboardEntityIds,
     private readonly guestVoucherCreateButtonId: string = guestVoucherCreateButtonEntityId,
+    private readonly activityEntities: ActivityEntityConfig = { doorbellVisitor: '', frigateEvents: [] },
   ) {}
+
+  public async getActivityHistory(start: Date, end: Date, signal?: AbortSignal): Promise<Record<string, HomeHistoryPoint[]>> {
+    try {
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+        throw communicationError();
+      }
+      const entityIds = [...new Set([
+        this.entities.home,
+        this.activityEntities.doorbellVisitor,
+        this.entities.frontDoorLock,
+        this.activityEntities.securityMode,
+        ...this.activityEntities.frigateEvents,
+      ].filter(Boolean))];
+      const query = new URLSearchParams({
+        filter_entity_id: entityIds.join(','),
+        end_time: end.toISOString(),
+        minimal_response: 'true',
+        no_attributes: 'true',
+      });
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/history/period/${start.toISOString()}?${query}`, {
+        method: 'GET',
+        headers: this.headers(),
+        signal,
+      });
+      if (!response.ok) throw communicationError();
+      const payload: unknown = await response.json();
+      if (!Array.isArray(payload)) throw communicationError();
+
+      const allowlisted = new Set(entityIds);
+      const history: Record<string, HomeHistoryPoint[]> = {};
+      for (const series of payload) {
+        if (!Array.isArray(series)) continue;
+        const firstFullRow = series.find((point) => isRecord(point) && typeof point.entity_id === 'string');
+        if (!firstFullRow || typeof firstFullRow.entity_id !== 'string' || !allowlisted.has(firstFullRow.entity_id)) continue;
+        const friendlyName = isRecord(firstFullRow.attributes) && typeof firstFullRow.attributes.friendly_name === 'string'
+          ? firstFullRow.attributes.friendly_name
+          : undefined;
+        const points = series.flatMap((point, index) => {
+          if (
+            !isRecord(point)
+            || ('entity_id' in point && point.entity_id !== firstFullRow.entity_id)
+            || typeof point.state !== 'string'
+            || !point.state.trim()
+            || typeof point.last_changed !== 'string'
+          ) {
+            return [] as HomeHistoryPoint[];
+          }
+          const changedAt = new Date(point.last_changed);
+          if (!Number.isFinite(changedAt.getTime())) return [] as HomeHistoryPoint[];
+          return [{
+            entityId: firstFullRow.entity_id,
+            state: point.state,
+            changedAt: changedAt.toISOString(),
+            ...(index === 0 && changedAt.getTime() <= start.getTime() ? { baseline: true } : {}),
+            ...(friendlyName ? { friendlyName } : {}),
+          }];
+        });
+        if (points.length) history[firstFullRow.entity_id] = points;
+      }
+      return history;
+    } catch {
+      throw communicationError();
+    }
+  }
 
   public async getDashboardStates(): Promise<DashboardStates> {
     const states = {} as Record<DashboardStateKey, HomeAssistantState>;
@@ -640,8 +712,9 @@ export class HomeAssistantClient {
   private async fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
     try {
-      return await this.fetcher(input, { ...init, signal: controller.signal });
+      return await this.fetcher(input, { ...init, signal });
     } finally {
       clearTimeout(timeout);
     }

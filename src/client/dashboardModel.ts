@@ -7,8 +7,10 @@ export const stateValue = (state: HomeAssistantState | undefined): string | unde
   state && !unavailableStates.has(state.state.toLowerCase()) ? state.state : undefined;
 
 const planText = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined;
+const planId = (value: unknown): string | undefined => planText(value) ?? (typeof value === 'number' && Number.isFinite(value) ? String(value) : undefined);
 const planScalar = (value: unknown): string | number | undefined => typeof value === 'string' && value.trim() ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-const planItems = (value: unknown): JacobPlanItem[] => {
+type ParsedPlanItem = JacobPlanItem & Pick<MyKidKindergartenItem, 'id'>;
+const planItems = (value: unknown): ParsedPlanItem[] => {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
@@ -16,12 +18,15 @@ const planItems = (value: unknown): JacobPlanItem[] => {
     const title = planText(row.title ?? row.name ?? row.summary ?? row.message ?? row.description);
     if (!title) return [];
     return [{
+      ...(planId(row.id) ? { id: planId(row.id) } : {}),
       ...(planText(row.date) ? { date: planText(row.date) } : {}),
       ...(planText(row.weekday) ? { weekday: planText(row.weekday) } : {}),
       ...(planText(row.time) ? { time: planText(row.time) } : {}),
+      ...(planText(row.published_at) ? { published_at: planText(row.published_at) } : {}),
       title,
       ...(planText(row.details ?? row.description) ? { details: planText(row.details ?? row.description) } : {}),
       ...(planText(row.subject) ? { subject: planText(row.subject) } : {}),
+      ...(typeof row.include_in_agenda === 'boolean' ? { include_in_agenda: row.include_in_agenda } : {}),
     }];
   });
 };
@@ -45,13 +50,17 @@ export const jacobWeeklyPlan = (state: HomeAssistantState | undefined): JacobWee
   };
 };
 
-const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value).map((item) => ({
-  ...(item.date ? { date: item.date } : {}),
-  ...(item.time ? { time: item.time } : {}),
-  title: item.title,
-  ...(item.details ? { details: item.details } : {}),
-  ...(item.published_at ? { published_at: item.published_at } : {}),
-}));
+const mykidItems = (value: unknown): MyKidKindergartenItem[] => planItems(value).map((item) => {
+  return {
+    ...(item.id ? { id: item.id } : {}),
+    ...(item.date ? { date: item.date } : {}),
+    ...(item.time ? { time: item.time } : {}),
+    title: item.title,
+    ...(item.details ? { details: item.details } : {}),
+    ...(item.published_at ? { published_at: item.published_at } : {}),
+    ...(typeof item.include_in_agenda === 'boolean' ? { include_in_agenda: item.include_in_agenda } : {}),
+  };
+});
 
 export const mykidKindergarten = (state: HomeAssistantState | undefined): MyKidKindergartenSnapshot | undefined => {
   if (!stateValue(state)) return undefined;
@@ -192,7 +201,7 @@ export type AlertSeverity = 'yellow' | 'orange' | 'red';
 export type MeteoAlert = { events: string[]; severity?: AlertSeverity; name: string; description?: string; consequences?: string; instruction?: string; area?: string; response?: string; seriousness?: string; startsAt?: string; endsAt?: string; incidentName?: string; altitude?: string };
 
 export const meteoEventMeta: Record<string, { label: string; icon: string }> = {
-  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'air' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy' }, snow: { label: 'Snø', icon: 'ac_unit' }, blowingSnow: { label: 'Snøfokk', icon: 'ac_unit' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'local_fire_department' }, icing: { label: 'Ising', icon: 'severe_cold' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
+  wind: { label: 'Vindkast', icon: 'air' }, gale: { label: 'Kuling', icon: 'airwave' }, rain: { label: 'Regn', icon: 'rainy' }, rainFlood: { label: 'Styrtregn', icon: 'rainy_heavy' }, snow: { label: 'Snø', icon: 'weather_snowy' }, blowingSnow: { label: 'Snøfokk', icon: 'weather_snowy' }, ice: { label: 'Is / is på vei', icon: 'severe_cold' }, stormSurge: { label: 'Høy vannstand', icon: 'tsunami' }, polarLow: { label: 'Polart lavtrykk', icon: 'cyclone' }, forestFire: { label: 'Skogbrannfare', icon: 'forest' }, icing: { label: 'Ising', icon: 'weather_hail' }, lightning: { label: 'Mye lyn', icon: 'thunderstorm' },
 };
 
 export const meteoAlarmSeverity = (value?: string): AlertSeverity | undefined => {

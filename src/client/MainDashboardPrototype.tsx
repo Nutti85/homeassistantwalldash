@@ -1,10 +1,18 @@
 // PROTOTYPE V3: the selected time-zone direction, with scenario controls in ?scenario=.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { DashboardAction, HomeAssistantState, JacobWeeklyPlanSnapshot, MyKidKindergartenItem, MyKidKindergartenSnapshot } from '../shared/entities';
-import type { DepartureBriefingPayload } from '../shared/departureBriefing';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
+import type { DepartureBriefingPayload, DepartureTripBriefing } from '../shared/departureBriefing';
 import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
 import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
+import { WeatherChart, WeatherOverview } from './WeatherOverview';
+import { V2WeatherCard } from './V2WeatherCard';
+import { CameraCard } from './CameraCard';
+import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
+import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
+import { homeworkId, isHomeworkActive, readCompletedHomework, writeCompletedHomework } from './homeworkAgenda';
+import { SinceLast, type SinceLastProps } from './SinceLast';
+import { prototypeAlertDescriptors, type PrototypeAlertDescriptor } from './prototypeAlertModel';
 
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const numberState = (state?: HomeAssistantState) => { const value = Number(stateValue(state)); return Number.isFinite(value) ? value : undefined; };
@@ -15,7 +23,7 @@ const timeLabel = (value?: string) => value && !Number.isNaN(Date.parse(value)) 
 
 type Scenario = 'calm' | 'arrival' | 'doorbell' | 'warning';
 type Period = 'now' | 'later' | 'tomorrow' | 'week';
-type Detail = { title: string; icon: string; body: ReactNode };
+type Detail = { title: string; icon: string; body: ReactNode; onComplete?: () => void };
 type PrototypeProps = {
   states: Record<string, HomeAssistantState>;
   showWeather: () => void;
@@ -28,7 +36,13 @@ type PrototypeProps = {
   openDeparture: () => void;
   hasDepartureBriefing: boolean;
   departureBriefings?: DepartureBriefingPayload;
+  activity?: SinceLastProps['activity'];
+  activityLoading?: boolean;
+  activityStale?: boolean;
+  refreshActivity?: () => Promise<void>;
   action: (key: DashboardAction) => void;
+  pending?: Record<string, boolean>;
+  errors?: Record<string, string>;
 };
 
 const roomDefinitions: Array<{ id: string; name: string; icon: string; type: ClimateRoomType; values: Array<[string, ClimateMetric, string, string]> }> = [
@@ -48,6 +62,8 @@ function FutureHorizon({ period, setPeriod }: { period: Period; setPeriod: (valu
   return <div className="ppf-future-horizon" role="tablist" aria-label="Velg hvor langt frem kalenderen skal vise">{periods.map(([value, label]) => <button type="button" role="tab" aria-selected={period === value} className={period === value ? 'is-active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}</div>;
 }
 
+// Retained V2 weather-card implementation. Use ?weather-card=v2 to compare it
+// with the temporary V1-card test currently shown by default.
 function WeatherFocus({ states, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'>) {
   const now = new Date();
   const model = buildLiveBriefingViewModel(currentLiveBriefingMode(now), states, now);
@@ -66,15 +82,18 @@ function WeatherFocus({ states, showWeather }: Pick<PrototypeProps, 'states' | '
   </Surface>;
 }
 
-function UrgentStrip({ states, scenario, openDetail }: { states: PrototypeProps['states']; scenario: Scenario; openDetail: (detail: Detail) => void }) {
-  const lightning = numberState(states.lightningDistance);
-  const items = [
-    ...(scenario === 'warning' || (lightning !== undefined && lightning < 15) ? [{ icon: 'thunderstorm', title: 'Lyn i nærheten', text: `${reading(scenario === 'warning' ? 7.4 : lightning, ' km')} til nærmeste registrerte lyn` }] : []),
-    ...(scenario === 'warning' || stateValue(states.frontDoorLock) === 'unlocked' ? [{ icon: 'lock_open', title: 'Ytterdøren er ulåst', text: 'Sist endret for 8 minutter siden' }] : []),
-    ...(scenario === 'warning' ? [{ icon: 'electric_car', title: 'Lading stoppet', text: 'Peugeot · kontroller Zaptec-kabelen' }] : []),
-  ];
-  if (!items.length) return null;
-  return <aside className="ppf-urgent" aria-label="Viktig nå">{items.map((item) => <button type="button" key={item.title} onClick={() => openDetail({ title: item.title, icon: item.icon, body: <p>{item.text}. Dette er en prototype på hvordan varselet kan utvides med kilde, tidspunkt og anbefalt handling.</p> })}><Icon>{item.icon}</Icon><span><strong>{item.title}</strong><small>{item.text}</small></span><Icon>chevron_right</Icon></button>)}</aside>;
+const alertSeverityLabel = (severity?: 'yellow' | 'orange' | 'red') => severity === 'red' ? 'Rødt nivå' : severity === 'orange' ? 'Oransje nivå' : severity === 'yellow' ? 'Gult nivå' : undefined;
+const alertTime = (value?: string) => value && !Number.isNaN(Date.parse(value)) ? new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Oslo' }).format(new Date(value)) : undefined;
+
+function AlertDetails({ alert }: { alert: PrototypeAlertDescriptor }) {
+  if (!alert.meteo) return <><p>{alert.summary}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{alert.source}</dd></div>{alert.value && <div><dt>Nåverdi</dt><dd>{alert.value}</dd></div>}<div><dt>Kontekst</dt><dd>{alert.summary}</dd></div></dl></>;
+  const meteo = alert.meteo;
+  return <div className="ppf-alert-detail"><p>{[alertSeverityLabel(meteo.severity), meteo.area, meteo.seriousness, meteo.response].filter(Boolean).join(' · ')}</p>{meteo.description && <section><h3>Beskrivelse</h3><p>{meteo.description}</p></section>}{meteo.consequences && <section><h3>Konsekvenser</h3><p>{meteo.consequences}</p></section>}{meteo.instruction && <section><h3>Råd</h3><p>{meteo.instruction}</p></section>}<dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{alert.source}</dd></div>{meteo.startsAt && <div><dt>Gjelder fra</dt><dd>{alertTime(meteo.startsAt)}</dd></div>}{meteo.endsAt && <div><dt>Gjelder til</dt><dd>{alertTime(meteo.endsAt)}</dd></div>}{meteo.incidentName && <div><dt>Ekstremvær</dt><dd>{meteo.incidentName}</dd></div>}{meteo.altitude && <div><dt>Høyde</dt><dd>{meteo.altitude}</dd></div>}</dl></div>;
+}
+
+function ActiveAlertIcons({ alerts, openAlert }: { alerts: PrototypeAlertDescriptor[]; openAlert: (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => void }) {
+  if (!alerts.length) return null;
+  return <div className="ppf-alert-icons" aria-label="Aktive varsler">{alerts.map((alert, index) => <button type="button" key={`${alert.kind}-${alert.title}-${index}`} className={`ppf-alert-icon ppf-alert-icon-${alert.kind}`} aria-label={`${alert.title}${alert.value ? `: ${alert.value}` : ''}`} title={`${alert.title}${alert.value ? `: ${alert.value}` : ''}`} onClick={(event) => openAlert(alert, event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); openAlert(alert, event.currentTarget); } }}><Icon>{alert.icon}</Icon></button>)}</div>;
 }
 
 function ArrivalEvidence({ scenario, openDetail }: { scenario: Scenario; openDetail: (detail: Detail) => void }) {
@@ -87,168 +106,90 @@ function ArrivalEvidence({ scenario, openDetail }: { scenario: Scenario; openDet
   </Surface>;
 }
 
-function DeparturePreview({ payload, openDeparture }: { payload?: DepartureBriefingPayload; openDeparture: () => void }) {
-  const trip = payload?.briefings[0];
-  if (!trip) return null;
-  const departure = trip.departureAt ? timeLabel(trip.departureAt) : undefined;
-  return <button type="button" className="ppf-departure-preview" onClick={openDeparture}><span className="ppf-surface-icon"><Icon>route</Icon></span><span><small>Avreisebriefing klar</small><strong>{trip.eventTitle}</strong><em>{departure ? `Dra ca. ${departure}` : 'Åpne for reisetid, bilvalg og vær'}</em></span><Icon>chevron_right</Icon></button>;
+function CameraPair({ states }: { states: PrototypeProps['states'] }) {
+  return <div className="ppf-camera-pair">
+    <CameraCard title="Ringeklokke" available={Boolean(stateValue(states.doorbellCamera))} streamPath="/api/camera/stream"/>
+    <CameraCard title="Gårdsplassen" available={Boolean(stateValue(states.courtyardCamera))} streamPath="/api/courtyard-camera/stream"/>
+  </div>;
 }
 
-type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; briefing?: boolean };
-type FamilyMessageFreshness = 'today' | 'dated' | 'persistent';
-type FamilyMessage = { source: 'Jacob' | 'Nicolai'; title: string; body?: string; date?: string; freshness: FamilyMessageFreshness };
-type FamilySource = FamilyMessage['source'];
-const isMessageLike = (item: { title: string; details?: string }) => /god helg|i dag har vi|vi var |nyhetsbrev|brev|oppslag|referat|ukeplan|informasjon fra/i.test(item.title) || (item.details?.length ?? 0) > 140;
-const osloWeekday = (date: Date): string => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', weekday: 'short' }).format(date);
-const isStaleFamilyItem = (item: { title: string; details?: string; date?: string }, freshness: FamilyMessageFreshness, now: Date): boolean => {
-  const content = `${item.title} ${item.details ?? ''}`;
-  if (/\bgod\s+helg\b/i.test(content) && !['Fri', 'Sat', 'Sun'].includes(osloWeekday(now))) return true;
-  if (freshness === 'today' && item.date && !Number.isNaN(Date.parse(item.date))) return dayKey(new Date(item.date)) !== dayKey(now);
-  if (freshness === 'dated' && item.date && !Number.isNaN(Date.parse(item.date))) return dayKey(new Date(item.date)) < dayKey(now);
-  return false;
-};
-const practicalKindergartenSignals = /\b(?:tur(?:dag)?|utflukt|skitur|ski(?:dag)?|svømm(?:ing)?|foreldremøte|foreldresamtale|planleggingsdag|dugnad|temadag|sommerfest|juleavslutning|avslutning|karneval|teater|konsert|fotografering|overnatting|sovedag|stengt|fridag|husk|ta med|medbring|lever(?:e|ing)?|hent(?:e|ing)?|påmelding|klær|utstyr|sekk|matpakke|regntøy|gummistøvler|badetøy)\b/i;
-const isPracticalKindergartenItem = (item: MyKidKindergartenItem) => practicalKindergartenSignals.test(`${item.title} ${item.details ?? ''}`);
+type AgendaItem = { source: 'Felles' | 'Jacob' | 'Nicolai'; title: string; detail?: string; date: Date; end?: Date; time?: string; allDay?: boolean; departureBriefing?: DepartureTripBriefing; homeworkId?: string };
 const planDate = (date: string, time?: string): Date => {
   if (time && !Number.isNaN(Date.parse(time))) return new Date(time);
   const match = time?.match(/^(\d{1,2}):(\d{2})/);
   return new Date(`${date}T${match ? `${match[1].padStart(2, '0')}:${match[2]}:00` : '12:00:00'}`);
 };
 const planTime = (time?: string): string | undefined => time && !Number.isNaN(Date.parse(time)) ? timeLabel(time) : time;
-function agendaItems(states: PrototypeProps['states'], now: Date): AgendaItem[] {
+const normalizedEventTitle = (value: string): string => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('nb-NO');
+const departureBriefingForEvent = (title: string, start: string, payload?: DepartureBriefingPayload): DepartureTripBriefing | undefined => payload?.briefings.find((briefing) => normalizedEventTitle(briefing.eventTitle) === normalizedEventTitle(title) && Date.parse(briefing.eventStartAt) === Date.parse(start));
+function agendaItems(states: PrototypeProps['states'], now: Date, completedHomework = new Set<string>(), departureBriefings?: DepartureBriefingPayload): AgendaItem[] {
   const calendar = calendarEvents(states.calendar).flatMap((event): AgendaItem[] => {
     if (Number.isNaN(Date.parse(event.start))) return [];
     const end = event.end && !Number.isNaN(Date.parse(event.end)) ? new Date(event.end) : undefined;
-    return [{ source: 'Felles', title: event.title, date: new Date(event.start), end, time: event.allDay ? 'Hele dagen' : timeLabel(event.start), allDay: event.allDay, detail: event.allDay ? 'Felles kalender' : `${timeLabel(event.start)}–${timeLabel(event.end)}`, briefing: /reise|fly|tog|ferie|tur/i.test(event.title) }];
+    return [{ source: 'Felles', title: event.title, date: new Date(event.start), end, time: event.allDay ? 'Hele dagen' : timeLabel(event.start), allDay: event.allDay, detail: event.allDay ? 'Felles kalender' : `${timeLabel(event.start)}–${timeLabel(event.end)}`, departureBriefing: departureBriefingForEvent(event.title, event.start, departureBriefings) }];
   });
   const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
-  const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? []), ...(school?.homework ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const schoolItems = [...(school?.events ?? []), ...(school?.reminders ?? [])].flatMap((item): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const activeHomework = (school?.homework ?? []).flatMap((item): AgendaItem[] => {
+    const id = homeworkId(item);
+    return isHomeworkActive(item, now) && !completedHomework.has(id) ? [{ source: 'Jacob', title: item.title, detail: item.details ?? item.subject, date: new Date(now.getFullYear(), now.getMonth(), now.getDate()), allDay: true, homeworkId: id }] : [];
+  });
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kinderItems = [...(kindergarten?.today ?? []), ...(kindergarten?.events ?? [])].filter(isPracticalKindergartenItem).flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
+  const kinderItems = (kindergarten?.events ?? []).filter((item) => item.include_in_agenda === true).flatMap((item: MyKidKindergartenItem): AgendaItem[] => !item.date || Number.isNaN(Date.parse(item.date)) ? [] : [{ source: 'Nicolai', title: item.title, detail: item.details, date: planDate(item.date, item.time), time: planTime(item.time), allDay: !item.time }]);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const future = [...calendar, ...schoolItems, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
+  const future = [...calendar, ...schoolItems, ...activeHomework, ...kinderItems].filter((item) => item.allDay ? item.date.getTime() >= today.getTime() : (item.end ?? item.date).getTime() >= now.getTime()).sort((a, b) => a.date.getTime() - b.date.getTime() || (a.time ?? '').localeCompare(b.time ?? ''));
   return future.length ? future : [
     { source: 'Jacob', title: 'Gym · husk innesko', detail: 'Ta med gymtøy og drikkeflaske', date: now, time: '10:15' },
     { source: 'Nicolai', title: 'Turdag og varmmat', detail: 'Klær etter været. Mat serveres i barnehagen.', date: new Date(now.getTime() + 86_400_000), time: '09:30' },
-    { source: 'Felles', title: 'Familiebesøk i Oslo', detail: 'Avreise etter frokost', date: new Date(now.getTime() + 2 * 86_400_000), time: '10:00', briefing: true },
+    { source: 'Felles', title: 'Familiebesøk i Oslo', detail: 'Avreise etter frokost', date: new Date(now.getTime() + 2 * 86_400_000), time: '10:00' },
   ];
 }
 
-function familyMessages(states: PrototypeProps['states'], now = new Date()): FamilyMessage[] {
-  const kindergarten = mykidKindergarten(states.mykidKindergarten);
-  const kindergartenMessages = [
-    ...(kindergarten?.noticeboard ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
-    ...(kindergarten?.newsletters ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
-    ...(kindergarten?.weeklyPlans ?? []).map((item) => ({ item, freshness: 'persistent' as const })),
-    ...(kindergarten?.today ?? []).filter(isMessageLike).map((item) => ({ item, freshness: 'today' as const })),
-    ...(kindergarten?.events ?? []).filter(isMessageLike).map((item) => ({ item, freshness: 'dated' as const })),
-  ].map(({ item, freshness }) => ({ source: 'Nicolai' as const, title: item.title, body: item.details, date: item.date ?? item.published_at, freshness }));
-  const school = jacobWeeklyPlan(states.jacobWeeklyPlan);
-  const schoolMessages = (school?.messages ?? []).map((message) => ({ source: 'Jacob' as const, title: message.length > 54 ? `${message.slice(0, 51)}…` : message, body: message, date: school?.source_updated_at, freshness: 'persistent' as const }));
-  const messages = [...new Map([...kindergartenMessages, ...schoolMessages]
-    .map((message) => [`${message.source}:${message.title}:${message.body ?? ''}`, message])).values()]
-    .filter((message) => !isStaleFamilyItem(message, message.freshness, now))
-    .sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
-  return messages;
-}
 
-const weekdayNames = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
-const planWeekNumber = (value: string | undefined): number | undefined => {
-  if (!value || Number.isNaN(Date.parse(value))) return undefined;
-  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
-  const day = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
-};
-const planItemWhen = (item: JacobWeeklyPlanSnapshot['events'][number]): string => {
-  const weekday = item.weekday?.toLocaleLowerCase('nb-NO').match(/søndag|mandag|tirsdag|onsdag|torsdag|fredag|lørdag/)?.[0];
-  if (weekday) return weekday;
-  if (!item.date || Number.isNaN(Date.parse(item.date))) return '';
-  return weekdayNames[new Date(`${item.date}T12:00:00`).getDay()];
-};
-const weekdayOrder = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag'];
-const chronologicalPlanItems = (items: JacobWeeklyPlanSnapshot['events']): JacobWeeklyPlanSnapshot['events'] => [...items].sort((left, right) => {
-  const leftOrder = weekdayOrder.indexOf(planItemWhen(left));
-  const rightOrder = weekdayOrder.indexOf(planItemWhen(right));
-  return (leftOrder === -1 ? weekdayOrder.length : leftOrder) - (rightOrder === -1 ? weekdayOrder.length : rightOrder);
-});
-const localDayKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const mykidDetailSections = (plan: MyKidKindergartenSnapshot, now = new Date()) => {
-  const today = localDayKey(now);
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowKey = localDayKey(tomorrow);
-  const dated = (date: string) => plan.events.filter((item) => item.date?.slice(0, 10) === date);
-  const newsletters = [...plan.newsletters].sort((left, right) => Date.parse(right.published_at ?? right.date ?? '') - Date.parse(left.published_at ?? left.date ?? ''));
-  return {
-    today: [...plan.today.filter((item) => !isStaleFamilyItem(item, 'today', now)), ...dated(today)].filter((item, index, items) => items.findIndex((candidate) => `${candidate.date ?? ''}-${candidate.title}` === `${item.date ?? ''}-${item.title}`) === index),
-    tomorrow: dated(tomorrowKey),
-    upcoming: plan.events.filter((item) => item.date?.slice(0, 10) !== today && item.date?.slice(0, 10) !== tomorrowKey),
-    newsletters,
-  };
-};
-
-function FamilyDetailBody({ source, states }: { source: FamilySource; states: PrototypeProps['states'] }) {
-  const plan = source === 'Jacob' ? jacobWeeklyPlan(states.jacobWeeklyPlan) : mykidKindergarten(states.mykidKindergarten);
-  if (!plan) return <p className="ppf-family-detail-empty">Ingen {source === 'Jacob' ? 'skoleplan' : 'MyKid-informasjon'} er tilgjengelig ennå.</p>;
-
-  const renderJacobItems = (items: JacobWeeklyPlanSnapshot['events']) => items.length ? <ul className="ppf-family-detail-list">{chronologicalPlanItems(items).map((item, index) => <li key={`${item.date ?? item.weekday ?? 'item'}-${item.title}-${index}`}><span>{item.subject ?? planItemWhen(item)}</span><strong>{item.title}</strong>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen oppføringer.</p>;
-  const renderMyKidItems = (items: MyKidKindergartenSnapshot['events']) => items.length ? <ul className="ppf-family-detail-list">{items.map((item, index) => <li key={`${item.date ?? 'item'}-${item.title}-${index}`}><span>{item.date ?? item.time ?? ''}</span><strong>{item.title}</strong>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen oppføringer.</p>;
-
-  if (source === 'Jacob') {
-    const jacob = plan as JacobWeeklyPlanSnapshot;
-    return <div className="ppf-family-detail-body">{jacob.summary && <p className="ppf-family-detail-summary">{jacob.summary}</p>}<section><h3>Skoledager</h3>{jacob.school_schedule.length ? <ul className="ppf-family-detail-schedule">{jacob.school_schedule.map((item, index) => <li key={`${item.title}-${index}`}><strong>{weekdayNames[index + 1] ?? `Dag ${index + 1}`}</strong><span>{item.time ?? item.title}</span>{item.details && <p>{item.details}</p>}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen timeplan.</p>}</section><section><h3>Hendelser</h3>{renderJacobItems(jacob.events)}</section><section><h3>Påminnelser</h3>{renderJacobItems(jacob.reminders)}</section><section><h3>Lekser</h3>{renderJacobItems(jacob.homework)}</section><section><h3>Temaer</h3>{jacob.topics.length ? <ul className="ppf-family-detail-notes">{jacob.topics.map((topic, index) => <li key={`${topic}-${index}`}>{topic}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen temaer.</p>}</section><section><h3>Meldinger til hjemmet</h3>{jacob.messages.length ? <ul className="ppf-family-detail-notes">{jacob.messages.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul> : <p className="ppf-family-detail-empty">Ingen meldinger.</p>}</section></div>;
-  }
-
-  const mykid = plan as MyKidKindergartenSnapshot;
-  const sections = mykidDetailSections(mykid);
-  return <div className="ppf-family-detail-body">{mykid.summary && <p className="ppf-family-detail-summary">{mykid.summary}</p>}<section><h3>I dag</h3>{renderMyKidItems(sections.today)}</section><section><h3>I morgen</h3>{renderMyKidItems(sections.tomorrow)}</section><section><h3>Oppslagstavle</h3>{renderMyKidItems(mykid.noticeboard)}</section><section><h3>Siste nyhetsbrev</h3>{renderMyKidItems(sections.newsletters)}</section><section><h3>Kommende hendelser</h3>{renderMyKidItems(sections.upcoming)}</section><section><h3>Ukeplaner</h3>{renderMyKidItems(mykid.weeklyPlans)}</section><section><h3>Bursdager</h3>{renderMyKidItems(mykid.birthdays)}</section></div>;
-}
-
-const familyDetailTitle = (source: FamilySource, states: PrototypeProps['states']): string => {
-  if (source === 'Nicolai') return 'MyKid · full oversikt';
-  const plan = jacobWeeklyPlan(states.jacobWeeklyPlan);
-  const firstDatedItem = plan && [...plan.events, ...plan.reminders, ...plan.homework].find((item) => item.date)?.date;
-  const week = planWeekNumber(plan?.week_start ?? firstDatedItem);
-  return week === undefined ? 'Jacobs skoleplan' : `Jacobs skoleplan – uke ${week}`;
-};
-
-function ScrollingMessageText({ children }: { children: string }) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const [overflows, setOverflows] = useState(false);
-
-  useEffect(() => {
-    const node = textRef.current;
-    if (!node) return;
-    const update = () => setOverflows(node.scrollWidth > node.clientWidth);
-    update();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [children]);
-
-  return <span ref={textRef} className={`ppf-message-marquee${overflows ? ' is-overflowing' : ''}`}>{overflows ? <span className="ppf-message-marquee-track"><span>{children}</span><span aria-hidden="true">{children}</span></span> : <span>{children}</span>}</span>;
-}
-
-function MessagesArea({ states, openDetail }: { states: PrototypeProps['states']; openDetail: (detail: Detail) => void }) {
-  const messages = familyMessages(states);
-  const sources: Array<{ source: FamilySource; icon: string }> = [{ source: 'Jacob', icon: 'school' }, { source: 'Nicolai', icon: 'child_care' }];
-  const openFamilyDetail = (source: FamilySource, icon: string) => openDetail({ title: familyDetailTitle(source, states), icon, body: <FamilyDetailBody source={source} states={states}/> });
-  const renderMessage = (message: FamilyMessage, index: number) => <button type="button" key={`${message.source}-${message.title}-${index}`} onClick={() => openDetail({ title: message.title, icon: message.source === 'Jacob' ? 'school' : 'child_care', body: <><p>{message.body ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Gjelder</dt><dd>{message.source}</dd></div><div><dt>Mottatt</dt><dd>{message.date ? dayLabel(new Date(message.date), new Date()) : 'Nylig'}</dd></div></dl></> })}><span className="ppf-message-copy"><strong><ScrollingMessageText>{message.title}</ScrollingMessageText></strong><small><ScrollingMessageText>{message.body ?? 'Trykk for å lese hele beskjeden'}</ScrollingMessageText></small></span><Icon>chevron_right</Icon></button>;
-  return <Surface icon="mark_email_unread" eyebrow="Brev og oppdateringer" title="Nye beskjeder" className="ppf-messages"><div className="ppf-message-sections">{sources.map(({ source, icon }) => { const sourceMessages = messages.filter((message) => message.source === source).slice(0, 3); return <section key={source} className="ppf-message-section" aria-label={`${source} beskjeder`}><h3 className="ppf-message-section-heading"><button type="button" aria-label={`Åpne full oversikt for ${source}`} onClick={() => openFamilyDetail(source, icon)}><span className={`ppf-source ppf-source-${source.toLowerCase()}`}>{source}</span><Icon>arrow_outward</Icon></button></h3>{sourceMessages.length ? <div className="ppf-message-list">{sourceMessages.map(renderMessage)}</div> : <p className="ppf-message-empty">Ingen beskjeder</p>}</section>; })}</div></Surface>;
-}
-
-function Agenda({ states, period, openDetail, openDeparture, hasDepartureBriefing }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'hasDepartureBriefing'> & { period: Period; openDetail: (detail: Detail) => void }) {
+function Agenda({ states, period, openDetail, openDeparture, departureBriefings, completedHomework, completeHomework }: Pick<PrototypeProps, 'states' | 'openDeparture' | 'departureBriefings'> & { period: Period; openDetail: (detail: Detail) => void; completedHomework: Set<string>; completeHomework: (id: string) => void }) {
   const now = new Date();
-  const items = agendaItems(states, now);
-  const filtered = items.filter((item) => period === 'now' || period === 'later' ? dayKey(item.date) === dayKey(now) : period === 'tomorrow' ? dayKey(item.date) === dayKey(new Date(now.getTime() + 86_400_000)) : item.date.getTime() < now.getTime() + 7 * 86_400_000);
-  const visible = filtered.slice(0, period === 'week' ? 1 : 2);
+  const items = agendaItems(states, now, completedHomework, departureBriefings);
+  const tomorrow = new Date(now.getTime() + 86_400_000);
+  const todayItems = items.filter((item) => dayKey(item.date) === dayKey(now));
+  const usesTomorrowFallback = period === 'later' && todayItems.length === 0;
+  const filtered = usesTomorrowFallback
+    ? items.filter((item) => dayKey(item.date) === dayKey(tomorrow))
+    : items.filter((item) => period === 'now' || period === 'later' ? dayKey(item.date) === dayKey(now) : period === 'tomorrow' ? dayKey(item.date) === dayKey(tomorrow) : item.date.getTime() < now.getTime() + 7 * 86_400_000);
+  const visible = filtered.slice(0, 5);
   const grouped = Object.entries(visible.reduce<Record<string, AgendaItem[]>>((days, item) => { (days[dayKey(item.date)] ??= []).push(item); return days; }, {}));
-  const openAll = () => openDetail({ title: period === 'week' ? 'Dette skjer de neste 7 dagene' : period === 'tomorrow' ? 'Dette skjer i morgen' : 'Dette skjer resten av dagen', icon: 'calendar_month', body: <div className="ppf-agenda-modal-list">{filtered.map((item, index) => <div key={`${item.source}-${item.title}-${index}`}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><small>{dayLabel(item.date, now)} · {item.time || 'Hele dagen'}</small><strong>{item.title}</strong>{item.detail && <p>{item.detail}</p>}</span></div>)}</div> });
-  return <Surface icon="calendar_month" eyebrow="Neste" title={period === 'week' ? 'Dette skjer denne uken' : 'Det familien må vite'} className="ppf-agenda">
-    <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => item.briefing && hasDepartureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{(item.briefing || (hasDepartureBriefing && /reise|tur/i.test(item.title))) && <em title="Reisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}{filtered.length > visible.length && <button type="button" className="ppf-agenda-more" onClick={openAll}>+{filtered.length - visible.length} flere <Icon>arrow_outward</Icon></button>}</div>
+  const agendaDetailTitle = period === 'week' ? 'Dette skjer de neste 7 dagene' : period === 'tomorrow' || usesTomorrowFallback ? 'Dette skjer i morgen' : 'Dette skjer resten av dagen';
+  const openAll = () => openDetail({ title: agendaDetailTitle, icon: 'calendar_month', body: <div className="ppf-agenda-modal-list">{filtered.map((item, index) => <div key={`${item.source}-${item.title}-${index}`}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><small>{dayLabel(item.date, now)} · {item.time || 'Hele dagen'}</small><strong>{item.title}</strong>{item.detail && <p>{item.detail}</p>}</span></div>)}</div> });
+  const openAgendaItem = (item: AgendaItem) => item.departureBriefing ? openDeparture() : openDetail({ title: item.title, icon: item.source === 'Jacob' ? 'school' : item.source === 'Nicolai' ? 'child_care' : 'event', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{item.source}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></>, ...(item.homeworkId ? { onComplete: () => completeHomework(item.homeworkId!) } : {}) });
+  return <Surface icon="calendar_month" title="Hendelser" className="ppf-agenda">
+    <div className="ppf-agenda-days">{grouped.length ? grouped.map(([key, dayItems]) => <section key={key}><h3>{dayLabel(dayItems![0].date, now)}</h3><div>{dayItems!.map((item, index) => <button type="button" key={`${item.source}-${item.title}-${index}`} onClick={() => openAgendaItem(item)}><span className={`ppf-source ppf-source-${item.source.toLowerCase()}`}>{item.source}</span><span><b>{item.time || 'Hele dagen'}</b><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{item.departureBriefing && <em title="Avreisebriefing tilgjengelig"><Icon>route</Icon></em>}<Icon>chevron_right</Icon></button>)}</div></section>) : <p className="ppf-empty">Ingenting planlagt i denne perioden.</p>}{filtered.length > visible.length && <button type="button" className="ppf-agenda-more" onClick={openAll}>+{filtered.length - visible.length} flere <Icon>arrow_outward</Icon></button>}</div>
+  </Surface>;
+}
+
+function ForwardWeather({ states, showWeather }: Pick<PrototypeProps, 'states' | 'showWeather'>) {
+  const now = new Date();
+  const points = forecastPoints(states.weatherHourly).filter((point) => new Date(point.datetime).getTime() >= now.getTime()).slice(0, 6);
+  return <Surface icon="ssid_chart" title="Vær fremover" className="ppf-weather-forward" onClick={showWeather}>
+    {points.length ? <div className="ppf-forward-chart"><WeatherChart points={points} compact/></div> : <p className="ppf-forward-empty">Værprognose ikke tilgjengelig</p>}
+  </Surface>;
+}
+
+type TodayTask = { title: string; detail?: string; time?: string; completed?: boolean };
+const fallbackTodayTasks: TodayTask[] = [
+  { title: 'Handle mat', detail: 'Kiwi', time: '13:00–14:00', completed: true },
+  { title: 'Rydde entré', time: '09:00–10:00', completed: true },
+  { title: 'Vanne planter', detail: 'Stue og terrasse', time: '19:00–19:30' },
+];
+
+function TodayModule({ states, openDetail }: Pick<PrototypeProps, 'states'> & { openDetail: (detail: Detail) => void }) {
+  const now = new Date();
+  const kindergarten = mykidKindergarten(states.mykidKindergarten);
+  const liveTasks = (kindergarten?.today ?? [])
+    .filter((item) => !item.date || dayKey(new Date(item.date)) === dayKey(now))
+    .slice(0, 4)
+    .map((item): TodayTask => ({ title: item.title, detail: item.details, time: planTime(item.time) }));
+  const items = liveTasks.length ? liveTasks : fallbackTodayTasks;
+  return <Surface icon="checklist" title="I dag" className="ppf-today">
+    <div className="ppf-today-list">{items.map((item, index) => <button type="button" className={`ppf-today-item${item.completed ? ' is-complete' : ''}`} key={item.title + '-' + index} onClick={() => openDetail({ title: item.title, icon: 'checklist', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{kindergarten && liveTasks.length ? 'Nicolai' : 'Hjemmeoppgave'}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className="ppf-today-check" aria-hidden="true"><Icon filled={item.completed}>{item.completed ? 'check_circle' : 'radio_button_unchecked'}</Icon></span><span><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{item.time && <time>{item.time}</time>}<Icon>chevron_right</Icon></button>)}</div>
   </Surface>;
 }
 
@@ -267,7 +208,7 @@ function RoomExceptions({ states, openDetail }: { states: PrototypeProps['states
   });
   const visible = rooms.length ? rooms : [{ ...roomDefinitions[2], readings: [{ label: 'CO₂', metric: 'co2' as const, value: 1180, unit: ' ppm', status: 'high_warning' as const }], exceptions: [{ label: 'CO₂', metric: 'co2' as const, value: 1180, unit: ' ppm', status: 'high_warning' as const }] }];
   const roomSummary = <div className="ppf-room-summary">{visible.map((room) => <section key={room.id}><h3><Icon>{room.icon}</Icon>{room.name}</h3><div className="ppf-room-details">{room.readings.map((item) => <span key={item.label}><small>{item.label}</small><b>{reading(item.value, item.unit)}</b></span>)}</div></section>)}</div>;
-  return <Surface icon="home_health" eyebrow="Avvik først" title="Rom som trenger oppmerksomhet" className="ppf-rooms" headerAction={() => openDetail({ title: 'Rom som trenger oppmerksomhet', icon: 'home_health', body: roomSummary })}><div className="ppf-room-list">{visible.slice(0, 3).map((room) => <button type="button" key={room.id} onClick={() => openDetail({ title: room.name, icon: room.icon, body: <div className="ppf-room-details">{room.readings.map((item) => <span key={item.label}><small>{item.label}</small><b>{reading(item.value, item.unit)}</b></span>)}</div> })}><Icon>{room.icon}</Icon><span><strong>{room.name}</strong><small>{room.exceptions.map((item) => `${item.label} ${reading(item.value, item.unit)}`).join(' · ')}</small></span><i/><Icon>chevron_right</Icon></button>)}</div></Surface>;
+  return <Surface icon="home_health" title="Rom som trenger oppmerksomhet" className="ppf-rooms" headerAction={() => openDetail({ title: 'Rom som trenger oppmerksomhet', icon: 'home_health', body: roomSummary })}><div className="ppf-room-list">{visible.slice(0, 3).map((room) => <button type="button" key={room.id} onClick={() => openDetail({ title: room.name, icon: room.icon, body: <div className="ppf-room-details">{room.readings.map((item) => <span key={item.label}><small>{item.label}</small><b>{reading(item.value, item.unit)}</b></span>)}</div> })}><Icon>{room.icon}</Icon><span><strong>{room.name}</strong><small>{room.exceptions.map((item) => `${item.label} ${reading(item.value, item.unit)}`).join(' · ')}</small></span><i/><Icon>chevron_right</Icon></button>)}</div></Surface>;
 }
 
 function ContextNudges({ states, openVehicles, openDetail }: Pick<PrototypeProps, 'states' | 'openVehicles'> & { openDetail: (detail: Detail) => void }) {
@@ -279,49 +220,120 @@ function ContextNudges({ states, openVehicles, openDetail }: Pick<PrototypeProps
   return <div className="ppf-nudges">{workdayMorning && <button type="button" onClick={openVehicles}><Icon>route</Icon><span><small>Til jobb nå</small><b>{reading(numberState(states.andreasTravelTime), ' min')}</b></span></button>}{low && <button type="button" className="is-warning" onClick={openVehicles}><Icon>battery_alert</Icon><span><small>{low.name}</small><b>{reading(low.value, ' %')}</b></span></button>}<button type="button" onClick={() => openDetail({ title: 'Strøm akkurat nå', icon: 'bolt', body: <><p>Huset bruker {reading(power === undefined ? undefined : power / 1000, ' kW')} akkurat nå. Strømprisen er {reading(price, ' kr/kWh')}.</p><dl className="ppf-detail-list"><div><dt>Effekt nå</dt><dd>{reading(power === undefined ? undefined : power / 1000, ' kW')}</dd></div><div><dt>Pris</dt><dd>{reading(price, ' kr/kWh')}</dd></div></dl></> })}><Icon>bolt</Icon><span><small>{price !== undefined && price < .8 ? 'Fint tidspunkt å bruke strøm' : 'Strøm akkurat nå'}</small><b>{reading(power === undefined ? undefined : power / 1000, ' kW')} · {reading(price, ' kr')}</b></span><Icon>arrow_outward</Icon></button></div>;
 }
 
-function BottomControls(props: PrototypeProps) {
+const sceneMeta = { morning: ['sunny', 'Morgen'], evening: ['wb_twilight', 'Kveld'], night: ['bedtime', 'Natt'] } as const;
+
+function SceneControls({ action, pending = {}, errors = {} }: Pick<PrototypeProps, 'action'> & Pick<PrototypeProps, 'pending' | 'errors'>) {
+  const [selected, setSelected] = useState<keyof typeof sceneMeta>();
+  const sceneControlsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+    const dismiss = (event: PointerEvent) => { if (!sceneControlsRef.current?.contains(event.target as Node)) setSelected(undefined); };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, [selected]);
+
+  return <div ref={sceneControlsRef} id="ppf-scenes-panel" className="ppf-scene-controls ppf-scene-reveal" role="group" aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => {
+    const sceneKey = key as keyof typeof sceneMeta;
+    const open = selected === sceneKey;
+    return <div className={`scene-action${open ? ' confirm-open' : ''}`} key={key}>
+      <button type="button" className={`scene ${key}`} disabled={pending[key]} aria-expanded={open} onClick={() => setSelected(open ? undefined : sceneKey)}><Icon filled>{icon}</Icon><span>{label}</span></button>
+      <div className="scene-confirm-wrap" aria-hidden={!open}>
+        <button type="button" className="scene-confirm" aria-label={`Bekreft ${label}`} tabIndex={open ? 0 : -1} disabled={pending[key]} onClick={() => { setSelected(undefined); action(sceneKey); }}>Bekreft</button>
+      </div>
+      {errors[key] && <small role="alert">{errors[key]}</small>}
+    </div>;
+  })}</div>;
+}
+
+function HomeControlRail(props: PrototypeProps) {
   const locked = stateValue(props.states.frontDoorLock) === 'locked';
   const securityOn = Number(stateValue(props.states.securityMode)) > 0;
+  const [scenesOpen, setScenesOpen] = useState(false);
   const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi]];
-  return <nav className="ppf-bottom-controls" aria-label="Hjemkontroller"><div className="ppf-home-controls">{controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}</div><div className="ppf-safety-controls" aria-label="Sikkerhet"><button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button><button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button></div></nav>;
+  return <nav className="ppf-home-controls ppf-home-control-rail" aria-label="Hjemkontroller">
+    <div className="ppf-scenes-menu">
+      <button type="button" className="ppf-scenes-toggle" aria-expanded={scenesOpen} aria-controls="ppf-scenes-panel" onClick={() => setScenesOpen((open) => !open)}><Icon>wb_twilight</Icon><span>Scener</span></button>
+      {scenesOpen && <SceneControls action={props.action} pending={props.pending} errors={props.errors}/>}
+    </div>
+    {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
+    <button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button>
+    <button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button>
+  </nav>;
 }
 
 function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
   const scenarios: Scenario[] = ['calm', 'arrival', 'doorbell', 'warning'];
-  const update = (nextScenario: Scenario) => { const params = new URLSearchParams(window.location.search); params.set('variant', 'C'); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
+  const update = (nextScenario: Scenario) => { const params = new URLSearchParams(window.location.search); params.set('scenario', nextScenario); window.history.replaceState({}, '', `${window.location.pathname}?${params}`); window.dispatchEvent(new PopStateEvent('popstate')); };
   return <aside className="ppf-prototype-switcher" aria-label="Prototypescenario"><span><small>Prototype v3</small><b>C · Tidssoner</b></span><select aria-label="Vis dynamisk tilstand" value={scenario} onChange={(event) => update(event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Kameraer utløst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
 }
 
 function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="ppf-modal" role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}</div></section></div>;
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="ppf-modal" role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
-  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: import.meta.env.DEV || params.has('scenario') }; };
+  const readQuery = () => { const params = new URLSearchParams(window.location.search); return { scenario: (['calm', 'arrival', 'doorbell', 'warning'].includes(params.get('scenario') ?? '') ? params.get('scenario') : 'calm') as Scenario, showScenarioControls: params.has('scenario'), weatherCard: params.get('weather-card') === 'v2' ? 'v2' as const : 'v1' as const }; };
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
+  const [completedHomework, setCompletedHomework] = useState(() => new Set(readCompletedHomework()));
+  const [receipts, setReceipts] = useState(() => readFamilyReceipts());
+  const [familyOpen, setFamilyOpen] = useState(false);
+  const [familyTab, setFamilyTab] = useState<FamilyInboxTab>('messages');
+  const [messageFilter, setMessageFilter] = useState<FamilyMessageFilter>('unread');
+  const [selectedMessageId, setSelectedMessageId] = useState<string>();
+  const detailInvoker = useRef<HTMLElement>();
+  const familyInvoker = useRef<HTMLElement>();
+  const familyFallback = useRef<HTMLDivElement>(null);
+  const messages = familyMessages(props.states);
+  const openFamily = (id?: string) => {
+    familyInvoker.current = document.activeElement instanceof HTMLElement && familyFallback.current?.contains(document.activeElement)
+      ? document.activeElement : familyFallback.current?.querySelector<HTMLButtonElement>('[aria-label="Se alle beskjeder"]') ?? undefined;
+    setFamilyTab('messages'); setMessageFilter('unread'); setSelectedMessageId(id); setFamilyOpen(true);
+  };
+  // A read message can disappear from the card while its modal is open.
+  // Restore focus to the durable inbox opener if that original row is gone.
+  useEffect(() => {
+    if (!familyOpen && familyInvoker.current) {
+      const target = familyInvoker.current.isConnected ? familyInvoker.current : familyFallback.current?.querySelector<HTMLButtonElement>('[aria-label="Se alle beskjeder"]');
+      target?.focus(); familyInvoker.current = undefined;
+    }
+  }, [familyOpen]);
+  useEffect(() => {
+    if (!detail && detailInvoker.current) {
+      const target = detailInvoker.current;
+      detailInvoker.current = undefined;
+      if (target.isConnected) target.focus();
+    }
+  }, [detail]);
   const [doorbellOpen, setDoorbellOpen] = useState(query.scenario === 'doorbell');
   useEffect(() => { document.documentElement.classList.add('prototype-active'); document.body.classList.add('prototype-active'); const sync = () => setQuery(readQuery()); window.addEventListener('popstate', sync); return () => { document.documentElement.classList.remove('prototype-active'); document.body.classList.remove('prototype-active'); window.removeEventListener('popstate', sync); }; }, []);
   useEffect(() => setDoorbellOpen(query.scenario === 'doorbell'), [query.scenario]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setDetail(undefined); setDoorbellOpen(false); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
-  const now = useMemo(() => new Date(), [period]);
-  const isWorkday = now.getDay() >= 1 && now.getDay() <= 5;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
+  const completeHomework = (id: string) => setCompletedHomework((current) => new Set(writeCompletedHomework([...current, id])));
   const common = { states: props.states, period, openDetail: setDetail };
-  const header = <header className="ppf-v3-header"><div className="ppf-v3-brand"><span><Icon filled>auto_awesome</Icon></span><div><small>Klara AI</small><strong>Hjemmeoversikt</strong></div></div><time><b>{now.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}</b><span>{now.toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long' })}</span></time><div className="ppf-v3-day"><i/><span><small>I dag</small><strong>{isWorkday ? 'Arbeidsdag' : 'Fridag'}</strong></span></div></header>;
-  const weather = <WeatherFocus states={props.states} showWeather={props.showWeather}/>;
-  const agenda = <Agenda {...common} openDeparture={props.openDeparture} hasDepartureBriefing={props.hasDepartureBriefing}/>;
-  const cameras = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
+  const weather = query.weatherCard === 'v2'
+    ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
+    : <V2WeatherCard states={props.states} onDetails={props.showWeather}/>;
+  const agenda = <Agenda {...common} completedHomework={completedHomework} completeHomework={completeHomework} openDeparture={props.openDeparture} departureBriefings={props.departureBriefings}/>;
+  const cameras = <CameraPair states={props.states}/>;
+  const arrivalEvidence = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
+  const forwardWeather = <ForwardWeather states={props.states} showWeather={props.showWeather}/>;
+  const today = <TodayModule states={props.states} openDetail={setDetail}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
-  const messages = <MessagesArea states={props.states} openDetail={setDetail}/>;
+  const alerts = prototypeAlertDescriptors(props.states, query.scenario, now);
+  const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
+  const closeDetail = () => setDetail(undefined);
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
-    <UrgentStrip states={props.states} scenario={query.scenario} openDetail={setDetail}/>
-    <div className="ppf-c-head">{header}</div><div className="ppf-c-zones"><section className="ppf-zone ppf-zone-past"><h2><Icon>history</Icon>Det som har skjedd</h2>{messages}</section><section className="ppf-zone ppf-zone-now"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2>{cameras}{weather}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div><DeparturePreview payload={props.departureBriefings} openDeparture={props.openDeparture}/>{agenda}{prepare}</section></div>
-    <BottomControls {...props}/>
+    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{cameras}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
-    {detail && <DetailModal detail={detail} close={() => setDetail(undefined)}/>} 
+    {detail && <DetailModal detail={detail} close={closeDetail}/>}
+    {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}
     {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
   </div>;
 }

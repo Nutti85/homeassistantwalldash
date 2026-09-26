@@ -17,6 +17,8 @@ describe('formatJacobWeeklyPlan', () => {
     };
 
     const result = formatJacobWeeklyPlan(input);
+    expect(result).toBeDefined();
+    if (!result) throw new Error('Expected a formatted weekly plan');
 
     expect(result.state).toBe('Uke 35');
     expect(result.attributes).toMatchObject({
@@ -31,10 +33,7 @@ describe('formatJacobWeeklyPlan', () => {
     expect(result.attributes.school_schedule).toEqual([{ weekday: 'mandag', time: '08:30–14:00', title: 'Skole' }]);
   });
 
-  it('publishes a safe empty snapshot when no plan rows are available', () => {
-    expect(formatJacobWeeklyPlan({})).toEqual({
-      state: 'Ukjent',
-      attributes: { summary: '', events: [], reminders: [], homework: [], school_schedule: [], topics: [], messages: [] },
-    });
+  it('does not publish when no processed plan is available', () => {
+    expect(formatJacobWeeklyPlan({})).toBeUndefined();
   });
 });

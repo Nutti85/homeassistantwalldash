@@ -65,7 +65,7 @@
     "Load latest Jacob plan": {"main": [[{"node": "Format Jacob plan", "type": "main", "index": 0}]]},
     "Format Jacob plan": {"main": [[{"node": "Publish to Home Assistant", "type": "main", "index": 0}]]}
   },
-  "active": false,
+  "active": true,
   "settings": {"executionOrder": "v1"},
   "versionId": "jacob-weekly-plan-publish-v1",
   "meta": {"templateCredsSetupCompleted": false},
