@@ -516,8 +516,39 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(forecastCells[5]).toHaveTextContent('6 m/s');
     expect(forecastCells[6]).toHaveTextContent('30 %');
     const today = future.querySelector('.ppf-today') as HTMLElement;
-    expect(within(today).getByRole('heading', { name: 'Oppgaver' })).toBeInTheDocument();
+    expect(within(today).getByRole('heading', { name: 'Oppgaver · 1' })).toBeInTheDocument();
     expect(within(today).getByText('Handle mat')).toBeInTheDocument();
+  });
+
+  it('shows all tasks under Alle and only maintenance tasks under Drift', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-20T10:00:00+02:00'));
+    const summaries = ['Bytt batteri: Stue', 'Bytt batteri: Gang', 'Bytt batteri: Bad', 'Bytt batteri: Soverom'];
+    const maintenance: MaintenanceResponse = {
+      observedAt: '2026-09-20T08:00:00Z', checkedAt: '2026-09-20T08:00:00Z', sourceAvailable: true,
+      tasks: summaries.map((summary, index) => ({ id: `battery-${index}`, kind: 'replace_battery', summary, description: 'Lavt batteri', due: null,
+        device: { name: `Dimmer ${index}`, area: 'Hjemme', level: 1, batteryType: 'CR2450', quantity: 1, status: 'critical', action: 'Bytt batteri', evidenceUpdatedAt: '2026-09-20T08:00:00Z' } })),
+    };
+    renderPrototype({ mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', { today: [{ title: 'Handle mat', date: '2026-09-20' }] }) }, vi.fn(), vi.fn(), undefined, maintenance);
+
+    const card = document.querySelector('.ppf-today') as HTMLElement;
+    const categories = within(card).getByRole('group', { name: 'Oppgavekategori' });
+    expect(within(card).getByRole('heading', { name: 'Oppgaver · 5' })).toBeInTheDocument();
+    const all = within(categories).getByRole('button', { name: 'Alle' });
+    const drift = within(categories).getByRole('button', { name: 'Drift' });
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    expect(within(card).getByRole('button', { name: /Handle mat/ })).toBeInTheDocument();
+    summaries.forEach((summary) => expect(within(card).getByRole('button', { name: new RegExp(summary) })).toBeInTheDocument());
+
+    fireEvent.click(drift);
+    expect(drift).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('heading', { name: 'Oppgaver · 4' })).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /Handle mat/ })).not.toBeInTheDocument();
+    summaries.forEach((summary) => expect(within(card).getByRole('button', { name: new RegExp(summary) })).toBeInTheDocument());
+
+    fireEvent.click(all);
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    expect(within(card).getByRole('button', { name: /Handle mat/ })).toBeInTheDocument();
   });
 
   it('shows maintenance tasks with verified purchase detail and stale status', () => {

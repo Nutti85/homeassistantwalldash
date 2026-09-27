@@ -16,7 +16,7 @@ const states = new Map(stateItems.filter(item => item.entity_id).map(item => [it
 const priorRow = $items('Load previous snapshot')[0]?.json;
 const prior = priorRow?.payload ? JSON.parse(priorRow.payload) : null;
 const todoResponse = $input.first()?.json ?? {};
-const todoItems = (todoResponse.service_response ?? todoResponse.body ?? todoResponse)['todo.husvedlikehold']?.items;
+const todoItems = (todoResponse.service_response ?? todoResponse.body ?? todoResponse)['todo.batteries']?.items;
 const available = states.size > 10 && Array.isArray(todoItems);
 const kinds = { 'Bytt batteri': 'replace_battery', 'Sjekk tilkobling': 'check_offline', 'Kontroller enhet': 'verify_device' };
 const existing = new Map((todoItems ?? []).map(item => {
@@ -61,16 +61,16 @@ const desired = available ? devices.filter(device => device.kind).map(device => 
 const operations = [];
 for (const task of desired) {
   const old = existing.get(task.id);
-  if (!old) operations.push({ service: 'add_item', body: { entity_id: 'todo.husvedlikehold', item: task.summary, description: task.description } });
-  else if (old.status === 'needs_action' && (old.summary !== task.summary || old.description !== task.description)) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, rename: task.summary, description: task.description } });
+  if (!old) operations.push({ service: 'add_item', body: { entity_id: 'todo.batteries', item: task.summary, description: task.description } });
+  else if (old.status === 'needs_action' && (old.summary !== task.summary || old.description !== task.description)) operations.push({ service: 'update_item', body: { entity_id: 'todo.batteries', item: old.uid, rename: task.summary, description: task.description } });
   // A completed item stays completed until its underlying HA state changes.
-  else if (old.status === 'completed' && task.evidenceUpdatedAt && new Date(task.evidenceUpdatedAt) > new Date((prior?.tasks ?? []).find(item => item.id === task.id)?.evidenceUpdatedAt ?? task.evidenceUpdatedAt)) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, status: 'needs_action', description: task.description } });
+  else if (old.status === 'completed' && task.evidenceUpdatedAt && new Date(task.evidenceUpdatedAt) > new Date((prior?.tasks ?? []).find(item => item.id === task.id)?.evidenceUpdatedAt ?? task.evidenceUpdatedAt)) operations.push({ service: 'update_item', body: { entity_id: 'todo.batteries', item: old.uid, status: 'needs_action', description: task.description } });
 }
 for (const [id, old] of existing) {
   if (old.status !== 'needs_action' || desired.some(task => task.id === id)) continue;
   const [, deviceId, kind] = id.match(/^battery:([^:]+):(replace_battery|check_offline|verify_device)$/) ?? [];
   const current = devices.find(device => device.id === deviceId);
-  if (current && ((current.batteryStatus === 'healthy' && current.level > 20 && current.connectionStatus === 'online') || (current.kind && current.kind !== kind))) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, status: 'completed' } });
+  if (current && ((current.batteryStatus === 'healthy' && current.level > 20 && current.connectionStatus === 'online') || (current.kind && current.kind !== kind))) operations.push({ service: 'update_item', body: { entity_id: 'todo.batteries', item: old.uid, status: 'completed' } });
 }
-if (!operations.length) operations.push({ service: 'get_items', body: { entity_id: 'todo.husvedlikehold' } });
+if (!operations.length) operations.push({ service: 'get_items', body: { entity_id: 'todo.batteries' } });
 return operations.map(operation => ({ json: { ...operation, devices, observedAt: available ? now.toISOString() : prior?.observedAt ?? null, sourceAvailable: available, desired } }));

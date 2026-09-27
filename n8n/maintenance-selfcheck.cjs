@@ -23,7 +23,7 @@ const states = [
   state('sensor.0xa4c138d9823c57d3_battery', '6', '2026-09-21T17:22:15Z'),
   ...Array.from({ length: 7 }, (_, i) => state(`sensor.test_${i}`, '50')),
 ];
-const empty = { service_response: { 'todo.husvedlikehold': { items: [] } } };
+const empty = { service_response: { 'todo.batteries': { items: [] } } };
 const nodes = { 'Read HA states': states, 'Load previous snapshot': [] };
 const operations = run('maintenance-assess.js', nodes, empty).map(item => item.json);
 assert(operations.some(item => item.body.item === 'Bytt batteri: Hovedlysbryter Soverom Jacob'));
@@ -38,14 +38,14 @@ assert(operations.some(item => item.body.description.includes('Sist observert: 2
 assert(!operations.some(item => /Kontroll Soverom HA|Soverom HA Innside/.test(item.body.item ?? '')));
 
 const existing = operations.map((operation, index) => ({ uid: String(index), summary: operation.body.item, description: operation.body.description, status: 'needs_action' }));
-const repeated = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: existing } } });
+const repeated = run('maintenance-assess.js', nodes, { service_response: { 'todo.batteries': { items: existing } } });
 assert.equal(repeated.length, 1);
 assert.equal(repeated[0].json.service, 'get_items');
 const legacy = existing.map((item, index) => ({ ...item, description: `${item.description}\nVedlikehold-ID: ${operations[index].desired[index]?.id ?? 'legacy'}` }));
-const migrated = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: legacy } } });
+const migrated = run('maintenance-assess.js', nodes, { service_response: { 'todo.batteries': { items: legacy } } });
 assert(migrated.every(item => item.json.service === 'update_item'));
 const completed = existing.map(item => ({ ...item, status: 'completed' }));
-const afterCompletion = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: completed } } });
+const afterCompletion = run('maintenance-assess.js', nodes, { service_response: { 'todo.batteries': { items: completed } } });
 assert.equal(afterCompletion.length, 1);
 assert.equal(afterCompletion[0].json.service, 'get_items');
 const recoveredStates = states.map(item => {
@@ -53,20 +53,20 @@ const recoveredStates = states.map(item => {
   if (item.json.entity_id === 'binary_sensor.bevegelse_lys_ute') return state(item.json.entity_id, 'off');
   return item;
 });
-const recovery = run('maintenance-assess.js', { ...nodes, 'Read HA states': recoveredStates }, { service_response: { 'todo.husvedlikehold': { items: existing } } }).map(item => item.json);
+const recovery = run('maintenance-assess.js', { ...nodes, 'Read HA states': recoveredStates }, { service_response: { 'todo.batteries': { items: existing } } }).map(item => item.json);
 assert(recovery.some(item => item.service === 'update_item' && item.body.item === existing[0].uid && item.body.status === 'completed'));
 assert(recovery.some(item => item.service === 'update_item' && item.body.item === existing[2].uid && item.body.status === 'completed'));
 const atThreshold = recoveredStates.map(item => item.json.entity_id === 'sensor.0x0017880104f3594d_battery' ? state(item.json.entity_id, '20') : item);
-const threshold = run('maintenance-assess.js', { ...nodes, 'Read HA states': atThreshold }, { service_response: { 'todo.husvedlikehold': { items: existing } } }).map(item => item.json);
+const threshold = run('maintenance-assess.js', { ...nodes, 'Read HA states': atThreshold }, { service_response: { 'todo.batteries': { items: existing } } }).map(item => item.json);
 assert(!threshold.some(item => item.service === 'update_item' && item.body.item === existing[0].uid && item.body.status === 'completed'));
 const staleRecovery = recoveredStates.map(item => item.json.entity_id === 'sensor.0x0017880104f3594d_battery' ? state(item.json.entity_id, '75', '2026-09-20T06:43:24Z') : item);
-const staleResult = run('maintenance-assess.js', { ...nodes, 'Read HA states': staleRecovery }, { service_response: { 'todo.husvedlikehold': { items: existing } } }).map(item => item.json);
+const staleResult = run('maintenance-assess.js', { ...nodes, 'Read HA states': staleRecovery }, { service_response: { 'todo.batteries': { items: existing } } }).map(item => item.json);
 assert(!staleResult.some(item => item.service === 'update_item' && item.body.item === existing[0].uid && item.body.status === 'completed'));
 const synced = run('maintenance-snapshot.js', {
   'Assess maintenance': [{ json: operations[0] }],
   'Load previous snapshot': [],
   'Apply HA to-do operation': [{ json: {} }],
-}, { service_response: { 'todo.husvedlikehold': { items: existing } } });
+}, { service_response: { 'todo.batteries': { items: existing } } });
 assert.equal(JSON.parse(synced[0].json.payload).tasks.length, existing.length);
 
 const prior = { schemaVersion: 1, observedAt: now, checkedAt: now, sourceAvailable: true, devices: [{ id: 'saved' }], tasks: [{ id: 'saved' }] };

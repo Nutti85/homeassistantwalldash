@@ -1,6 +1,6 @@
 # Battery maintenance feed
 
-Home Assistant owns the `todo.husvedlikehold` Local to-do list. Its card is on the sidebar dashboard `hus-vedlikehold/oversikt`. Complete tasks there. No mobile notification automation is configured.
+Home Assistant owns the `todo.batteries` Local to-do list. Its card is on the sidebar dashboard `hus-vedlikehold/oversikt`. Complete tasks there. No mobile notification automation is configured.
 
 n8n workflow `1e6kqgvlioY4093u` runs every 30 minutes. It reads HA states and to-do items, reconciles actionable tasks, then upserts the single `latest` row in Data Table `PvmdwPwMSBPMH0mh`. n8n workflow `yrj7f2nxK32Nggzr` serves that row at:
 

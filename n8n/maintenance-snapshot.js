@@ -1,7 +1,7 @@
 // n8n Code node: run once after re-reading the Home Assistant to-do list.
 const assessment = $items('Assess maintenance')[0]?.json;
 const response = $input.first()?.json ?? {};
-const items = (response.service_response ?? response.body ?? response)['todo.husvedlikehold']?.items;
+const items = (response.service_response ?? response.body ?? response)['todo.batteries']?.items;
 const priorRow = $items('Load previous snapshot')[0]?.json;
 const prior = priorRow?.payload ? JSON.parse(priorRow.payload) : null;
 const now = new Date().toISOString();
