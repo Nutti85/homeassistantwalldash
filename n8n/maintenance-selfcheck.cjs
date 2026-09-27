@@ -48,6 +48,20 @@ const completed = existing.map(item => ({ ...item, status: 'completed' }));
 const afterCompletion = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: completed } } });
 assert.equal(afterCompletion.length, 1);
 assert.equal(afterCompletion[0].json.service, 'get_items');
+const recoveredStates = states.map(item => {
+  if (item.json.entity_id === 'sensor.0x0017880104f3594d_battery' || item.json.entity_id === 'sensor.0x001788010646bf54_battery') return state(item.json.entity_id, '75');
+  if (item.json.entity_id === 'binary_sensor.bevegelse_lys_ute') return state(item.json.entity_id, 'off');
+  return item;
+});
+const recovery = run('maintenance-assess.js', { ...nodes, 'Read HA states': recoveredStates }, { service_response: { 'todo.husvedlikehold': { items: existing } } }).map(item => item.json);
+assert(recovery.some(item => item.service === 'update_item' && item.body.item === existing[0].uid && item.body.status === 'completed'));
+assert(recovery.some(item => item.service === 'update_item' && item.body.item === existing[2].uid && item.body.status === 'completed'));
+const atThreshold = recoveredStates.map(item => item.json.entity_id === 'sensor.0x0017880104f3594d_battery' ? state(item.json.entity_id, '20') : item);
+const threshold = run('maintenance-assess.js', { ...nodes, 'Read HA states': atThreshold }, { service_response: { 'todo.husvedlikehold': { items: existing } } }).map(item => item.json);
+assert(!threshold.some(item => item.service === 'update_item' && item.body.item === existing[0].uid && item.body.status === 'completed'));
+const staleRecovery = recoveredStates.map(item => item.json.entity_id === 'sensor.0x0017880104f3594d_battery' ? state(item.json.entity_id, '75', '2026-09-20T06:43:24Z') : item);
+const staleResult = run('maintenance-assess.js', { ...nodes, 'Read HA states': staleRecovery }, { service_response: { 'todo.husvedlikehold': { items: existing } } }).map(item => item.json);
+assert(!staleResult.some(item => item.service === 'update_item' && item.body.item === existing[0].uid && item.body.status === 'completed'));
 const synced = run('maintenance-snapshot.js', {
   'Assess maintenance': [{ json: operations[0] }],
   'Load previous snapshot': [],

@@ -46,6 +46,8 @@ Example response shape (values illustrative):
 
 `observedAt` is null before the first successful sync. `checkedAt` advances on each completed sync. If HA states or the to-do list cannot be read, n8n retains the last observation, sets `sourceAvailable:false`, and advances `checkedAt`. A client should show that data as stale. Device `status` is the primary state (`healthy`, `low`, `critical`, `offline`, `unknown`, or `stale`); `batteryStatus` and `connectionStatus` preserve the separate evidence. Nullable fields stay null when unknown. `tasks.status` is HA's `needs_action` or `completed`; dashboards should show only incomplete tasks.
 
+An open task is completed when its device is online with a fresh battery reading **above 20%**. A stale or unavailable reading does not complete it. If a different action replaces the old one (for example, a connection check becomes a battery replacement), n8n completes the old task and opens the new one.
+
 The current catalog has ten physical devices with active issues. The two unavailable Hue integration entities in the bedroom map by MAC to Zigbee2MQTT devices already in this catalog, so they do not create duplicate offline tasks. Every HA task shows the battery type and a short Europe/Oslo timestamp; the internal task ID stays in the n8n feed, not in the visible description. n8n matches HA items by their generated summary, so those summaries should not be manually renamed.
 
 | Device group | Battery | Model evidence |

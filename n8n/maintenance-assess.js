@@ -70,7 +70,7 @@ for (const [id, old] of existing) {
   if (old.status !== 'needs_action' || desired.some(task => task.id === id)) continue;
   const [, deviceId, kind] = id.match(/^battery:([^:]+):(replace_battery|check_offline|verify_device)$/) ?? [];
   const current = devices.find(device => device.id === deviceId);
-  if (current && ((kind === 'check_offline' && current.connectionStatus === 'online') || (kind === 'verify_device' && (current.kind === 'replace_battery' || current.status === 'healthy')))) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, status: 'completed' } });
+  if (current && ((current.batteryStatus === 'healthy' && current.level > 20 && current.connectionStatus === 'online') || (current.kind && current.kind !== kind))) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, status: 'completed' } });
 }
 if (!operations.length) operations.push({ service: 'get_items', body: { entity_id: 'todo.husvedlikehold' } });
 return operations.map(operation => ({ json: { ...operation, devices, observedAt: available ? now.toISOString() : prior?.observedAt ?? null, sourceAvailable: available, desired } }));
