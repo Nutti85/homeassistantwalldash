@@ -4,7 +4,7 @@
 
 **Goal:** Tell the household which replaceable device batteries need attention, which battery-powered devices are offline, what to buy or check, and what remains to be done; make the same status available to WallDash and other services through n8n.
 
-**Architecture:** Home Assistant owns device measurements, a dedicated Local to-do list, the user-facing card and push delivery. One n8n workflow owns the verified device catalog, evaluates low/stale/offline status, synchronizes HA tasks, and keeps a structured latest snapshot in a Data Table. An authenticated, read-only n8n webhook serves that snapshot to other services; WallDash initially reads the HA `todo` list through its existing server-side client.
+**Architecture:** Home Assistant owns device measurements, a dedicated Local to-do list, the user-facing card and push delivery. One n8n workflow owns the verified device catalog, evaluates low/stale/offline status, synchronizes HA tasks, and keeps a structured latest snapshot in a Data Table. WallDash, the Emergency Dashboard, and future services all read that snapshot through the same authenticated, read-only n8n endpoint. Only n8n reads and writes the HA to-do list for this feature.
 
 **Tech stack:** Home Assistant 2026.9.3, Local to-do, Companion app notifications, existing n8n with Data Tables, React/TypeScript, Express, Vitest.
 
@@ -51,7 +51,7 @@ The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` b
 ### Task 2: Build one reusable n8n maintenance snapshot
 
 - [ ] Create one n8n workflow that reads the curated HA battery and operational entities on a schedule, evaluates the Task 1 rules, and upserts one latest-snapshot row in a Data Table. Use the existing HA credential in n8n; keep it out of workflow JSON and output. Do not overwrite the last good snapshot when HA is unreachable; mark `sourceAvailable: false` and advance `checkedAt` while retaining `observedAt` from the last successful read.
-- [ ] Publish a versioned, read-only JSON contract through an authenticated n8n Webhook + Respond to Webhook path. Shape: `{ schemaVersion: 1, observedAt, checkedAt, sourceAvailable, devices: [{ id, name, area, batteryEntityId, level, batteryType, quantity, replaceable, status, action, evidenceUpdatedAt }], tasks: [{ id, deviceId, kind, summary, status }] }`. `kind` is `replace_battery`, `check_offline`, or `verify_device`; `action` is human-readable Norwegian. No HA token, private network details, or unnecessary person data in the response.
+- [ ] Publish a versioned, read-only JSON contract through an authenticated n8n Webhook + Respond to Webhook path. Shape: `{ schemaVersion: 1, observedAt, checkedAt, sourceAvailable, devices: [{ id, name, area, batteryEntityId, level, batteryType, quantity, replaceable, status, action, evidenceUpdatedAt }], tasks: [{ id, deviceId, kind, summary, description, due, status }] }`. `kind` is `replace_battery`, `check_offline`, or `verify_device`; `action` is human-readable Norwegian. Read current HA to-do item status during each successful sync so a task completed in HA also disappears from both dashboard consumers. No HA token, private network details, or unnecessary person data in the response.
 - [ ] Document the endpoint, auth method, fields, timestamps, stale-data behavior, and a sample payload without credentials. Use stable device IDs and task IDs so consumers do not parse Norwegian summaries to identify devices. Keep the Data Table as a snapshot/cache, not a second editable task system.
 
 **Check:** A read-only client can retrieve one well-formed snapshot from n8n; after a simulated HA outage it receives the last observation clearly marked stale. Unauthorized requests fail. A restored HA connection refreshes the snapshot.
@@ -72,14 +72,14 @@ The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` b
 
 ## Phase 2 — WallDash tasks
 
-### Task 5: Read the dedicated HA list through the existing server
+### Task 5: Read the shared n8n feed through the WallDash server
 
-**Affected files:** `src/server/homeAssistant.ts`, `src/server/app.ts`, `src/server/index.ts`, `src/shared/entities.ts`, `src/client/api.ts` and their existing focused tests.
+**Affected files:** `src/server/app.ts`, `src/server/index.ts`, `src/client/api.ts`, a small server-side n8n feed client, and their existing focused tests.
 
-- [ ] Add one configured, server-side allow-listed `todo` entity ID. Fetch incomplete items with HA `todo.get_items` and return a narrow typed response (`uid`, summary, description, due, status). The `todo` entity state is only an incomplete-item **count**, so it cannot supply task text. Keep `HA_TOKEN` and arbitrary entity IDs out of the browser.
-- [ ] If task completion from WallDash is wanted, add a narrow `todo.update_item` endpoint accepting a UID from that configured list only; confirm by rereading the list. Start read-only if the HA card already handles completion well.
+- [ ] Configure only the authenticated n8n feed URL and credential on the WallDash server. Fetch the versioned snapshot with a bounded timeout and validate the fields WallDash needs. Return a narrow same-origin response containing incomplete tasks and status/observation time. Do not send the n8n credential or upstream URL to the browser.
+- [ ] Keep the WallDash view read-only. People complete tasks in Home Assistant; the next n8n sync updates the common snapshot and both dashboards. The HA `todo` entity's numeric state is only a count and is not the WallDash data source.
 
-**Check:** API tests cover response mapping, empty list, HA failure, malformed items, and rejecting updates outside the allow-listed list. Existing state and action tests remain green.
+**Check:** API tests cover response mapping, empty list, stale source, n8n failure, malformed items, and unauthorized upstream responses. Existing state and action tests remain green.
 
 ### Task 6: Show tasks in the established WallDash layout
 
@@ -88,7 +88,7 @@ The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` b
 - [ ] Replace the prototype's hard-coded `fallbackTodayTasks` in the existing **Dette skjer / today** area with real incomplete items from the dedicated HA list. Show a small count and the first few useful tasks; tap opens a detail view with full text and the right action. Battery replacement details show type/quantity; offline details show last known status and a connection check. Keep the main 1920 × 1200 tablet screen free of page scrolling and do not put battery status in a second place on the same screen.
 - [ ] Show a calm empty state, and a distinct “could not load tasks” state rather than presenting old placeholder work as live. Preserve the current accessible buttons and detail-modal focus behavior.
 
-**Check:** At tablet size, no card overlaps or clips; keyboard/touch access works; a completed HA task disappears after refresh; a HA outage does not show fake tasks. Run relevant Vitest tests, `npm.cmd run build`, typecheck/lint scripts available in `package.json`, and `git diff --check` before local commits. Do not push or deploy as part of this plan.
+**Check:** At tablet size, no card overlaps or clips; keyboard/touch access works; a completed HA task disappears after the n8n sync; a stale or failed feed does not show fake current tasks. Run relevant Vitest tests, `npm.cmd run build`, typecheck/lint scripts available in `package.json`, and `git diff --check` before local commits. Do not push or deploy as part of this plan.
 
 ## Phase 3 — Other consumers
 
@@ -106,5 +106,5 @@ The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` b
 - A device can expose two battery entities; create at most one task per physical replacement action.
 - A completed task can coexist with an old low reading; do not instantly recreate it without a fresh report or deliberate reset.
 - Battery type changes by model revision; require exact-model evidence before purchase wording.
-- HA's `todo` state is a count; WallDash must fetch items and handle an unavailable list.
+- HA's `todo` state is a count; n8n must fetch items and include task status in the shared snapshot.
 - A cached n8n snapshot is useful during a HA outage only when its observation time and source availability are explicit.
