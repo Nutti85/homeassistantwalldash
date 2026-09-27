@@ -1229,7 +1229,10 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-forward-chart .weather-chart .time-label{font-size:13px}
 .ppf-forward-chart .weather-chart.compact .axis-wind-value{fill:#c6c4bd}
 .ppf-forward-empty{display:grid;place-items:center;min-height:190px;color:var(--ppf-soft);font-size:14px}
-.ppf-today-list{display:grid}
+.ppf-today-list{display:grid;min-height:0;max-height:min(36dvh,360px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(239,178,118,.72) transparent}
+.ppf-today-list::-webkit-scrollbar{width:8px}
+.ppf-today-list::-webkit-scrollbar-track{background:transparent}
+.ppf-today-list::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:999px;background:rgba(239,178,118,.72) padding-box}
 .ppf-task-categories{display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--ppf-line);border-radius:10px;background:rgba(255,255,255,.025)}
 .ppf-task-categories button{min-width:48px;min-height:48px;padding:0 8px;border-radius:7px;background:transparent;color:var(--ppf-soft);font-size:11px;font-weight:600;white-space:nowrap}
 .ppf-task-categories button[aria-pressed=true]{background:rgba(142,226,178,.13);color:#c4efd7;box-shadow:inset 0 0 0 1px rgba(142,226,178,.19)}
