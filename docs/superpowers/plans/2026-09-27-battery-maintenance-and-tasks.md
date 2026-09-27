@@ -25,23 +25,21 @@ The 0% Aqara and SONOFF readings were last updated on 2026-09-21; the Hue 1% and
 
 ### Battery-powered devices that appear offline
 
-On 2026-09-27, both the battery entity and an operational sibling were `unavailable` for all five devices below; those entities have shown unavailable since 2026-09-20. This supports a **check device/connection** task, not an automatic battery purchase claim.
+On 2026-09-27, both the battery entity and an operational sibling were `unavailable` for the three devices below; those entities have shown unavailable since 2026-09-20. This supports a **check device/connection** task, not an automatic battery purchase claim.
 
 | Device | Battery entity | Operational evidence |
 | --- | --- | --- |
 | Philips outdoor motion sensor, roadside | `sensor.0x001788010646bf54_battery` | Motion and temperature unavailable |
 | Philips living-room main-light dimmer | `sensor.0x001788010670c2ff_battery` | Button event unavailable |
-| Hue `Kontroll Soverom HA` dimmer | `sensor.kontroll_soverom_ha_battery` | Button events unavailable |
-| Hue `Soverom HA Innside` dimmer | `sensor.soverom_ha_innside_battery` | Button events unavailable |
 | Aqara front-door contact sensor | `sensor.sensor_ytterdor_battery` | Door state unavailable |
 
-The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` battery reading and unavailable button event; include it as **needs verification**, not confirmed offline. Before opening individual tasks, check whether the Zigbee2MQTT bridge/Hue integration or many unrelated devices are down together.
+Two other unavailable Hue records are **not separate physical devices**: `Kontroll Soverom HA` has MAC `00:17:88:01:04:ee:18:6e` and matches Zigbee2MQTT `Hovedlysbryter Soverom` at 7%; `Soverom HA Innside` has MAC `00:17:88:01:02:19:cb:54` and matches `Ekstralysbryter Soverom` at 2.5%. Deduplicate by physical identity before making tasks. The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` battery reading and unavailable button event; include it as **needs verification**, not confirmed offline. Before opening individual tasks, check whether the Zigbee2MQTT bridge/Hue integration or many unrelated devices are down together.
 
 ## Phase 1 — Home Assistant first
 
 ### Task 1: Finish the device catalog and status rules
 
-- [ ] Enumerate HA entities with battery device class, low-battery binary sensors, and their device-registry siblings; include hidden and disabled entries in the audit, but alert only on active devices. Record entity ID, stable device identity/model, area, replaceable vs rechargeable, exact cell type/quantity, evidence source, and last valid report. Include the five offline devices and kitchen remote above.
+- [ ] Enumerate HA entities with battery device class, low-battery binary sensors, and their device-registry siblings; include hidden and disabled entries in the audit, but alert only on active physical devices. Record entity ID, stable device identity (MAC/IEEE where available), model, area, replaceable vs rechargeable, exact cell type/quantity, evidence source, and last valid report. Include the three offline devices and kitchen remote above; deduplicate old Hue integration records.
 - [ ] Confirm ambiguous models in Zigbee2MQTT or on the device itself. Never infer purchase type from the percentage sensor or a generic name. Record `unknown` until confirmed.
 - [ ] Define distinct per-device states: `healthy`, `low`, `critical`, `offline`, `unknown`, and `stale`. Require both a missing battery reading and missing operational evidence before calling a device offline; give transient dropouts a grace period. If the bridge or integration is down, report that shared fault once and suppress a flood of device tasks. Allow `offline` and `low` to coexist in the data feed while choosing one clear next action for the user.
 - [ ] Assign useful HA areas to devices lacking them, where the physical location is known, so the Maintenance dashboard and messages identify the right room.
