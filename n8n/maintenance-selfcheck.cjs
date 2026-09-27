@@ -27,6 +27,9 @@ const nodes = { 'Read HA states': states, 'Load previous snapshot': [] };
 const operations = run('maintenance-assess.js', nodes, empty).map(item => item.json);
 assert(operations.some(item => item.body.item === 'Bytt batteri: Hovedlysbryter Soverom Jacob'));
 assert(operations.some(item => item.body.item === 'Sjekk tilkobling: Philips Bevegelse Lux Yttervegg Vei'));
+assert(operations.every(item => item.body.description.includes('Batteritype: ')));
+assert(operations.some(item => item.body.description.includes('Batteritype: 1 × CR2450')));
+assert(operations.some(item => item.body.description.includes('Batteritype: ukjent – kontroller fysisk modell')));
 assert(!operations.some(item => /Kontroll Soverom HA|Soverom HA Innside/.test(item.body.item ?? '')));
 
 const existing = operations.map((operation, index) => ({ uid: String(index), summary: operation.body.item, description: operation.body.description, status: 'needs_action' }));

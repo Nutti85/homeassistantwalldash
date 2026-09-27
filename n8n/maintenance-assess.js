@@ -49,7 +49,7 @@ const desired = available ? devices.filter(device => device.kind).map(device => 
   const id = `battery:${device.id}:${device.kind}`;
   const prefix = device.kind === 'replace_battery' ? 'Bytt batteri' : device.kind === 'check_offline' ? 'Sjekk tilkobling' : 'Kontroller enhet';
   const summary = `${prefix}: ${device.name}`;
-  const description = `${device.action}\n${device.level === null ? '' : `Siste nivå: ${device.level} %.\n`}Sist observert: ${device.evidenceUpdatedAt ?? 'ukjent'}.\nVedlikehold-ID: ${id}`;
+  const description = `${device.action}\nBatteritype: ${device.batteryType ? `${device.quantity} × ${device.batteryType}` : 'ukjent – kontroller fysisk modell'}.\n${device.level === null ? '' : `Siste nivå: ${device.level} %.\n`}Sist observert: ${device.evidenceUpdatedAt ?? 'ukjent'}.\nVedlikehold-ID: ${id}`;
   return { id, deviceId: device.id, kind: device.kind, summary, description, due: null, status: 'needs_action', evidenceUpdatedAt: device.evidenceUpdatedAt };
 }) : [];
 const operations = [];
