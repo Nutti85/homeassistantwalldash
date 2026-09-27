@@ -5,6 +5,7 @@ import type { HomeAssistantClient, VacuumAction } from './homeAssistant';
 import type { AirQualityService } from './airQuality';
 import { isActivityMediaId, type ActivityService } from './activity';
 import { lightControlKeys, type DashboardAction, type FanSpeed, type HeatPumpMode, type LightCommand, type LightControlKey } from '../shared/entities';
+import { getMaintenance } from './maintenance';
 
 type DashboardActionResult = Awaited<ReturnType<HomeAssistantClient['execute']>>;
 type DashboardStates = Awaited<ReturnType<HomeAssistantClient['getDashboardStates']>>;
@@ -37,6 +38,8 @@ export interface AppServices {
   aiReportSourceUrl?: string;
   aiReportRefreshUrl?: string;
   aiReportStorePath?: string;
+  maintenanceFeedUrl?: string;
+  maintenanceFeedKey?: string;
 }
 
 const actions = new Set<DashboardAction>(['home', 'guestMode', 'guestVoucher', 'morning', 'evening', 'night', 'cooling', 'heatPump', 'fanSpeed', 'securityMode', 'lockDoor', 'unlockDoor']);
@@ -188,7 +191,7 @@ const proxyActivityMedia = async (
 };
 
 export const createApp = (client: DashboardClient, services: AppServices = {}): Express => {
-  const { activity, airQuality, activityUpdates, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '' } = services;
+  const { activity, airQuality, activityUpdates, aiReportSecret = '', aiReportSourceUrl = '', aiReportRefreshUrl = '', aiReportStorePath = '', maintenanceFeedUrl = '', maintenanceFeedKey = '' } = services;
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   let aiReport: AiReport | undefined = aiReportStorePath ? loadAiReport(aiReportStorePath) : undefined;
@@ -196,6 +199,13 @@ export const createApp = (client: DashboardClient, services: AppServices = {}): 
 
   app.get('/health', (_request: Request, response: Response) => {
     response.json({ status: 'ok' });
+  });
+
+  app.get('/api/maintenance', async (_request: Request, response: Response) => {
+    response.set('Cache-Control', 'no-store');
+    if (!maintenanceFeedUrl || !maintenanceFeedKey) { response.status(503).json({ error: 'Vedlikeholdsoppgaver er ikke konfigurert.' }); return; }
+    try { response.json(await getMaintenance(maintenanceFeedUrl, maintenanceFeedKey)); }
+    catch { response.status(502).json({ error: 'Kunne ikke hente vedlikeholdsoppgaver.' }); }
   });
 
   app.get('/api/activity', async (_request: Request, response: Response) => {

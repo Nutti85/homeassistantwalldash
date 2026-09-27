@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HomeAssistantState } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
+import type { MaintenanceResponse } from '../shared/maintenance';
 import { MainDashboardPrototype } from './MainDashboardPrototype';
 import { departureBriefingFixturePayload } from './departureBriefingFixtures';
 import { familyReceiptStorageKey } from './familyInbox';
@@ -14,8 +15,10 @@ const renderPrototype = (
   action = vi.fn(),
   openMode = vi.fn(),
   departureBriefings?: DepartureBriefingPayload,
+  maintenance?: MaintenanceResponse,
 ) => render(<MainDashboardPrototype
   states={states}
+  maintenance={maintenance}
   showWeather={() => {}}
   openLights={() => {}}
   openHeatPump={() => {}}
@@ -513,8 +516,26 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(forecastCells[5]).toHaveTextContent('6 m/s');
     expect(forecastCells[6]).toHaveTextContent('30 %');
     const today = future.querySelector('.ppf-today') as HTMLElement;
-    expect(within(today).getByRole('heading', { name: 'I dag' })).toBeInTheDocument();
+    expect(within(today).getByRole('heading', { name: 'Oppgaver' })).toBeInTheDocument();
     expect(within(today).getByText('Handle mat')).toBeInTheDocument();
+  });
+
+  it('shows maintenance tasks with verified purchase detail and stale status', () => {
+    const maintenance: MaintenanceResponse = {
+      observedAt: '2026-09-20T10:00:00Z', checkedAt: '2026-09-27T10:00:00Z', sourceAvailable: false,
+      tasks: [{ id: 't1', kind: 'replace_battery', summary: 'Bytt batteri: Soverom', description: 'Lavt batteri', due: null,
+        device: { name: 'Dimmer', area: 'Soverom', level: 1, batteryType: 'CR2450', quantity: 1, status: 'critical', action: 'Bytt batteri', evidenceUpdatedAt: '2026-09-20T09:00:00Z' } }],
+    };
+    renderPrototype({}, vi.fn(), vi.fn(), undefined, maintenance);
+    const card = screen.getByRole('heading', { name: 'Oppgaver · 1' }).closest('section') as HTMLElement;
+    expect(within(card).getByText(/Sist kjent status/)).toBeInTheDocument();
+    const task = within(card).getByRole('button', { name: /Bytt batteri: Soverom/ });
+    task.focus(); fireEvent.click(task);
+    const dialog = screen.getByRole('dialog', { name: 'Bytt batteri: Soverom' });
+    expect(dialog).toHaveTextContent('1 × CR2450');
+    expect(dialog).toHaveTextContent('Fullfør oppgaven i Home Assistant');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(task).toHaveFocus();
   });
 
 describe('MainDashboardPrototype bottom controls', () => {

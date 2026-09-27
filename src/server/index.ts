@@ -54,6 +54,8 @@ const aiReportSecret = process.env.AI_REPORT_SECRET?.trim() || '';
 const aiReportSourceUrl = process.env.AI_REPORT_SOURCE_URL?.trim() || '';
 const aiReportRefreshUrl = process.env.N8N_AI_REPORT_REFRESH_URL?.trim() || '';
 const aiReportStorePath = process.env.AI_REPORT_STORE_PATH?.trim() || '';
+const maintenanceFeedUrl = process.env.N8N_MAINTENANCE_FEED_URL?.trim() || '';
+const maintenanceFeedKey = process.env.N8N_MAINTENANCE_FEED_KEY?.trim() || '';
 const activityEntities = parseActivityEntityConfig(
   process.env.HA_DOORBELL_VISITOR_ENTITY_ID,
   process.env.HA_FRIGATE_EVENT_ENTITY_IDS,
@@ -122,7 +124,7 @@ const frigateUpdates = new FrigateUpdateService(frigateUpdateConfig);
 export const activityService = new ActivityService(homeAssistant, frigateUrl ? new FrigateClient(frigateUrl) : undefined, {
   ...activityEntities, home: entities.home, frontDoorLock: entities.frontDoorLock,
 });
-const app = createApp(homeAssistant, { activity: activityService, airQuality, activityUpdates: frigateUpdateConfig ? frigateUpdates : undefined, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath });
+const app = createApp(homeAssistant, { activity: activityService, airQuality, activityUpdates: frigateUpdateConfig ? frigateUpdates : undefined, aiReportSecret, aiReportSourceUrl, aiReportRefreshUrl, aiReportStorePath, maintenanceFeedUrl, maintenanceFeedKey });
 const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
 
 app.use('/api', (_request, response) => {

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
 import type { DepartureBriefingPayload, DepartureTripBriefing } from '../shared/departureBriefing';
+import type { MaintenanceResponse, MaintenanceTask } from '../shared/maintenance';
 import { calendarEvents, forecastPoints, jacobWeeklyPlan, mykidKindergarten, stateValue } from './dashboardModel';
 import { buildLiveBriefingViewModel, currentLiveBriefingMode } from './briefingModel';
 import { classifyClimateValue, type ClimateMetric, type ClimateRoomType } from './roomClimate';
@@ -26,6 +27,8 @@ type Period = 'now' | 'later' | 'tomorrow' | 'week';
 type Detail = { title: string; icon: string; body: ReactNode; className?: string; onComplete?: () => void };
 type PrototypeProps = {
   states: Record<string, HomeAssistantState>;
+  maintenance?: MaintenanceResponse;
+  maintenanceError?: boolean;
   showWeather: () => void;
   openLights: () => void;
   openHeatPump: () => void;
@@ -173,23 +176,17 @@ function ForwardWeather({ states, showWeather }: Pick<PrototypeProps, 'states' |
   </Surface>;
 }
 
-type TodayTask = { title: string; detail?: string; time?: string; completed?: boolean };
-const fallbackTodayTasks: TodayTask[] = [
-  { title: 'Handle mat', detail: 'Kiwi', time: '13:00–14:00', completed: true },
-  { title: 'Rydde entré', time: '09:00–10:00', completed: true },
-  { title: 'Vanne planter', detail: 'Stue og terrasse', time: '19:00–19:30' },
-];
-
-function TodayModule({ states, openDetail }: Pick<PrototypeProps, 'states'> & { openDetail: (detail: Detail) => void }) {
+function TodayModule({ states, maintenance, maintenanceError, openDetail }: Pick<PrototypeProps, 'states' | 'maintenance' | 'maintenanceError'> & { openDetail: (detail: Detail) => void }) {
   const now = new Date();
   const kindergarten = mykidKindergarten(states.mykidKindergarten);
   const liveTasks = (kindergarten?.today ?? [])
     .filter((item) => !item.date || dayKey(new Date(item.date)) === dayKey(now))
-    .slice(0, 4)
-    .map((item): TodayTask => ({ title: item.title, detail: item.details, time: planTime(item.time) }));
-  const items = liveTasks.length ? liveTasks : fallbackTodayTasks;
-  return <Surface icon="checklist" title="I dag" className="ppf-today">
-    <div className="ppf-today-list">{items.map((item, index) => <button type="button" className={`ppf-today-item${item.completed ? ' is-complete' : ''}`} key={item.title + '-' + index} onClick={() => openDetail({ title: item.title, icon: 'checklist', body: <><p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p><dl className="ppf-detail-list"><div><dt>Kilde</dt><dd>{kindergarten && liveTasks.length ? 'Nicolai' : 'Hjemmeoppgave'}</dd></div><div><dt>Tid</dt><dd>{item.time || 'Hele dagen'}</dd></div></dl></> })}><span className="ppf-today-check" aria-hidden="true"><Icon filled={item.completed}>{item.completed ? 'check_circle' : 'radio_button_unchecked'}</Icon></span><span><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{item.time && <time>{item.time}</time>}<Icon>chevron_right</Icon></button>)}</div>
+    .map((item) => ({ title: item.title, detail: item.details, time: planTime(item.time) }));
+  const stale = maintenance && (!maintenance.sourceAvailable || !maintenance.observedAt || Date.now() - Date.parse(maintenance.observedAt) > 2 * 60 * 60 * 1000);
+  const tasks = maintenance?.tasks ?? [];
+  const openTask = (item: MaintenanceTask) => openDetail({ title: item.summary, icon: 'checklist', body: <><p>{item.description}</p><dl className="ppf-detail-list"><div><dt>Enhet</dt><dd>{item.device.name}{item.device.area ? ` · ${item.device.area}` : ''}</dd></div><div><dt>Neste steg</dt><dd>{item.device.action}</dd></div>{item.kind === 'replace_battery' && item.device.batteryType && <div><dt>Kjøp</dt><dd>{item.device.quantity ?? 1} × {item.device.batteryType}</dd></div>}{item.device.evidenceUpdatedAt && <div><dt>Sist sett</dt><dd>{new Date(item.device.evidenceUpdatedAt).toLocaleString('nb-NO')}</dd></div>}</dl><p>Fullfør oppgaven i Home Assistant.</p></> });
+  return <Surface icon="checklist" title={`Oppgaver${tasks.length ? ` · ${tasks.length}` : ''}`} className="ppf-today">
+    <div className="ppf-today-list">{stale && <p className="ppf-empty" role="status">{maintenance.observedAt ? `Sist kjent status fra ${new Date(maintenance.observedAt).toLocaleString('nb-NO')}.` : 'Vedlikeholdsstatus er ikke tilgjengelig ennå.'}</p>}{maintenanceError && <p className="ppf-empty" role="status">Kunne ikke oppdatere oppgaver.</p>}{!maintenance && !maintenanceError && <p className="ppf-empty">Henter oppgaver …</p>}{tasks.slice(0, 3).map((item) => <button type="button" className="ppf-today-item" key={item.id} onClick={() => openTask(item)}><span className="ppf-today-check" aria-hidden="true"><Icon>radio_button_unchecked</Icon></span><span><strong>{item.summary}</strong><small>{item.device.action}</small></span><Icon>chevron_right</Icon></button>)}{tasks.length > 3 && <p className="ppf-empty">+{tasks.length - 3} flere i Home Assistant</p>}{maintenance && !tasks.length && !maintenanceError && !stale && <p className="ppf-empty">Ingen vedlikeholdsoppgaver nå.</p>}{liveTasks.slice(0, Math.max(0, 3 - tasks.length)).map((item, index) => <button type="button" className="ppf-today-item" key={`${item.title}-${index}`} onClick={() => openDetail({ title: item.title, icon: 'checklist', body: <p>{item.detail ?? 'Ingen flere detaljer er registrert.'}</p> })}><span className="ppf-today-check" aria-hidden="true"><Icon>radio_button_unchecked</Icon></span><span><strong>{item.title}</strong>{item.detail && <small>{item.detail}</small>}</span>{item.time && <time>{item.time}</time>}<Icon>chevron_right</Icon></button>)}</div>
   </Surface>;
 }
 
@@ -325,7 +322,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
   const forwardWeather = <ForwardWeather states={props.states} showWeather={props.showWeather}/>;
-  const today = <TodayModule states={props.states} openDetail={setDetail}/>;
+  const today = <TodayModule states={props.states} maintenance={props.maintenance} maintenanceError={props.maintenanceError} openDetail={(next) => { detailInvoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined; setDetail(next); }}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
   const alerts = prototypeAlertDescriptors(props.states, query.scenario, now);
   const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };

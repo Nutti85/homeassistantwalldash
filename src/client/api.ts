@@ -1,6 +1,7 @@
 import type { DashboardAction, FanSpeed, HeatPumpMode, HomeAssistantState, LightCommand, LightControlKey } from '../shared/entities';
 import type { DepartureBriefingPayload } from '../shared/departureBriefing';
 import type { ActivityEvent, CameraEventGroup, ActivityPayload, CameraEventFeed, CameraObject, CameraReview } from '../shared/activity';
+import type { MaintenanceResponse } from '../shared/maintenance';
 
 export interface DashboardResponse {
   states: Record<string, HomeAssistantState>;
@@ -70,6 +71,12 @@ const request = async (path: string, init?: RequestInit): Promise<DashboardRespo
 };
 
 export const getStates = async (): Promise<DashboardResponse> => request('/api/states');
+
+export const getMaintenance = async (): Promise<MaintenanceResponse> => {
+  const response = await fetch('/api/maintenance', { signal: AbortSignal.timeout(requestTimeoutMs), cache: 'no-store' });
+  if (!response.ok) throw new Error('Kunne ikke hente vedlikeholdsoppgaver.');
+  return response.json() as Promise<MaintenanceResponse>;
+};
 
 const isActivityDate = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value));
 const activityMediaPath = /^\/api\/activity\/review\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(preview|thumbnail)$/;
