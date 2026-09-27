@@ -2,11 +2,11 @@
 
 > **For agentic workers:** Implement this plan task by task with the repository's engineering router. Keep Home Assistant changes and WallDash changes as separate, reviewable checkpoints.
 
-**Goal:** Tell the household which replaceable device batteries need attention, which battery-powered devices are offline, what to buy or check, and what remains to be done; make the same status available to WallDash and other services through n8n.
+**Goal:** Tell the household which replaceable device batteries need attention, which battery-powered devices are offline, what to buy or check, and what remains to be done; make the same status available to WallDash and other services through n8n. Mobile notifications are deferred.
 
-**Architecture:** Home Assistant owns device measurements, a dedicated Local to-do list, the user-facing card and push delivery. One n8n workflow owns the verified device catalog, evaluates low/stale/offline status, synchronizes HA tasks, and keeps a structured latest snapshot in a Data Table. WallDash, the Emergency Dashboard, and future services all read that snapshot through the same authenticated, read-only n8n endpoint. Only n8n reads and writes the HA to-do list for this feature.
+**Architecture:** Home Assistant owns device measurements, a dedicated Local to-do list, and the user-facing card. One n8n workflow owns the verified device catalog, evaluates low/stale/offline status, synchronizes HA tasks, and keeps a structured latest snapshot in a Data Table. WallDash, the Emergency Dashboard, and future services all read that snapshot through the same authenticated, read-only n8n endpoint. Only n8n reads and writes the HA to-do list for this feature.
 
-**Tech stack:** Home Assistant 2026.9.3, Local to-do, Companion app notifications, existing n8n with Data Tables, React/TypeScript, Express, Vitest.
+**Tech stack:** Home Assistant 2026.9.3, Local to-do, existing n8n with Data Tables, React/TypeScript, Express, Vitest.
 
 **Spec:** The requirements and decisions in this plan, based on the user's 2026-09-27 request and the live Home Assistant inventory below.
 
@@ -63,12 +63,14 @@ The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` b
 
 **Check:** A user can see the device, urgency, and correct next action in HA; purchase tasks include verified battery type and quantity, while offline tasks say to check connectivity. Completing a task is possible from the card.
 
-### Task 4: Notify without duplicate or misleading alerts
+### Task 4: Synchronize tasks without duplicates or misleading advice
 
 - [ ] Have the n8n workflow reconcile low, critical, offline, and verify-device findings against `todo.get_items`, then add/update only missing or changed tasks. Initial battery policy: **low below 20%; critical at or below 5% or an asserted low-battery binary sensor**. Make thresholds and offline grace period adjustable after observing the devices. Do not open purchase tasks for stale, `unknown`, or `unavailable` readings. Do not auto-complete an offline task until a valid operational reading returns, or a battery task solely because of one transient percentage rise.
-- [ ] Use a small HA automation on `todo.item_added` or a deliberate n8n-to-HA notification action to send a [Companion app notification](https://companion.home-assistant.io/docs/notifications/notifications-basic/) to the intended recipient when a new task opens or becomes critical. Include room, device, clear next action, verified battery type/quantity **only when relevant**, and a link to the HA task view. Use a stable per-device notification tag and cooldown. If the whole Zigbee/Hue integration is unavailable, send one infrastructure alert rather than individual battery pushes.
+- [ ] If the whole Zigbee/Hue integration is unavailable, create one infrastructure-check task rather than individual device tasks.
 
-**Check:** Simulate low, critical, restored, stale, one offline device, an integration outage and HA outage; verify one appropriate task per device, no duplicate notifications, no invented purchase advice, and no battery alert for a charging phone, car, mower or solar rain sensor.
+**Check:** Simulate low, critical, restored, stale, one offline device, an integration outage and HA outage; verify one appropriate task per device, no duplicate tasks, no invented purchase advice, and no battery task for a charging phone, car, mower or solar rain sensor.
+
+**Deferred:** Companion app/mobile notifications and their delivery rules. Do not create notification automations or send push messages in this implementation round.
 
 ## Phase 2 — WallDash tasks
 
@@ -102,7 +104,7 @@ The IKEA kitchen remote (`sensor.0x14b457fffe7dc4d5_battery`) has an `unknown` b
 ## Review focus
 
 - Battery percentages can be stale or unavailable; neither should become a false “buy this battery” claim.
-- An individual device outage and a shared Zigbee/Hue outage require different tasks and notification volume.
+- An individual device outage and a shared Zigbee/Hue outage require different tasks and task volume.
 - A device can expose two battery entities; create at most one task per physical replacement action.
 - A completed task can coexist with an old low reading; do not instantly recreate it without a fresh report or deliberate reset.
 - Battery type changes by model revision; require exact-model evidence before purchase wording.
