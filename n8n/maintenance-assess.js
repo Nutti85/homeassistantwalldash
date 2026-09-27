@@ -3,13 +3,13 @@ const catalog = [
   ['0x0017880104f3594d', 'Hovedlysbryter Soverom Jacob', 'Jacobs soverom', 'sensor.0x0017880104f3594d_battery', 'event.hovedlysbryter_soverom_jacob_action', 'CR2450', 1],
   ['0x001788010219cb54', 'Ekstralysbryter Soverom', 'Soverom', 'sensor.0x001788010219cb54_battery', 'event.ekstralysbryter_soverom_action', 'CR2450', 1],
   ['0x0017880104ee186e', 'Hovedlysbryter Soverom', 'Soverom', 'sensor.0x0017880104ee186e_battery', 'event.hovedlysbryter_soverom_action', 'CR2450', 1],
-  ['0x00158d000488a2e3', 'Aqara Temperature Sensor Vaskerom', 'Vaskerom', 'sensor.0x00158d000488a2e3_battery', 'sensor.temp_vaskerom', null, null],
-  ['0x8c65a3fffeef2fae', 'Vanning Planter', null, 'sensor.0x8c65a3fffeef2fae_battery', 'sensor.0x8c65a3fffeef2fae_current_device_status', null, null],
-  ['0xa4c138d9823c57d3', 'Solar Rain Sensor Tuya', 'Ute', 'sensor.0xa4c138d9823c57d3_battery', 'binary_sensor.rain_sensor_rain', null, null],
-  ['0x001788010646bf54', 'Philips Bevegelse Lux Yttervegg Vei', 'Ute', 'sensor.0x001788010646bf54_battery', 'binary_sensor.bevegelse_lys_ute', null, null],
-  ['0x001788010670c2ff', 'Philips Hovedlysbryter Stue', 'Stue', 'sensor.0x001788010670c2ff_battery', 'event.philips_hovedlysbryter_stue_action', null, null],
-  ['0x00158d000ae16cb6', 'Dørsensor Ytterdør', 'Ytterdør', 'sensor.sensor_ytterdor_battery', 'binary_sensor.sensor_ytterdor', null, null],
-  ['0x14b457fffe7dc4d5', 'Lysbryter Kjøkken', 'Kjøkken', 'sensor.0x14b457fffe7dc4d5_battery', 'event.fjernkontroll_takspot_kjokken_action', null, null],
+  ['0x00158d000488a2e3', 'Aqara Temperature Sensor Vaskerom', 'Vaskerom', 'sensor.0x00158d000488a2e3_battery', 'sensor.temp_vaskerom', 'CR2032', 1],
+  ['0x8c65a3fffeef2fae', 'Vanning Planter', null, 'sensor.0x8c65a3fffeef2fae_battery', 'sensor.0x8c65a3fffeef2fae_current_device_status', 'AA', 4],
+  ['0xa4c138d9823c57d3', 'Solar Rain Sensor Tuya', 'Ute', 'sensor.0xa4c138d9823c57d3_battery', 'binary_sensor.rain_sensor_rain', 'oppladbart Li-ion 3,7 V / 1300 mAh (solcelle)', null],
+  ['0x001788010646bf54', 'Philips Bevegelse Lux Yttervegg Vei', 'Ute', 'sensor.0x001788010646bf54_battery', 'binary_sensor.bevegelse_lys_ute', 'AA', 2],
+  ['0x001788010670c2ff', 'Philips Hovedlysbryter Stue', 'Stue', 'sensor.0x001788010670c2ff_battery', 'event.philips_hovedlysbryter_stue_action', 'CR2450', 1],
+  ['0x00158d000ae16cb6', 'Dørsensor Ytterdør', 'Ytterdør', 'sensor.sensor_ytterdor_battery', 'binary_sensor.sensor_ytterdor', 'CR1632', 1],
+  ['0x14b457fffe7dc4d5', 'Lysbryter Kjøkken', 'Kjøkken', 'sensor.0x14b457fffe7dc4d5_battery', 'event.fjernkontroll_takspot_kjokken_action', 'CR2032', 1],
 ];
 const stateItems = $items('Read HA states').map(item => item.json);
 const states = new Map(stateItems.filter(item => item.entity_id).map(item => [item.entity_id, item]));
@@ -18,7 +18,12 @@ const prior = priorRow?.payload ? JSON.parse(priorRow.payload) : null;
 const todoResponse = $input.first()?.json ?? {};
 const todoItems = (todoResponse.service_response ?? todoResponse.body ?? todoResponse)['todo.husvedlikehold']?.items;
 const available = states.size > 10 && Array.isArray(todoItems);
-const existing = new Map((todoItems ?? []).map(item => [item.description?.match(/Vedlikehold-ID: ([^\s]+)/)?.[1], item]).filter(([id]) => id));
+const kinds = { 'Bytt batteri': 'replace_battery', 'Sjekk tilkobling': 'check_offline', 'Kontroller enhet': 'verify_device' };
+const existing = new Map((todoItems ?? []).map(item => {
+  const match = item.summary?.match(/^(Bytt batteri|Sjekk tilkobling|Kontroller enhet): (.+)$/);
+  const device = catalog.find(([, name]) => name === match?.[2]);
+  return [device ? `battery:${device[0]}:${kinds[match[1]]}` : null, item];
+}).filter(([id]) => id));
 const now = new Date();
 const bridge = states.get('binary_sensor.zigbee2mqtt_bridge_connection_state')?.state;
 const bridgeDown = bridge !== 'on';
@@ -49,7 +54,8 @@ const desired = available ? devices.filter(device => device.kind).map(device => 
   const id = `battery:${device.id}:${device.kind}`;
   const prefix = device.kind === 'replace_battery' ? 'Bytt batteri' : device.kind === 'check_offline' ? 'Sjekk tilkobling' : 'Kontroller enhet';
   const summary = `${prefix}: ${device.name}`;
-  const description = `${device.action}\nBatteritype: ${device.batteryType ? `${device.quantity} × ${device.batteryType}` : 'ukjent – kontroller fysisk modell'}.\n${device.level === null ? '' : `Siste nivå: ${device.level} %.\n`}Sist observert: ${device.evidenceUpdatedAt ?? 'ukjent'}.\nVedlikehold-ID: ${id}`;
+  const seen = device.evidenceUpdatedAt ? new Date(device.evidenceUpdatedAt).toLocaleString('nb-NO', { timeZone: 'Europe/Oslo', dateStyle: 'short', timeStyle: 'short' }).replace(', ', ' kl. ') : 'ukjent';
+  const description = `${device.action}\nBatteritype: ${device.quantity ? `${device.quantity} × ` : ''}${device.batteryType}.\n${device.level === null ? '' : `Siste nivå: ${device.level} %.\n`}Sist observert: ${seen}.`;
   return { id, deviceId: device.id, kind: device.kind, summary, description, due: null, status: 'needs_action', evidenceUpdatedAt: device.evidenceUpdatedAt };
 }) : [];
 const operations = [];

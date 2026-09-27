@@ -20,6 +20,7 @@ const states = [
   state('event.hovedlysbryter_soverom_jacob_action', 'unknown'),
   state('sensor.0x001788010646bf54_battery', 'unavailable', '2026-09-20T06:43:24Z'),
   state('binary_sensor.bevegelse_lys_ute', 'unavailable'),
+  state('sensor.0xa4c138d9823c57d3_battery', '6', '2026-09-21T17:22:15Z'),
   ...Array.from({ length: 7 }, (_, i) => state(`sensor.test_${i}`, '50')),
 ];
 const empty = { service_response: { 'todo.husvedlikehold': { items: [] } } };
@@ -29,17 +30,30 @@ assert(operations.some(item => item.body.item === 'Bytt batteri: Hovedlysbryter 
 assert(operations.some(item => item.body.item === 'Sjekk tilkobling: Philips Bevegelse Lux Yttervegg Vei'));
 assert(operations.every(item => item.body.description.includes('Batteritype: ')));
 assert(operations.some(item => item.body.description.includes('Batteritype: 1 × CR2450')));
-assert(operations.some(item => item.body.description.includes('Batteritype: ukjent – kontroller fysisk modell')));
+assert(operations.every(item => !item.body.description.includes('Batteritype: ukjent')));
+assert(operations.some(item => item.body.description.includes('Batteritype: 2 × AA')));
+assert(operations.some(item => item.body.description.includes('Batteritype: oppladbart Li-ion 3,7 V / 1300 mAh (solcelle)')));
+assert(operations.every(item => !item.body.description.includes('Vedlikehold-ID:')));
+assert(operations.some(item => item.body.description.includes('Sist observert: 20.09.2026 kl. 08:43.')));
 assert(!operations.some(item => /Kontroll Soverom HA|Soverom HA Innside/.test(item.body.item ?? '')));
 
 const existing = operations.map((operation, index) => ({ uid: String(index), summary: operation.body.item, description: operation.body.description, status: 'needs_action' }));
 const repeated = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: existing } } });
 assert.equal(repeated.length, 1);
 assert.equal(repeated[0].json.service, 'get_items');
+const legacy = existing.map((item, index) => ({ ...item, description: `${item.description}\nVedlikehold-ID: ${operations[index].desired[index]?.id ?? 'legacy'}` }));
+const migrated = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: legacy } } });
+assert(migrated.every(item => item.json.service === 'update_item'));
 const completed = existing.map(item => ({ ...item, status: 'completed' }));
 const afterCompletion = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: completed } } });
 assert.equal(afterCompletion.length, 1);
 assert.equal(afterCompletion[0].json.service, 'get_items');
+const synced = run('maintenance-snapshot.js', {
+  'Assess maintenance': [{ json: operations[0] }],
+  'Load previous snapshot': [],
+  'Apply HA to-do operation': [{ json: {} }],
+}, { service_response: { 'todo.husvedlikehold': { items: existing } } });
+assert.equal(JSON.parse(synced[0].json.payload).tasks.length, existing.length);
 
 const prior = { schemaVersion: 1, observedAt: now, checkedAt: now, sourceAvailable: true, devices: [{ id: 'saved' }], tasks: [{ id: 'saved' }] };
 const outageNodes = { 'Read HA states': [{ json: { error: 'offline' } }], 'Load previous snapshot': [{ json: { payload: JSON.stringify(prior) } }] };

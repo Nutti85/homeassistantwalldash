@@ -7,11 +7,9 @@ const prior = priorRow?.payload ? JSON.parse(priorRow.payload) : null;
 const now = new Date().toISOString();
 const writesOk = $items('Apply HA to-do operation').every(item => !item.json.error);
 const tasks = Array.isArray(items) ? items.flatMap(item => {
-  const id = item.description?.match(/Vedlikehold-ID: ([^\s]+)/)?.[1];
-  if (!id) return [];
-  const [, deviceId, kind] = id.match(/^battery:([^:]+):(replace_battery|check_offline|verify_device)$/) ?? [];
-  if (!deviceId) return [];
-  return [{ id, deviceId, kind, summary: item.summary, description: item.description, due: item.due ?? null, status: item.status, evidenceUpdatedAt: assessment.desired.find(task => task.id === id)?.evidenceUpdatedAt ?? prior?.tasks?.find(task => task.id === id)?.evidenceUpdatedAt ?? null }];
+  const task = assessment.desired.find(task => task.summary === item.summary) ?? prior?.tasks?.find(task => task.summary === item.summary);
+  if (!task) return [];
+  return [{ ...task, summary: item.summary, description: item.description, due: item.due ?? null, status: item.status }];
 }) : (prior?.tasks ?? []);
 const snapshot = {
   schemaVersion: 1,
