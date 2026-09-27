@@ -1,0 +1,57 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+
+function run(file, nodes, input) {
+  const code = fs.readFileSync(path.join(__dirname, file), 'utf8');
+  return vm.runInNewContext(`(() => { ${code} })()`, {
+    $items: name => nodes[name] ?? [],
+    $input: { first: () => ({ json: input }) },
+    Date,
+  });
+}
+
+const now = new Date().toISOString();
+const state = (entity_id, value, last_updated = now) => ({ json: { entity_id, state: value, last_updated } });
+const states = [
+  state('binary_sensor.zigbee2mqtt_bridge_connection_state', 'on'),
+  state('sensor.0x0017880104f3594d_battery', '1'),
+  state('event.hovedlysbryter_soverom_jacob_action', 'unknown'),
+  state('sensor.0x001788010646bf54_battery', 'unavailable', '2026-09-20T06:43:24Z'),
+  state('binary_sensor.bevegelse_lys_ute', 'unavailable'),
+  ...Array.from({ length: 7 }, (_, i) => state(`sensor.test_${i}`, '50')),
+];
+const empty = { service_response: { 'todo.husvedlikehold': { items: [] } } };
+const nodes = { 'Read HA states': states, 'Load previous snapshot': [] };
+const operations = run('maintenance-assess.js', nodes, empty).map(item => item.json);
+assert(operations.some(item => item.body.item === 'Bytt batteri: Hovedlysbryter Soverom Jacob'));
+assert(operations.some(item => item.body.item === 'Sjekk tilkobling: Philips Bevegelse Lux Yttervegg Vei'));
+assert(!operations.some(item => /Kontroll Soverom HA|Soverom HA Innside/.test(item.body.item ?? '')));
+
+const existing = operations.map((operation, index) => ({ uid: String(index), summary: operation.body.item, description: operation.body.description, status: 'needs_action' }));
+const repeated = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: existing } } });
+assert.equal(repeated.length, 1);
+assert.equal(repeated[0].json.service, 'get_items');
+const completed = existing.map(item => ({ ...item, status: 'completed' }));
+const afterCompletion = run('maintenance-assess.js', nodes, { service_response: { 'todo.husvedlikehold': { items: completed } } });
+assert.equal(afterCompletion.length, 1);
+assert.equal(afterCompletion[0].json.service, 'get_items');
+
+const prior = { schemaVersion: 1, observedAt: now, checkedAt: now, sourceAvailable: true, devices: [{ id: 'saved' }], tasks: [{ id: 'saved' }] };
+const outageNodes = { 'Read HA states': [{ json: { error: 'offline' } }], 'Load previous snapshot': [{ json: { payload: JSON.stringify(prior) } }] };
+const outage = run('maintenance-assess.js', outageNodes, { error: 'offline' });
+assert.equal(outage.length, 1);
+assert.equal(outage[0].json.service, 'get_items');
+assert.equal(outage[0].json.sourceAvailable, false);
+const snapshot = run('maintenance-snapshot.js', {
+  'Assess maintenance': outage,
+  'Load previous snapshot': outageNodes['Load previous snapshot'],
+  'Apply HA to-do operation': [{ json: { error: 'offline' } }],
+}, { error: 'offline' })[0].json;
+const payload = JSON.parse(snapshot.payload);
+assert.equal(payload.sourceAvailable, false);
+assert.equal(payload.observedAt, now);
+assert.equal(payload.devices[0].id, 'saved');
+assert.equal(payload.tasks[0].id, 'saved');
+console.log('maintenance self-check passed');

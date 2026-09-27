@@ -1,0 +1,488 @@
+{
+  "note": "Reattach existing n8n credentials: WallDash Home Assistant API (httpBearerAuth) on HA HTTP nodes; Home maintenance read feed (httpHeaderAuth) on GET webhook. No secret values are exported.",
+  "workflows": [
+    {
+      "name": "Home maintenance - assess and sync v1",
+      "nodes": [
+        {
+          "id": "schedule",
+          "name": "Every 30 minutes",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "typeVersion": 1.3,
+          "position": [
+            0,
+            0
+          ],
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "minutes",
+                  "minutesInterval": 30
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "previous",
+          "name": "Load previous snapshot",
+          "type": "n8n-nodes-base.dataTable",
+          "typeVersion": 1.1,
+          "position": [
+            240,
+            0
+          ],
+          "parameters": {
+            "resource": "row",
+            "operation": "get",
+            "dataTableId": {
+              "mode": "id",
+              "value": "PvmdwPwMSBPMH0mh"
+            },
+            "filters": {
+              "conditions": [
+                {
+                  "keyName": "key",
+                  "condition": "eq",
+                  "keyValue": "latest"
+                }
+              ]
+            },
+            "limit": 1
+          }
+        },
+        {
+          "id": "states",
+          "name": "Read HA states",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            480,
+            0
+          ],
+          "parameters": {
+            "method": "GET",
+            "url": "http://192.168.1.78:8123/api/states",
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "httpBearerAuth",
+            "options": {
+              "timeout": 15000
+            }
+          },
+          "onError": "continueRegularOutput"
+        },
+        {
+          "id": "todo-before",
+          "name": "Read HA to-do before sync",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            720,
+            0
+          ],
+          "parameters": {
+            "method": "POST",
+            "url": "http://192.168.1.78:8123/api/services/todo/get_items?return_response",
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "httpBearerAuth",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\"entity_id\":\"todo.husvedlikehold\"}",
+            "options": {
+              "timeout": 15000
+            }
+          },
+          "onError": "continueRegularOutput"
+        },
+        {
+          "id": "assess",
+          "name": "Assess maintenance",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            960,
+            0
+          ],
+          "parameters": {
+            "jsCode": "// n8n Code node: run once for all items after reading HA states and existing to-do items.\nconst catalog = [\n  ['0x0017880104f3594d', 'Hovedlysbryter Soverom Jacob', 'Jacobs soverom', 'sensor.0x0017880104f3594d_battery', 'event.hovedlysbryter_soverom_jacob_action', 'CR2450', 1],\n  ['0x001788010219cb54', 'Ekstralysbryter Soverom', 'Soverom', 'sensor.0x001788010219cb54_battery', 'event.ekstralysbryter_soverom_action', 'CR2450', 1],\n  ['0x0017880104ee186e', 'Hovedlysbryter Soverom', 'Soverom', 'sensor.0x0017880104ee186e_battery', 'event.hovedlysbryter_soverom_action', 'CR2450', 1],\n  ['0x00158d000488a2e3', 'Aqara Temperature Sensor Vaskerom', 'Vaskerom', 'sensor.0x00158d000488a2e3_battery', 'sensor.temp_vaskerom', null, null],\n  ['0x8c65a3fffeef2fae', 'Vanning Planter', null, 'sensor.0x8c65a3fffeef2fae_battery', 'sensor.0x8c65a3fffeef2fae_current_device_status', null, null],\n  ['0xa4c138d9823c57d3', 'Solar Rain Sensor Tuya', 'Ute', 'sensor.0xa4c138d9823c57d3_battery', 'binary_sensor.rain_sensor_rain', null, null],\n  ['0x001788010646bf54', 'Philips Bevegelse Lux Yttervegg Vei', 'Ute', 'sensor.0x001788010646bf54_battery', 'binary_sensor.bevegelse_lys_ute', null, null],\n  ['0x001788010670c2ff', 'Philips Hovedlysbryter Stue', 'Stue', 'sensor.0x001788010670c2ff_battery', 'event.philips_hovedlysbryter_stue_action', null, null],\n  ['0x00158d000ae16cb6', 'Dørsensor Ytterdør', 'Ytterdør', 'sensor.sensor_ytterdor_battery', 'binary_sensor.sensor_ytterdor', null, null],\n  ['0x14b457fffe7dc4d5', 'Lysbryter Kjøkken', 'Kjøkken', 'sensor.0x14b457fffe7dc4d5_battery', 'event.fjernkontroll_takspot_kjokken_action', null, null],\n];\nconst stateItems = $items('Read HA states').map(item => item.json);\nconst states = new Map(stateItems.filter(item => item.entity_id).map(item => [item.entity_id, item]));\nconst priorRow = $items('Load previous snapshot')[0]?.json;\nconst prior = priorRow?.payload ? JSON.parse(priorRow.payload) : null;\nconst todoResponse = $input.first()?.json ?? {};\nconst todoItems = (todoResponse.service_response ?? todoResponse.body ?? todoResponse)['todo.husvedlikehold']?.items;\nconst available = states.size > 10 && Array.isArray(todoItems);\nconst existing = new Map((todoItems ?? []).map(item => [item.description?.match(/Vedlikehold-ID: ([^\\s]+)/)?.[1], item]).filter(([id]) => id));\nconst now = new Date();\nconst bridge = states.get('binary_sensor.zigbee2mqtt_bridge_connection_state')?.state;\nconst bridgeDown = bridge !== 'on';\nconst devices = available ? catalog.map(([id, name, area, batteryEntityId, operationalEntityId, batteryType, quantity]) => {\n  const battery = states.get(batteryEntityId);\n  const operational = states.get(operationalEntityId);\n  const level = Number(battery?.state);\n  const validLevel = battery && battery.state !== 'unknown' && battery.state !== 'unavailable' && Number.isFinite(level) && level >= 0 && level <= 100;\n  const evidenceUpdatedAt = battery?.last_updated ?? null;\n  const ageHours = evidenceUpdatedAt ? (now - new Date(evidenceUpdatedAt)) / 3600000 : Infinity;\n  const batteryStatus = !validLevel ? 'unknown' : ageHours > 48 ? 'stale' : level <= 5 ? 'critical' : level < 20 ? 'low' : 'healthy';\n  const offline = battery?.state === 'unavailable' && operational?.state === 'unavailable' && !bridgeDown && ageHours > 0.5;\n  const connectionStatus = offline ? 'offline' : operational?.state === 'unavailable' ? 'unknown' : 'online';\n  const status = offline ? 'offline' : batteryStatus;\n  let kind = null, action = 'Ingen tiltak';\n  if (offline) { kind = 'check_offline'; action = 'Sjekk enhet og tilkobling; batteriet er ikke bekreftet tomt.'; }\n  else if (batteryStatus === 'critical' || batteryStatus === 'low') {\n    if (batteryType) { kind = 'replace_battery'; action = `Kjøp ${quantity} × ${batteryType} og bytt batteri.`; }\n    else { kind = 'verify_device'; action = 'Kontroller fysisk modell og batteritype før kjøp.'; }\n  } else if (batteryStatus === 'stale' && validLevel && level < 20) {\n    kind = 'verify_device'; action = batteryEntityId.includes('a4c138') ? 'Sjekk solcelle, lading og plassering.' : 'Sjekk om enheten rapporterer og bekreft batterinivået.';\n  } else if (!validLevel && operational?.state === 'unavailable' && !bridgeDown) {\n    kind = 'verify_device'; action = 'Sjekk enhetens tilkobling og batteristatus.';\n  }\n  return { id, name, area, batteryEntityId, level: validLevel ? level : null, batteryType, quantity, replaceable: !batteryEntityId.includes('a4c138'), status, batteryStatus, connectionStatus, action, evidenceUpdatedAt, kind };\n}) : (prior?.devices ?? []);\nconst desired = available ? devices.filter(device => device.kind).map(device => {\n  const id = `battery:${device.id}:${device.kind}`;\n  const prefix = device.kind === 'replace_battery' ? 'Bytt batteri' : device.kind === 'check_offline' ? 'Sjekk tilkobling' : 'Kontroller enhet';\n  const summary = `${prefix}: ${device.name}`;\n  const description = `${device.action}\\n${device.level === null ? '' : `Siste nivå: ${device.level} %.\\n`}Sist observert: ${device.evidenceUpdatedAt ?? 'ukjent'}.\\nVedlikehold-ID: ${id}`;\n  return { id, deviceId: device.id, kind: device.kind, summary, description, due: null, status: 'needs_action', evidenceUpdatedAt: device.evidenceUpdatedAt };\n}) : [];\nconst operations = [];\nfor (const task of desired) {\n  const old = existing.get(task.id);\n  if (!old) operations.push({ service: 'add_item', body: { entity_id: 'todo.husvedlikehold', item: task.summary, description: task.description } });\n  else if (old.status === 'needs_action' && (old.summary !== task.summary || old.description !== task.description)) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, rename: task.summary, description: task.description } });\n  // A completed item stays completed until its underlying HA state changes.\n  else if (old.status === 'completed' && task.evidenceUpdatedAt && new Date(task.evidenceUpdatedAt) > new Date((prior?.tasks ?? []).find(item => item.id === task.id)?.evidenceUpdatedAt ?? task.evidenceUpdatedAt)) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, status: 'needs_action', description: task.description } });\n}\nfor (const [id, old] of existing) {\n  if (old.status !== 'needs_action' || desired.some(task => task.id === id)) continue;\n  const [, deviceId, kind] = id.match(/^battery:([^:]+):(replace_battery|check_offline|verify_device)$/) ?? [];\n  const current = devices.find(device => device.id === deviceId);\n  if (current && ((kind === 'check_offline' && current.connectionStatus === 'online') || (kind === 'verify_device' && (current.kind === 'replace_battery' || current.status === 'healthy')))) operations.push({ service: 'update_item', body: { entity_id: 'todo.husvedlikehold', item: old.uid, status: 'completed' } });\n}\nif (!operations.length) operations.push({ service: 'get_items', body: { entity_id: 'todo.husvedlikehold' } });\nreturn operations.map(operation => ({ json: { ...operation, devices, observedAt: available ? now.toISOString() : prior?.observedAt ?? null, sourceAvailable: available, desired } }));\n\r\n"
+          }
+        },
+        {
+          "id": "apply",
+          "name": "Apply HA to-do operation",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1200,
+            0
+          ],
+          "parameters": {
+            "method": "POST",
+            "url": "=http://192.168.1.78:8123/api/services/todo/{{$json.service}}{{$json.service === 'get_items' ? '?return_response' : ''}}",
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "httpBearerAuth",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{$json.body}}",
+            "options": {
+              "timeout": 15000
+            }
+          },
+          "onError": "continueRegularOutput"
+        },
+        {
+          "id": "collapse",
+          "name": "After to-do sync",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            1440,
+            0
+          ],
+          "parameters": {
+            "jsCode": "return [{ json: { operations: $input.all().length } }];"
+          }
+        },
+        {
+          "id": "todo-after",
+          "name": "Read HA to-do after sync",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1680,
+            0
+          ],
+          "parameters": {
+            "method": "POST",
+            "url": "http://192.168.1.78:8123/api/services/todo/get_items?return_response",
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "httpBearerAuth",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\"entity_id\":\"todo.husvedlikehold\"}",
+            "options": {
+              "timeout": 15000
+            }
+          },
+          "onError": "continueRegularOutput"
+        },
+        {
+          "id": "snapshot",
+          "name": "Build snapshot",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            1920,
+            0
+          ],
+          "parameters": {
+            "jsCode": "// n8n Code node: run once after re-reading the Home Assistant to-do list.\nconst assessment = $items('Assess maintenance')[0]?.json;\nconst response = $input.first()?.json ?? {};\nconst items = (response.service_response ?? response.body ?? response)['todo.husvedlikehold']?.items;\nconst priorRow = $items('Load previous snapshot')[0]?.json;\nconst prior = priorRow?.payload ? JSON.parse(priorRow.payload) : null;\nconst now = new Date().toISOString();\nconst writesOk = $items('Apply HA to-do operation').every(item => !item.json.error);\nconst tasks = Array.isArray(items) ? items.flatMap(item => {\n  const id = item.description?.match(/Vedlikehold-ID: ([^\\s]+)/)?.[1];\n  if (!id) return [];\n  const [, deviceId, kind] = id.match(/^battery:([^:]+):(replace_battery|check_offline|verify_device)$/) ?? [];\n  if (!deviceId) return [];\n  return [{ id, deviceId, kind, summary: item.summary, description: item.description, due: item.due ?? null, status: item.status, evidenceUpdatedAt: assessment.desired.find(task => task.id === id)?.evidenceUpdatedAt ?? prior?.tasks?.find(task => task.id === id)?.evidenceUpdatedAt ?? null }];\n}) : (prior?.tasks ?? []);\nconst snapshot = {\n  schemaVersion: 1,\n  observedAt: assessment.sourceAvailable ? assessment.observedAt : prior?.observedAt ?? null,\n  checkedAt: now,\n  sourceAvailable: assessment.sourceAvailable && Array.isArray(items) && writesOk,\n  devices: assessment.devices.map(({ kind, ...device }) => device),\n  tasks,\n};\nreturn [{ json: { key: 'latest', payload: JSON.stringify(snapshot), observedAt: snapshot.observedAt, checkedAt: now, sourceAvailable: snapshot.sourceAvailable } }];\n\r\n"
+          }
+        },
+        {
+          "id": "upsert",
+          "name": "Save latest snapshot",
+          "type": "n8n-nodes-base.dataTable",
+          "typeVersion": 1.1,
+          "position": [
+            2160,
+            0
+          ],
+          "parameters": {
+            "resource": "row",
+            "operation": "upsert",
+            "dataTableId": {
+              "mode": "id",
+              "value": "PvmdwPwMSBPMH0mh"
+            },
+            "filters": {
+              "conditions": [
+                {
+                  "keyName": "key",
+                  "condition": "eq",
+                  "keyValue": "latest"
+                }
+              ]
+            },
+            "columns": {
+              "mappingMode": "defineBelow",
+              "value": {
+                "key": "={{$json.key}}",
+                "payload": "={{$json.payload}}",
+                "observedAt": "={{$json.observedAt}}",
+                "checkedAt": "={{$json.checkedAt}}",
+                "sourceAvailable": "={{$json.sourceAvailable}}"
+              }
+            }
+          }
+        },
+        {
+          "id": "collapse-states",
+          "name": "After HA states",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            600,
+            0
+          ],
+          "parameters": {
+            "jsCode": "return [{json:{stateCount:$input.all().length}}];"
+          }
+        }
+      ],
+      "connections": {
+        "Every 30 minutes": {
+          "main": [
+            [
+              {
+                "node": "Load previous snapshot",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Load previous snapshot": {
+          "main": [
+            [
+              {
+                "node": "Read HA states",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Read HA states": {
+          "main": [
+            [
+              {
+                "node": "After HA states",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Read HA to-do before sync": {
+          "main": [
+            [
+              {
+                "node": "Assess maintenance",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Assess maintenance": {
+          "main": [
+            [
+              {
+                "node": "Apply HA to-do operation",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Apply HA to-do operation": {
+          "main": [
+            [
+              {
+                "node": "After to-do sync",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "After to-do sync": {
+          "main": [
+            [
+              {
+                "node": "Read HA to-do after sync",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Read HA to-do after sync": {
+          "main": [
+            [
+              {
+                "node": "Build snapshot",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Build snapshot": {
+          "main": [
+            [
+              {
+                "node": "Save latest snapshot",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "After HA states": {
+          "main": [
+            [
+              {
+                "node": "Read HA to-do before sync",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "settings": {
+        "executionOrder": "v1",
+        "timezone": "Europe/Oslo",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false,
+        "saveDataSuccessExecution": "none",
+        "saveDataErrorExecution": "none"
+      }
+    },
+    {
+      "name": "Home maintenance - read snapshot v1",
+      "nodes": [
+        {
+          "id": "maintenance-feed-webhook",
+          "name": "GET maintenance snapshot",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2.1,
+          "position": [
+            0,
+            0
+          ],
+          "parameters": {
+            "httpMethod": "GET",
+            "path": "maintenance/v1/snapshot",
+            "authentication": "headerAuth",
+            "responseMode": "responseNode",
+            "options": {}
+          },
+          "webhookId": "0ae13a3e-f401-443e-a902-0fc2a938dd41",
+          "onError": "continueRegularOutput"
+        },
+        {
+          "id": "maintenance-feed-load",
+          "name": "Load latest snapshot",
+          "type": "n8n-nodes-base.dataTable",
+          "typeVersion": 1.1,
+          "position": [
+            220,
+            0
+          ],
+          "parameters": {
+            "resource": "row",
+            "operation": "get",
+            "dataTableId": {
+              "mode": "id",
+              "value": "PvmdwPwMSBPMH0mh"
+            },
+            "filters": {
+              "conditions": [
+                {
+                  "keyName": "key",
+                  "condition": "eq",
+                  "keyValue": "latest"
+                }
+              ]
+            },
+            "returnAll": false,
+            "limit": 1
+          }
+        },
+        {
+          "id": "maintenance-feed-parse",
+          "name": "Parse snapshot",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            440,
+            0
+          ],
+          "parameters": {
+            "jsCode": "const row = $input.first()?.json; if (!row?.payload) throw new Error('Maintenance snapshot unavailable'); const snapshot = JSON.parse(row.payload); if (snapshot.schemaVersion !== 1) throw new Error('Unexpected snapshot version'); return [{ json: snapshot }];"
+          }
+        },
+        {
+          "id": "maintenance-feed-respond",
+          "name": "Respond with JSON",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1.5,
+          "position": [
+            660,
+            0
+          ],
+          "parameters": {
+            "respondWith": "firstIncomingItem",
+            "options": {
+              "responseHeaders": {
+                "entries": [
+                  {
+                    "name": "Cache-Control",
+                    "value": "no-store"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "connections": {
+        "GET maintenance snapshot": {
+          "main": [
+            [
+              {
+                "node": "Load latest snapshot",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Load latest snapshot": {
+          "main": [
+            [
+              {
+                "node": "Parse snapshot",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Parse snapshot": {
+          "main": [
+            [
+              {
+                "node": "Respond with JSON",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "settings": {
+        "executionOrder": "v1",
+        "timezone": "Europe/Oslo",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false,
+        "saveDataSuccessExecution": "none",
+        "saveDataErrorExecution": "none"
+      }
+    }
+  ]
+}
