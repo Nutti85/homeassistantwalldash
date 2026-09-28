@@ -339,7 +339,8 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     });
 
     expect(screen.getByText('Fotballtrening')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'I morgen' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'I morgen' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /Fotballtrening/ })).getByText('tirsdag', { selector: 'b' })).toBeInTheDocument();
     expect(screen.queryByText('Ingenting planlagt i denne perioden.')).not.toBeInTheDocument();
   });
 
