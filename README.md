@@ -14,6 +14,10 @@ npm run start
 
 For lokal utvikling med automatisk klientoppdatering, bruk `npm.cmd run dev` og åpne `http://127.0.0.1:5173`. Dette er den eneste lokale dashboard-adressen; API-et på port 3000 brukes bare internt av Vite. Legg lokale Home Assistant-verdier i `.env` først.
 
+For en vedvarende Windows-forhåndsvisning, kjør `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-dev-task.ps1` fra prosjektroten én gang. Oppgaven **WallDash local preview** kjører samme `npm.cmd run dev` uavhengig av terminalen, starter ved innlogging og starter på nytt etter prosessfeil. Den bruker denne arbeidsmappen, viser lokale Git-endringer via vanlig hot reload, og logger til `.local-dev.log`. Maskinen må være på og brukeren innlogget. Ikke start en ekstra dev-server mens oppgaven kjører.
+
+Kontroller med `powershell.exe -NoProfile -File scripts/check-dev-task.ps1`. Deaktiver autostart med `Disable-ScheduledTask -TaskName 'WallDash local preview'`, og stopp med `Stop-ScheduledTask -TaskName 'WallDash local preview'`, og aktiver igjen med `Enable-ScheduledTask -TaskName 'WallDash local preview'` og `Start-ScheduledTask -TaskName 'WallDash local preview'`. For å fjerne autostart, stopp oppgaven og kjør `Unregister-ScheduledTask -TaskName 'WallDash local preview' -Confirm:$false`. Bekreft alltid at prosjektportene er frigitt før manuell oppstart.
+
 På enkelte Windows-maskiner med Node 24 feiler `tsx` før serverkoden starter fordi Node-kallet `os.userInfo()` returnerer `uv_os_get_passwd` med `ENOMEM`. Dev-launcheren forhåndslaster derfor `scripts/node-os-userinfo-fallback.cjs`, som bare håndterer akkurat denne kjente Windows-feilen og bruker `USERNAME`/`USERPROFILE` som lokal fallback. Ikke patch `node_modules` eller fjern `tsx`; produksjonscontaineren bruker sin egen Linux-runtime.
 
 ### Feilsøking lokalt: «Kunne ikke oppdatere smarthuset»
