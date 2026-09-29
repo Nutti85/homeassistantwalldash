@@ -502,7 +502,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     const forwardWeather = within(future).getByRole('heading', { name: 'Vær fremover' }).closest('section') as HTMLElement;
     expect(within(forwardWeather).queryByText('Prognose')).not.toBeInTheDocument();
     expect(within(forwardWeather).getByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' })).toBeInTheDocument();
-    expect(forwardWeather.querySelector('.chart-legend')).toHaveTextContent('TemperaturNedbørSannsynlighetVindKastSkydekke');
+    expect(forwardWeather.querySelector('.chart-legend')).toHaveTextContent('TempNedbørSannsynlighetVindKastSkyer');
     const chart = within(forwardWeather).getByRole('img', { name: 'Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke' });
     expect(chart).toHaveClass('compact');
     expect(chart.querySelectorAll('.axis-left')).toHaveLength(5);
