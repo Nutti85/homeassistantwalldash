@@ -1278,6 +1278,7 @@ body.prototype-active{min-width:0;background:#07100f}
 .ppf-forward-chart .chart-legend span{white-space:nowrap}
 .ppf-forward-chart .chart-legend span:before{width:10px;margin-right:5px}
 .ppf-forward-chart .weather-chart text{font-size:11px}
+.ppf-forward-chart .axis-left{font-variant-numeric:tabular-nums}
 .ppf-forward-chart .weather-chart .time-label{font-size:11px}
 .ppf-forward-chart .weather-chart.compact .axis-wind-value{fill:#c6c4bd}
 .ppf-forward-chart .weather-chart.compact .axis-rain-value,.ppf-forward-chart .weather-chart.compact .axis-wind-value{font-size:inherit}
