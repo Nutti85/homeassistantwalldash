@@ -122,7 +122,7 @@ export function WeatherChart({ points, detailed = false, labelByDay = false, com
       if (measured.width && measured.height) setViewport((current) => current.width === measured.width && current.height === measured.height ? current : measured);
     };
     const observer = new ResizeObserver(updateViewport);
-    observer.observe(wrap);
+    observer.observe(svg);
     updateViewport();
     return () => observer.disconnect();
   }, [data.length, detailed]);
@@ -146,7 +146,7 @@ export function WeatherChart({ points, detailed = false, labelByDay = false, com
   const plot = detailed
     ? { left: 92, right: 103, top: 31, bottom: 2 }
     : compact
-      ? (() => { const sideGutter = Math.min(152, Math.max(76, width * .195)); return { left: sideGutter, right: sideGutter, top: 16, bottom: 27 }; })()
+      ? { left: 82, right: 98, top: 12, bottom: 0 }
       : (() => { const sideGutter = Math.min(175, Math.max(88, width * .26)); return { left: sideGutter, right: sideGutter, top: 31, bottom: 25 }; })();
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
@@ -162,8 +162,8 @@ export function WeatherChart({ points, detailed = false, labelByDay = false, com
   const probabilityPath = pathFor(probabilities, 0, 100);
   const cloudPath = pathFor(clouds, 0, 100);
   const ticks = [0, .25, .5, .75, 1];
-  const timeStep = Math.max(1, Math.floor((data.length - 1) / 7));
-  const timeIndexes = data.map((_, index) => index).filter((index) => compact || index % timeStep === 0 || index === data.length - 1);
+  const timeStep = compact ? Math.max(1, Math.ceil((data.length - 1) / Math.max(1, Math.floor(plotWidth / 48)))) : Math.max(1, Math.floor((data.length - 1) / 7));
+  const timeIndexes = data.map((_, index) => index).filter((index) => index % timeStep === 0 || (!compact && index === data.length - 1));
   return <div ref={wrapRef} className="weather-chart-wrap">
     <div className="chart-legend" aria-label="Tegnforklaring"><span className="temp">Temperatur</span><span className="rain">Nedbør</span><span className="probability">Sannsynlighet</span><span className="wind">Vind</span><span className="gust">Kast</span><span className="cloud">Skydekke</span></div>
     {data.length ? <svg ref={svgRef} className={`weather-chart${compact ? ' compact' : ''}`} role="img" aria-label="Samlet graf for temperatur, nedbør, nedbørssannsynlighet, vind, vindkast og skydekke" viewBox={`0 0 ${width} ${height + 28}`} preserveAspectRatio="xMidYMid meet">
