@@ -23,7 +23,7 @@ it('updates the compact plot and spaces time labels when its SVG resizes', () =>
   const gridline = svg.querySelector('.gridline')!;
   expect(Number(gridline.getAttribute('x1'))).toBe(320 - Number(gridline.getAttribute('x2')));
   const labels = [...svg.querySelectorAll('.time-label')];
-  expect(labels).toHaveLength(2);
+  expect(labels.length).toBe(3);
   expect(Number(labels[1].getAttribute('x')) - Number(labels[0].getAttribute('x'))).toBeGreaterThanOrEqual(48);
   width = 640;
   height = 300;

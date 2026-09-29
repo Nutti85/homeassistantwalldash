@@ -146,7 +146,7 @@ export function WeatherChart({ points, detailed = false, labelByDay = false, com
   const plot = detailed
     ? { left: 92, right: 103, top: 31, bottom: 2 }
     : compact
-      ? { left: 90, right: 90, top: 12, bottom: 0 }
+      ? { left: 82, right: 82, top: 12, bottom: 0 }
       : (() => { const sideGutter = Math.min(175, Math.max(88, width * .26)); return { left: sideGutter, right: sideGutter, top: 31, bottom: 25 }; })();
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
