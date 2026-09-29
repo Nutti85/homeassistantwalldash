@@ -139,14 +139,14 @@ export function WeatherChart({ points, detailed = false, labelByDay = false, com
   const max = temperatureValues.length ? Math.ceil(Math.max(...temperatureValues) + 2) : 25;
   const windMax = Math.max(2.5, ...windValues);
   const precipitationMax = Math.max(1, ...precipitationValues);
-  const height = Math.max(120, width * viewport.height / viewport.width - 28);
+  const height = Math.max(compact ? 72 : 120, width * viewport.height / viewport.width - 28);
   // The detailed card uses the same visible gaps as the smaller overview
   // chart. Its SVG is much wider, so the internal gutters scale down with its
   // smaller label type instead of leaving an oversized empty border.
   const plot = detailed
     ? { left: 92, right: 103, top: 31, bottom: 2 }
     : compact
-      ? { left: 82, right: 98, top: 12, bottom: 0 }
+      ? { left: 90, right: 90, top: 12, bottom: 0 }
       : (() => { const sideGutter = Math.min(175, Math.max(88, width * .26)); return { left: sideGutter, right: sideGutter, top: 31, bottom: 25 }; })();
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;

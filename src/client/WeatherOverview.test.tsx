@@ -7,7 +7,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 it('updates the compact plot and spaces time labels when its SVG resizes', () => {
   let resize = () => {};
   let width = 320;
-  let height = 150;
+  let height = 110;
   const observe = vi.fn();
   vi.stubGlobal('ResizeObserver', class {
     constructor(callback: () => void) { resize = callback; }
@@ -18,7 +18,10 @@ it('updates the compact plot and spaces time labels when its SVG resizes', () =>
   const points = Array.from({ length: 6 }, (_, index) => ({ datetime: `2026-09-29T${10 + index}:00:00Z`, temperature: 12, precipitation: 0, windSpeed: 3 }));
   const { container } = render(<WeatherChart points={points} compact/>);
   const svg = container.querySelector('svg')!;
-  expect(observe).toHaveBeenCalledWith(svg);
+  expect(observe.mock.calls[0][0] === svg).toBe(true);
+  expect(svg.getAttribute('viewBox')).toBe('0 0 320 110');
+  const gridline = svg.querySelector('.gridline')!;
+  expect(Number(gridline.getAttribute('x1'))).toBe(320 - Number(gridline.getAttribute('x2')));
   const labels = [...svg.querySelectorAll('.time-label')];
   expect(labels).toHaveLength(2);
   expect(Number(labels[1].getAttribute('x')) - Number(labels[0].getAttribute('x'))).toBeGreaterThanOrEqual(48);
