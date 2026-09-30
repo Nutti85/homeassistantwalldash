@@ -246,8 +246,6 @@ function SceneControls({ action, pending = {}, errors = {} }: Pick<PrototypeProp
 }
 
 function HomeControlRail({ openCameras, ...props }: PrototypeProps & { openCameras: (invoker: HTMLButtonElement) => void }) {
-  const locked = stateValue(props.states.frontDoorLock) === 'locked';
-  const securityOn = Number(stateValue(props.states.securityMode)) > 0;
   const [scenesOpen, setScenesOpen] = useState(false);
   const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi]];
   return <nav className="ppf-home-controls ppf-home-control-rail" aria-label="Hjemkontroller">
@@ -257,8 +255,6 @@ function HomeControlRail({ openCameras, ...props }: PrototypeProps & { openCamer
     </div>
     {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
     <button type="button" onClick={(event) => openCameras(event.currentTarget)}><Icon>videocam</Icon><span>Kameraer</span></button>
-    <button type="button" className={locked ? 'is-active' : ''} onClick={() => props.action(locked ? 'unlockDoor' : 'lockDoor')}><Icon>{locked ? 'lock' : 'lock_open'}</Icon><span>{locked ? 'Låst' : 'Lås døren'}</span></button>
-    <button type="button" className={securityOn ? 'is-active' : ''} onClick={() => props.action('securityMode')}><Icon>shield</Icon><span>{securityOn ? 'Overvåket' : 'Start overvåking'}</span></button>
   </nav>;
 }
 
@@ -326,11 +322,13 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const forwardWeather = <ForwardWeather states={props.states} showWeather={props.showWeather}/>;
   const today = <TodayModule states={props.states} maintenance={props.maintenance} maintenanceError={props.maintenanceError} openDetail={(next) => { detailInvoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined; setDetail(next); }}/>;
   const nudges = <ContextNudges states={props.states} openVehicles={props.openVehicles} openDetail={setDetail}/>;
+  const doorLocked = stateValue(props.states.frontDoorLock) === 'locked';
+  const securityOn = Number(stateValue(props.states.securityMode)) > 0;
   const alerts = prototypeAlertDescriptors(props.states, query.scenario, now);
   const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
   const closeDetail = () => setDetail(undefined);
   return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
-    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props} openCameras={openCameras}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
+    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props} openCameras={openCameras}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><div className="ppf-now-controls" role="group" aria-label="Dørlås og overvåking"><button type="button" className={'ppf-now-control ' + (doorLocked ? 'is-locked' : 'is-unlocked')} aria-label={doorLocked ? 'Lås opp ytterdøren' : 'Lås ytterdøren'} title={doorLocked ? 'Lås opp ytterdøren' : 'Lås ytterdøren'} aria-pressed={doorLocked} onClick={() => props.action(doorLocked ? 'unlockDoor' : 'lockDoor')}><Icon>{doorLocked ? 'lock' : 'lock_open'}</Icon></button><button type="button" className={'ppf-now-control ' + (securityOn ? 'is-active' : '')} aria-label={securityOn ? 'Slå av overvåking' : 'Start overvåking'} title={securityOn ? 'Slå av overvåking' : 'Start overvåking'} aria-pressed={securityOn} onClick={() => props.action('securityMode')}><Icon>shield</Icon></button></div><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={closeDetail}/>}
     {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}
