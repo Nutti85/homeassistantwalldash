@@ -340,8 +340,31 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     expect(screen.getByText('Fotballtrening')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'I morgen' })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('button', { name: /Fotballtrening/ })).getByText('tirsdag', { selector: 'b' })).toBeInTheDocument();
+    const event = screen.getByRole('button', { name: /Fotballtrening/ });
+    expect(event.querySelector('b')).toBeNull();
+    expect(event.querySelector('strong')?.textContent).toBe('Fotballtrening');
+    expect(event.querySelector('small')?.textContent).toBe('tirsdag · 17:00–18:00');
+    expect(event.querySelector('.ppf-source')?.textContent).toBe('Felles');
     expect(screen.queryByText('Ingenting planlagt i denne perioden.')).not.toBeInTheDocument();
+  });
+
+  it('shows the kindergarten time range and all-day labels below the title', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T18:00:00+02:00'));
+    renderPrototype({
+      mykidKindergarten: state('sensor.mykid_kindergarten', 'Oppdatert', {
+        events: [
+          { title: 'Tur til skogen', date: '2026-09-08', time: '11:30', details: '09:30 - 12:30 Tur til skogen', include_in_agenda: true },
+          { title: 'Foreldremøte', date: '2026-09-08', include_in_agenda: true },
+        ],
+      }),
+    });
+    const agenda = within(document.querySelector('.ppf-agenda') as HTMLElement);
+    const event = agenda.getByRole('button', { name: /Tur til skogen/ });
+    expect(event.querySelector('small')?.textContent).toBe('tirsdag · 09:30–12:30');
+    expect(agenda.getByRole('button', { name: /Foreldremøte/ }).querySelector('small')?.textContent).toBe('tirsdag · Hele dagen');
+    fireEvent.click(event);
+    expect(screen.getByRole('dialog')).toHaveTextContent('09:30 - 12:30 Tur til skogen');
   });
 
   it('shows at most five events by default and keeps the remaining events behind the more button', () => {
