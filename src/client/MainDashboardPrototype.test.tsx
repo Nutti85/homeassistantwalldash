@@ -571,6 +571,21 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
   });
 
 describe('MainDashboardPrototype bottom controls', () => {
+  it('enables card editing from settings and persists keyboard resizing', () => {
+    const view = renderPrototype();
+    fireEvent.click(screen.getByRole('button', { name: 'Innstillinger' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Redigeringsmodus' }));
+    expect(document.querySelector('.main-dashboard-prototype')).toHaveClass('is-editing');
+    fireEvent.click(screen.getByRole('button', { name: 'Lukk' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Endre størrelse på Vær og forhold' }), { key: 'ArrowDown' });
+    expect(JSON.parse(localStorage.getItem('walldash-v2-card-ppf-weather-j')!)).toEqual({ columns: 4, height: 200 });
+    view.unmount();
+    renderPrototype();
+    expect(document.querySelector('[data-card-id="ppf-weather-j"]')).toHaveStyle({ height: '200px' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Endre størrelse på Vær og forhold' }), { key: 'Home' });
+    expect(localStorage.getItem('walldash-v2-card-ppf-weather-j')).toBeNull();
+  });
+
   it('hides prototype scenario controls unless explicitly requested in the URL', () => {
     const originalUrl = window.location.href;
     window.history.replaceState({}, '', window.location.pathname);
@@ -610,23 +625,24 @@ describe('MainDashboardPrototype bottom controls', () => {
     expect(home.firstElementChild).toHaveTextContent('Scener');
     expect(within(home).queryByRole('group', { name: 'Scener' })).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Scenekontroller' })).not.toBeInTheDocument();
-    ['Lys', 'Klima', 'Støvsuger', 'Biler', 'Modus', 'Klara', 'Låst', 'Overvåket']
+    ['Lys', 'Klima', 'Støvsuger', 'Biler', 'Kameraer', 'Modus', 'Innstillinger']
       .forEach((name) => expect(within(home).getByRole('button', { name })).toBeInTheDocument());
 
     fireEvent.click(within(home).getByRole('button', { name: 'Modus' }));
     expect(openMode).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves lock and security actions inside the home group', () => {
+  it('preserves lock and security actions in the current header', () => {
     const action = vi.fn();
     renderPrototype({
       frontDoorLock: state('lock.front_door', 'locked'),
       securityMode: state('input_number.security_mode', '1'),
     }, action);
 
-    const home = screen.getByRole('navigation', { name: 'Hjemkontroller' });
-    fireEvent.click(within(home).getByRole('button', { name: 'Låst' }));
-    fireEvent.click(within(home).getByRole('button', { name: 'Overvåket' }));
+    const controls = screen.getByRole('group', { name: 'Dørlås og overvåking' });
+    expect(controls.closest('section')).toHaveClass('ppf-zone-now');
+    fireEvent.click(within(controls).getByRole('button', { name: 'Lås opp ytterdøren' }));
+    fireEvent.click(within(controls).getByRole('button', { name: 'Slå av overvåking' }));
 
     expect(action).toHaveBeenCalledWith('unlockDoor');
     expect(action).toHaveBeenCalledWith('securityMode');

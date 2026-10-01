@@ -2,6 +2,8 @@
 
 Norsk, berøringsvennlig dashboard for en veggmontert tablet. Det leser status fra Home Assistant, utfører handlinger via serveren og bekrefter resultatet ved å hente oppdatert entity-state etterpå.
 
+Den offisielle dashboard-versjonen ligger på `master`. V2 er standardvisningen; `VITE_DASHBOARD_VERSION=v1` velger den eldre visningen ved bygging.
+
 ## Lokal kjøring
 
 ```bash

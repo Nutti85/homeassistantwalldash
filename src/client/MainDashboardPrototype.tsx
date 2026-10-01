@@ -14,6 +14,7 @@ import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyRe
 import { homeworkId, isHomeworkActive, readCompletedHomework, writeCompletedHomework } from './homeworkAgenda';
 import { SinceLast, type SinceLastProps } from './SinceLast';
 import { prototypeAlertDescriptors, type PrototypeAlertDescriptor } from './prototypeAlertModel';
+import { ResizableCard } from './ResizableCard';
 
 const Icon = ({ children, filled = false }: { children: string; filled?: boolean }) => <span className="material-symbols-outlined" style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined} aria-hidden="true">{children}</span>;
 const numberState = (state?: HomeAssistantState) => { const value = Number(stateValue(state)); return Number.isFinite(value) ? value : undefined; };
@@ -57,7 +58,7 @@ const roomDefinitions: Array<{ id: string; name: string; icon: string; type: Cli
 
 function Surface({ icon, eyebrow, title, className = '', onClick, headerAction, headerContent, children }: { icon: string; eyebrow?: string; title: string; className?: string; onClick?: () => void; headerAction?: () => void; headerContent?: ReactNode; children: ReactNode }) {
   const content = <><header><span className="ppf-surface-icon"><Icon>{icon}</Icon></span><div>{eyebrow && <small>{eyebrow}</small>}<h2>{title}</h2></div>{headerContent ?? (headerAction ? <button type="button" className="ppf-surface-open" aria-label={`Vis detaljer for ${title}`} onClick={headerAction}><Icon>arrow_outward</Icon></button> : onClick && <Icon>arrow_outward</Icon>)}</header>{children}</>;
-  return onClick ? <button type="button" className={`ppf-surface ${className}`} onClick={onClick}>{content}</button> : <section className={`ppf-surface ${className}`}>{content}</section>;
+  return <ResizableCard id={className} label={title}>{onClick ? <button type="button" className={`ppf-surface ${className}`} onClick={onClick}>{content}</button> : <section className={`ppf-surface ${className}`}>{content}</section>}</ResizableCard>;
 }
 
 function FutureHorizon({ period, setPeriod }: { period: Period; setPeriod: (value: Period) => void }) {
@@ -216,7 +217,7 @@ function ContextNudges({ states, openVehicles, openDetail }: Pick<PrototypeProps
   const batteries = [{ name: 'Mercedes', value: numberState(states.carAndreasBattery) }, { name: 'Peugeot', value: numberState(states.carHegeBattery) }];
   const low = batteries.find((car) => car.value !== undefined && car.value < 30);
   const power = numberState(states.energyPower); const price = numberState(states.energyPrice);
-  return <div className="ppf-nudges">{workdayMorning && <button type="button" onClick={openVehicles}><Icon>route</Icon><span><small>Til jobb nå</small><b>{reading(numberState(states.andreasTravelTime), ' min')}</b></span></button>}{low && <button type="button" className="is-warning" onClick={openVehicles}><Icon>battery_alert</Icon><span><small>{low.name}</small><b>{reading(low.value, ' %')}</b></span></button>}<button type="button" onClick={() => openDetail({ title: 'Strøm akkurat nå', icon: 'bolt', body: <><p>Huset bruker {reading(power === undefined ? undefined : power / 1000, ' kW')} akkurat nå. Strømprisen er {reading(price, ' kr/kWh')}.</p><dl className="ppf-detail-list"><div><dt>Effekt nå</dt><dd>{reading(power === undefined ? undefined : power / 1000, ' kW')}</dd></div><div><dt>Pris</dt><dd>{reading(price, ' kr/kWh')}</dd></div></dl></> })}><Icon>bolt</Icon><span><small>{price !== undefined && price < .8 ? 'Fint tidspunkt å bruke strøm' : 'Strøm akkurat nå'}</small><b>{reading(power === undefined ? undefined : power / 1000, ' kW')} · {reading(price, ' kr')}</b></span><Icon>arrow_outward</Icon></button></div>;
+  return <div className="ppf-nudges">{workdayMorning && <ResizableCard id="ppf-nudge-commute" label="Til jobb nå" minHeight={56}><button type="button" onClick={openVehicles}><Icon>route</Icon><span><small>Til jobb nå</small><b>{reading(numberState(states.andreasTravelTime), ' min')}</b></span></button></ResizableCard>}{low && <ResizableCard id="ppf-nudge-battery" label="Lavt bilbatteri" minHeight={56}><button type="button" className="is-warning" onClick={openVehicles}><Icon>battery_alert</Icon><span><small>{low.name}</small><b>{reading(low.value, ' %')}</b></span></button></ResizableCard>}<ResizableCard id="ppf-nudge-energy" label="Strøm akkurat nå" minHeight={56}><button type="button" onClick={() => openDetail({ title: 'Strøm akkurat nå', icon: 'bolt', body: <><p>Huset bruker {reading(power === undefined ? undefined : power / 1000, ' kW')} akkurat nå. Strømprisen er {reading(price, ' kr/kWh')}.</p><dl className="ppf-detail-list"><div><dt>Effekt nå</dt><dd>{reading(power === undefined ? undefined : power / 1000, ' kW')}</dd></div><div><dt>Pris</dt><dd>{reading(price, ' kr/kWh')}</dd></div></dl></> })}><Icon>bolt</Icon><span><small>{price !== undefined && price < .8 ? 'Fint tidspunkt å bruke strøm' : 'Strøm akkurat nå'}</small><b>{reading(power === undefined ? undefined : power / 1000, ' kW')} · {reading(price, ' kr')}</b></span><Icon>arrow_outward</Icon></button></ResizableCard></div>;
 }
 
 const sceneMeta = { morning: ['sunny', 'Morgen'], evening: ['wb_twilight', 'Kveld'], night: ['bedtime', 'Natt'] } as const;
@@ -245,9 +246,9 @@ function SceneControls({ action, pending = {}, errors = {} }: Pick<PrototypeProp
   })}</div>;
 }
 
-function HomeControlRail({ openCameras, ...props }: PrototypeProps & { openCameras: (invoker: HTMLButtonElement) => void }) {
+function HomeControlRail({ openCameras, openSettings, ...props }: PrototypeProps & { openCameras: (invoker: HTMLButtonElement) => void; openSettings: (invoker: HTMLButtonElement) => void }) {
   const [scenesOpen, setScenesOpen] = useState(false);
-  const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles], ['tune', 'Modus', props.openMode], ['auto_awesome', 'Klara', props.openKlaraAi]];
+  const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles]];
   return <nav className="ppf-home-controls ppf-home-control-rail" aria-label="Hjemkontroller">
     <div className="ppf-scenes-menu">
       <button type="button" className="ppf-scenes-toggle" aria-expanded={scenesOpen} aria-controls="ppf-scenes-panel" onClick={() => setScenesOpen((open) => !open)}><Icon>wb_twilight</Icon><span>Scener</span></button>
@@ -255,6 +256,8 @@ function HomeControlRail({ openCameras, ...props }: PrototypeProps & { openCamer
     </div>
     {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
     <button type="button" onClick={(event) => openCameras(event.currentTarget)}><Icon>videocam</Icon><span>Kameraer</span></button>
+    <button type="button" onClick={props.openMode}><Icon>tune</Icon><span>Modus</span></button>
+    <button type="button" aria-haspopup="dialog" onClick={(event) => openSettings(event.currentTarget)}><Icon>settings</Icon><span>Innstillinger</span></button>
   </nav>;
 }
 
@@ -273,6 +276,7 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const [query, setQuery] = useState(readQuery);
   const [period, setPeriod] = useState<Period>('later');
   const [detail, setDetail] = useState<Detail>();
+  const [editMode, setEditMode] = useState(false);
   const [completedHomework, setCompletedHomework] = useState(() => new Set(readCompletedHomework()));
   const [receipts, setReceipts] = useState(() => readFamilyReceipts());
   const [familyOpen, setFamilyOpen] = useState(false);
@@ -313,9 +317,10 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const common = { states: props.states, period, openDetail: setDetail };
   const weather = query.weatherCard === 'v2'
     ? <WeatherFocus states={props.states} showWeather={props.showWeather}/>
-    : <V2WeatherCard states={props.states} onDetails={props.showWeather}/>;
+    : <ResizableCard id="ppf-weather-j" label="Vær og forhold" minHeight={200}><V2WeatherCard states={props.states} onDetails={props.showWeather}/></ResizableCard>;
   const agenda = <Agenda {...common} completedHomework={completedHomework} completeHomework={completeHomework} openDeparture={props.openDeparture} departureBriefings={props.departureBriefings}/>;
   const openCameras = (invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: 'Kameraer', icon: 'videocam', className: 'ppf-camera-modal', body: <CameraPair states={props.states}/> }); };
+  const openSettings = (invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: 'Innstillinger', icon: 'settings', className: 'ppf-settings-modal', body: <label className="ppf-edit-setting"><span><strong>Redigeringsmodus</strong><small>Vis håndtak for å endre størrelsen på kortene.</small></span><input type="checkbox" role="switch" aria-label="Redigeringsmodus" defaultChecked={editMode} onChange={(event) => setEditMode(event.currentTarget.checked)} autoFocus/></label> }); };
   const arrivalEvidence = <ArrivalEvidence scenario={query.scenario} openDetail={setDetail}/>;
   const rooms = <RoomExceptions states={props.states} openDetail={setDetail}/>;
   const prepare = <PrepareCard states={props.states}/>;
@@ -327,8 +332,8 @@ export function MainDashboardPrototype(props: PrototypeProps) {
   const alerts = prototypeAlertDescriptors(props.states, query.scenario, now);
   const openAlert = (alert: PrototypeAlertDescriptor, invoker: HTMLButtonElement) => { detailInvoker.current = invoker; setDetail({ title: alert.title, icon: alert.icon, body: <AlertDetails alert={alert}/> }); };
   const closeDetail = () => setDetail(undefined);
-  return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}`}>
-    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props} openCameras={openCameras}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><div className="ppf-now-controls" role="group" aria-label="Dørlås og overvåking"><button type="button" className={'ppf-now-control ' + (doorLocked ? 'is-locked' : 'is-unlocked')} aria-label={doorLocked ? 'Lås opp ytterdøren' : 'Lås ytterdøren'} title={doorLocked ? 'Lås opp ytterdøren' : 'Lås ytterdøren'} aria-pressed={doorLocked} onClick={() => props.action(doorLocked ? 'unlockDoor' : 'lockDoor')}><Icon>{doorLocked ? 'lock' : 'lock_open'}</Icon></button><button type="button" className={'ppf-now-control ' + (securityOn ? 'is-active' : '')} aria-label={securityOn ? 'Slå av overvåking' : 'Start overvåking'} title={securityOn ? 'Slå av overvåking' : 'Start overvåking'} aria-pressed={securityOn} onClick={() => props.action('securityMode')}><Icon>shield</Icon></button></div><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
+  return <div className={`main-dashboard-prototype ppf-variant-c ppf-scenario-${query.scenario}${editMode ? ' is-editing' : ''}`}>
+    <div className="ppf-c-zones"><div className="ppf-past-layout"><HomeControlRail {...props} openCameras={openCameras} openSettings={openSettings}/><section className="ppf-zone ppf-zone-past" aria-labelledby="ppf-since-heading"><h2 id="ppf-since-heading"><Icon>history</Icon>SIDEN SIST</h2><div ref={familyFallback}><SinceLast activity={props.activity} activityLoading={props.activityLoading} activityStale={props.activityStale} messages={messages} receipts={receipts} onOpenFamily={openFamily} now={now}/></div></section></div><section className="ppf-zone ppf-zone-now"><div className="ppf-zone-now-heading"><h2><Icon>radio_button_checked</Icon>Akkurat nå</h2><div className="ppf-now-controls" role="group" aria-label="Dørlås og overvåking"><button type="button" className={'ppf-now-control ' + (doorLocked ? 'is-locked' : 'is-unlocked')} aria-label={doorLocked ? 'Lås opp ytterdøren' : 'Lås ytterdøren'} title={doorLocked ? 'Lås opp ytterdøren' : 'Lås ytterdøren'} aria-pressed={doorLocked} onClick={() => props.action(doorLocked ? 'unlockDoor' : 'lockDoor')}><Icon>{doorLocked ? 'lock' : 'lock_open'}</Icon></button><button type="button" className={'ppf-now-control ' + (securityOn ? 'is-active' : '')} aria-label={securityOn ? 'Slå av overvåking' : 'Start overvåking'} title={securityOn ? 'Slå av overvåking' : 'Start overvåking'} aria-pressed={securityOn} onClick={() => props.action('securityMode')}><Icon>shield</Icon></button></div><ActiveAlertIcons alerts={alerts} openAlert={openAlert}/></div>{weather}{prepare}{arrivalEvidence}{nudges}{rooms}</section><section className="ppf-zone ppf-zone-future"><div className="ppf-zone-heading"><h2><Icon>east</Icon>Dette skjer</h2><FutureHorizon period={period} setPeriod={setPeriod}/></div>{forwardWeather}{agenda}{today}</section></div>
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={closeDetail}/>}
     {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}

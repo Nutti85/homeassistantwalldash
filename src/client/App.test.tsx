@@ -163,7 +163,7 @@ describe('V2 activity lifecycle', () => {
     for (let failure = 1; failure <= 3; failure += 1) {
       await advance(30_000);
       expect(screen.getByText('Døren ble låst')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Lås opp ytterdøren' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.queryByText('Hendelsene kan være utdaterte') !== null).toBe(failure === 3);
       expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();
     }
@@ -185,7 +185,7 @@ describe('V2 activity lifecycle', () => {
     expect(api.getActivity).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Henter hendelser')).not.toBeInTheDocument();
     expect(screen.getByText('Ingen nye hendelser')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Låst' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lås opp ytterdøren' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Se alle beskjeder' }));
     expect(screen.getByRole('dialog', { name: 'Beskjeder' })).toBeInTheDocument();
     expect(screen.queryByText('Får ikke kontakt med lokal backend. Kobler til på nytt …')).not.toBeInTheDocument();

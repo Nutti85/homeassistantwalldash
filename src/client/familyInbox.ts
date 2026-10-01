@@ -20,13 +20,15 @@ export const familyReceiptStorageKey = 'smarthjem-family-message-reads-v1';
 
 const osloDateFormatter = new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeZone: 'Europe/Oslo' });
 const osloDateTimeFormatter = new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Oslo' });
+const osloDateNoYearFormatter = new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short', timeZone: 'Europe/Oslo' });
+const osloDateTimeNoYearFormatter = new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
-export const formatFamilyMessageDate = (value: string | undefined): string => {
+export const formatFamilyMessageDate = (value: string | undefined, includeYear = true): string => {
   if (!value || !Number.isFinite(Date.parse(value))) return 'Ukjent dato';
   // A date without a time is a calendar date, not midnight UTC. Use noon UTC
   // so it remains the same date when formatted for Oslo.
-  if (/^\d{4}-\d{2}-\d{2}$/u.test(value)) return osloDateFormatter.format(new Date(`${value}T12:00:00Z`));
-  return osloDateTimeFormatter.format(new Date(value));
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(value)) return (includeYear ? osloDateFormatter : osloDateNoYearFormatter).format(new Date(`${value}T12:00:00Z`));
+  return (includeYear ? osloDateTimeFormatter : osloDateTimeNoYearFormatter).format(new Date(value));
 };
 
 const normalizedText = (value: string): string => value.normalize('NFC').replace(/\s+/gu, ' ').trim();
