@@ -342,8 +342,9 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(screen.queryByRole('heading', { name: 'I morgen' })).not.toBeInTheDocument();
     const event = screen.getByRole('button', { name: /Fotballtrening/ });
     expect(event.querySelector('b')).toBeNull();
+    expect(document.querySelector('.ppf-agenda-days h3')).toBeNull();
     expect(event.querySelector('strong')?.textContent).toBe('Fotballtrening');
-    expect(event.querySelector('small')?.textContent).toBe('tirsdag · 17:00–18:00');
+    expect(event.querySelector('small')?.textContent).toBe('tirsdag 8. sep. · 17:00–18:00');
     expect(event.querySelector('.ppf-source')?.textContent).toBe('Felles');
     expect(screen.queryByText('Ingenting planlagt i denne perioden.')).not.toBeInTheDocument();
   });
@@ -361,8 +362,8 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     });
     const agenda = within(document.querySelector('.ppf-agenda') as HTMLElement);
     const event = agenda.getByRole('button', { name: /Tur til skogen/ });
-    expect(event.querySelector('small')?.textContent).toBe('tirsdag · 09:30–12:30');
-    expect(agenda.getByRole('button', { name: /Foreldremøte/ }).querySelector('small')?.textContent).toBe('tirsdag · Hele dagen');
+    expect(event.querySelector('small')?.textContent).toBe('tirsdag 8. sep. · 09:30–12:30');
+    expect(agenda.getByRole('button', { name: /Foreldremøte/ }).querySelector('small')?.textContent).toBe('tirsdag 8. sep. · Hele dagen');
     fireEvent.click(event);
     expect(screen.getByRole('dialog')).toHaveTextContent('09:30 - 12:30 Tur til skogen');
   });
