@@ -1297,7 +1297,7 @@ body.prototype-active{min-width:0;background:#07100f}
 /* Future-lane modules: forecast context and today's actionable list. */
 .ppf-weather-forward{display:flex;flex-direction:column;height:228px;min-height:228px;background:linear-gradient(145deg,#1a2825,#17231f)}
 .ppf-weather-forward>header{flex:none}
-.ppf-forward-chart{container-type:inline-size;display:flex;flex:1;min-width:0;min-height:0}
+.ppf-forward-chart{container-type:inline-size;display:flex;flex:1;width:100%;min-width:0;min-height:0}
 .ppf-forward-chart .weather-chart-wrap{display:flex;flex:1;flex-direction:column;min-width:0;min-height:0;margin:0}
 .ppf-forward-chart .weather-chart{order:1;height:0;min-height:100px;flex:1 1 auto}
 .ppf-forward-chart .chart-legend{order:2;display:flex;justify-content:space-between;flex-wrap:wrap;flex:none;gap:6px 8px;margin:8px 0 0;font-size:11px;line-height:1.3}
