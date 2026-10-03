@@ -1,6 +1,6 @@
 # Claude project instructions
 
-For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority.
+For software-development work in this repository, use the globally installed `engineering-router` skill to classify work and select a workflow. Apply the installed `ponytail:ponytail` skill to coding work and its focused companion skills when applicable. If Ponytail conflicts with another skill, Ponytail takes precedence as specified in `AGENTS.md`.
 
 Preserve and follow `AGENTS.md`; its Walldash-specific development, Home Assistant, and Portainer rules take precedence over generic skill guidance.
 

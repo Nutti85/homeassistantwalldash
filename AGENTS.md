@@ -2,9 +2,11 @@
 
 ## Engineering workflow
 
-- For software-development work in this repository, use the globally installed `engineering-router` skill as the workflow authority.
+- For software-development work in this repository, use the globally installed `engineering-router` skill to classify the task and select the lightest applicable workflow.
 - If `engineering-router` is not available, install the canonical global stack from `Nutti85/assistant-skills` by running the router installer at `skills/engineering-router/scripts/install.ps1` (or install `engineering-router` globally with `npx skills@latest add Nutti85/assistant-skills -g --copy -y --skill engineering-router` and then run its installer). Do not silently substitute a different top-level methodology.
 - Preserve the project-specific operational rules in this file; they take precedence over generic skill guidance.
+- For coding, refactoring, bug fixes, code design, and dependency choices, apply the installed `ponytail:ponytail` skill (default `full`). Use its simplest working solution after understanding the affected flow. Use `ponytail:ponytail-review` for reviews focused on over-engineering, `ponytail:ponytail-audit` for whole-repository complexity audits, and `ponytail:ponytail-debt` when asked to inventory deliberate `ponytail:` shortcuts.
+- If Ponytail conflicts with `engineering-router` or another skill on implementation scope, abstraction, dependency choice, testing overhead, or response length, follow Ponytail. The router still classifies work and selects useful skills. Explicit user requirements and this file's operational, safety, verification, and deployment rules remain binding; Ponytail must not remove required behavior, validation, security, accessibility, or checks.
 - Let the router classify work as QUICK, FEATURE, BUG, ARCHITECTURE, or SPIKE and use the lightest workflow that preserves correctness.
 - Use Matt Pocock skills for requirements discovery, domain modeling, codebase design, and research when the router calls for them.
 - Use selected Superpowers skills for implementation planning, TDD, systematic debugging, review, verification, worktrees, and branch completion when the router calls for them.
