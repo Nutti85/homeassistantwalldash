@@ -1,5 +1,5 @@
 // PROTOTYPE V3: the selected time-zone direction, with scenario controls in ?scenario=.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { DashboardAction, HomeAssistantState, MyKidKindergartenItem } from '../shared/entities';
 import type { DepartureBriefingPayload, DepartureTripBriefing } from '../shared/departureBriefing';
 import type { MaintenanceResponse, MaintenanceTask } from '../shared/maintenance';
@@ -224,43 +224,55 @@ function ContextNudges({ states, openVehicles, openDetail }: Pick<PrototypeProps
 
 const sceneMeta = { morning: ['sunny', 'Morgen'], evening: ['wb_twilight', 'Kveld'], night: ['bedtime', 'Natt'] } as const;
 
-function SceneControls({ action, pending = {}, errors = {} }: Pick<PrototypeProps, 'action'> & Pick<PrototypeProps, 'pending' | 'errors'>) {
+function SceneControls({ action, pending = {}, errors = {}, close }: Pick<PrototypeProps, 'action'> & Pick<PrototypeProps, 'pending' | 'errors'> & { close: () => void }) {
   const [selected, setSelected] = useState<keyof typeof sceneMeta>();
-  const sceneControlsRef = useRef<HTMLDivElement>(null);
+  const pendingScene = Object.keys(sceneMeta).find((key) => pending[key]);
+  const sceneErrors = Object.entries(sceneMeta).flatMap(([key, [, label]]) => errors[key] ? [`${label}: ${errors[key]}`] : []);
 
-  useEffect(() => {
-    if (!selected) return;
-    const dismiss = (event: PointerEvent) => { if (!sceneControlsRef.current?.contains(event.target as Node)) setSelected(undefined); };
-    document.addEventListener('pointerdown', dismiss);
-    return () => document.removeEventListener('pointerdown', dismiss);
-  }, [selected]);
-
-  return <div ref={sceneControlsRef} id="ppf-scenes-panel" className="ppf-scene-controls ppf-scene-reveal" role="group" aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => {
+  return <div className="ppf-scene-picker">
+    <p>Velg en scene. Du må bekrefte valget før det sendes.</p>
+    <div className="ppf-scene-options" role="group" aria-label="Scener">{Object.entries(sceneMeta).map(([key, [icon, label]]) => {
     const sceneKey = key as keyof typeof sceneMeta;
-    const open = selected === sceneKey;
-    return <div className={`scene-action${open ? ' confirm-open' : ''}`} key={key}>
-      <button type="button" className={`scene ${key}`} disabled={pending[key]} aria-expanded={open} onClick={() => setSelected(open ? undefined : sceneKey)}><Icon filled>{icon}</Icon><span>{label}</span></button>
-      <div className="scene-confirm-wrap" aria-hidden={!open}>
-        <button type="button" className="scene-confirm" aria-label={`Bekreft ${label}`} tabIndex={open ? 0 : -1} disabled={pending[key]} onClick={() => { setSelected(undefined); action(sceneKey); }}>Bekreft</button>
-      </div>
-      {errors[key] && <small role="alert">{errors[key]}</small>}
-    </div>;
-  })}</div>;
+    const isSelected = selected === sceneKey;
+    return <button key={key} type="button" className={`ppf-scene-choice scene-${key}${isSelected ? ' is-selected' : ''}`} aria-pressed={isSelected} disabled={Boolean(pendingScene)} onClick={() => setSelected(sceneKey)}><Icon filled>{icon}</Icon><span>{label}</span>{isSelected && <Icon>check</Icon>}</button>;
+  })}</div>
+    {selected && <p className="ppf-scene-selected" role="status">Valgt scene: <strong>{sceneMeta[selected][1]}</strong></p>}
+    {pendingScene && <p className="ppf-scene-status" role="status">{sceneMeta[pendingScene as keyof typeof sceneMeta][1]} sendes til Home Assistant …</p>}
+    {sceneErrors.map((error) => <p className="ppf-scene-error" role="alert" key={error}>{error}</p>)}
+    <div className="ppf-scene-actions">
+      <button type="button" className="ppf-scene-cancel" onClick={close}>Avbryt</button>
+      <button type="button" className="ppf-scene-confirm" disabled={!selected || Boolean(pendingScene)} onClick={() => { if (!selected) return; const scene = selected; setSelected(undefined); action(scene); }}><Icon>check</Icon>{selected ? `Bekreft ${sceneMeta[selected][1]}` : 'Bekreft'}</button>
+    </div>
+  </div>;
 }
 
 function HomeControlRail({ openCameras, openSettings, ...props }: PrototypeProps & { openCameras: (invoker: HTMLButtonElement) => void; openSettings: (invoker: HTMLButtonElement) => void }) {
   const [scenesOpen, setScenesOpen] = useState(false);
+  const scenesButton = useRef<HTMLButtonElement>(null);
+  const scenesCloseButton = useRef<HTMLButtonElement>(null);
+  const wasScenesOpen = useRef(false);
   const controls: Array<[string, string, () => void]> = [['lightbulb', 'Lys', props.openLights], ['mode_fan', 'Klima', props.openHeatPump], ['vacuum', 'Støvsuger', props.openVacuum], ['directions_car', 'Biler', props.openVehicles]];
-  return <nav className="ppf-home-controls ppf-home-control-rail" aria-label="Hjemkontroller">
-    <div className="ppf-scenes-menu">
-      <button type="button" className="ppf-scenes-toggle" aria-expanded={scenesOpen} aria-controls="ppf-scenes-panel" onClick={() => setScenesOpen((open) => !open)}><Icon>wb_twilight</Icon><span>Scener</span></button>
-      {scenesOpen && <SceneControls action={props.action} pending={props.pending} errors={props.errors}/>}
-    </div>
-    {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
-    <button type="button" onClick={(event) => openCameras(event.currentTarget)}><Icon>videocam</Icon><span>Kameraer</span></button>
-    <button type="button" onClick={props.openMode}><Icon>tune</Icon><span>Modus</span></button>
-    <button type="button" aria-haspopup="dialog" onClick={(event) => openSettings(event.currentTarget)}><Icon>settings</Icon><span>Innstillinger</span></button>
-  </nav>;
+  useEffect(() => {
+    if (!scenesOpen) return;
+    scenesCloseButton.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setScenesOpen(false); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [scenesOpen]);
+  useEffect(() => { if (!scenesOpen && wasScenesOpen.current) scenesButton.current?.focus(); wasScenesOpen.current = scenesOpen; }, [scenesOpen]);
+  const closeScenes = () => setScenesOpen(false);
+  return <>
+    <nav className="ppf-home-controls ppf-home-control-rail" aria-label="Hjemkontroller">
+      <div className="ppf-scenes-menu">
+        <button ref={scenesButton} type="button" className="ppf-scenes-toggle" aria-haspopup="dialog" aria-expanded={scenesOpen} onClick={() => setScenesOpen(true)}><Icon>wb_twilight</Icon><span>Scener</span></button>
+      </div>
+      {controls.map(([icon, label, action]) => <button type="button" key={label} onClick={action}><Icon>{icon}</Icon><span>{label}</span></button>)}
+      <button type="button" onClick={(event) => openCameras(event.currentTarget)}><Icon>videocam</Icon><span>Kameraer</span></button>
+      <button type="button" onClick={props.openMode}><Icon>tune</Icon><span>Modus</span></button>
+      <button type="button" aria-haspopup="dialog" onClick={(event) => openSettings(event.currentTarget)}><Icon>settings</Icon><span>Innstillinger</span></button>
+    </nav>
+    {scenesOpen && <DetailModal detail={{ title: 'Scener', icon: 'wb_twilight', className: 'ppf-scenes-modal', body: <SceneControls action={props.action} pending={props.pending} errors={props.errors} close={closeScenes}/> }} close={closeScenes} closeButtonRef={scenesCloseButton}/>}
+  </>;
 }
 
 function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
@@ -269,8 +281,8 @@ function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
   return <aside className="ppf-prototype-switcher" aria-label="Prototypescenario"><span><small>Prototype v3</small><b>C · Tidssoner</b></span><select aria-label="Vis dynamisk tilstand" value={scenario} onChange={(event) => update(event.target.value as Scenario)}>{scenarios.map((value) => <option key={value} value={value}>{value === 'calm' ? 'Rolig' : value === 'arrival' ? 'Kameraer utløst' : value === 'doorbell' ? 'Ringeklokke' : 'Varsler'}</option>)}</select></aside>;
 }
 
-function DetailModal({ detail, close }: { detail: Detail; close: () => void }) {
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className={`ppf-modal ${detail.className ?? ''}`} role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
+function DetailModal({ detail, close, closeButtonRef }: { detail: Detail; close: () => void; closeButtonRef?: RefObject<HTMLButtonElement> }) {
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className={`ppf-modal ${detail.className ?? ''}`} role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button ref={closeButtonRef} type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {

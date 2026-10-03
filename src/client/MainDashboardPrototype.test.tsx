@@ -135,34 +135,35 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
     expect(cameraButton).toHaveFocus();
   });
 
-  it('reveals the scene choices from the home navigation and still requires confirmation', () => {
+  it('opens scene choices in a modal and still requires confirmation', () => {
     const action = vi.fn();
     renderPrototype({}, action);
 
     const home = screen.getByRole('navigation', { name: 'Hjemkontroller' });
     const sceneToggle = within(home).getByRole('button', { name: 'Scener' });
-    const sceneMenu = sceneToggle.parentElement;
-    expect(sceneMenu).toHaveClass('ppf-scenes-menu');
     expect(sceneToggle).toHaveAttribute('aria-expanded', 'false');
-    expect(within(home).queryByRole('group', { name: 'Scener' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Scenekontroller' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Scener' })).not.toBeInTheDocument();
 
     fireEvent.click(sceneToggle);
-    const scenes = within(home).getByRole('group', { name: 'Scener' });
+    const dialog = screen.getByRole('dialog', { name: 'Scener' });
+    const scenes = within(dialog).getByRole('group', { name: 'Scener' });
     expect(sceneToggle).toHaveAttribute('aria-expanded', 'true');
-    expect(scenes.parentElement).toBe(sceneMenu);
     expect(within(scenes).getByRole('button', { name: 'Morgen' })).toBeInTheDocument();
     expect(within(scenes).getByRole('button', { name: 'Kveld' })).toBeInTheDocument();
     expect(within(scenes).getByRole('button', { name: 'Natt' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Bekreft' })).toBeDisabled();
 
-    fireEvent.click(within(scenes).getByRole('button', { name: 'Morgen' }));
+    fireEvent.click(within(scenes).getByRole('button', { name: 'Kveld' }));
     expect(action).not.toHaveBeenCalled();
-    fireEvent.click(within(scenes).getByRole('button', { name: 'Bekreft Morgen' }));
-    expect(action).toHaveBeenCalledWith('morning');
+    expect(within(scenes).getByRole('button', { name: 'Kveld' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Bekreft Kveld' }));
+    expect(action).toHaveBeenCalledWith('evening');
+    expect(screen.getByRole('dialog', { name: 'Scener' })).toBeInTheDocument();
 
-    fireEvent.click(sceneToggle);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Avbryt' }));
     expect(sceneToggle).toHaveAttribute('aria-expanded', 'false');
-    expect(within(home).queryByRole('group', { name: 'Scener' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Scener' })).not.toBeInTheDocument();
+    expect(sceneToggle).toHaveFocus();
   });
 
   it('removes the clock and date so the now lane can use the space for alerts', () => {
