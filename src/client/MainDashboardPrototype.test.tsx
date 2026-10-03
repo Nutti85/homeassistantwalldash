@@ -125,7 +125,7 @@ describe('MainDashboardPrototype Nicolai agenda', () => {
 
     fireEvent.click(cameraButton);
     const dialog = screen.getByRole('dialog', { name: 'Kameraer' });
-    expect(dialog).toHaveClass('ppf-camera-modal');
+    expect(dialog.querySelector('.ppf-camera-modal')).toBeInTheDocument();
     expect(within(dialog).getByRole('region', { name: 'Ringeklokke' })).toBeInTheDocument();
     expect(within(dialog).getByRole('region', { name: 'Gårdsplassen' })).toBeInTheDocument();
     expect(within(dialog).getByRole('img', { name: 'Direktevideo fra ringeklokke' })).toHaveAttribute('src', '/api/camera/stream?attempt=0');

@@ -195,11 +195,11 @@ describe('ActivityTimeline', () => {
     fireEvent.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Tidslinje' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(7);
-    expect(within(dialog).getByRole('button', { name: 'Lukk' })).toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'Lukk tidslinjen' })).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(dialog.querySelector('.ppf-activity-modal-body')).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Tab' });
-    expect(within(dialog).getByRole('button', { name: 'Lukk' })).toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'Lukk tidslinjen' })).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
