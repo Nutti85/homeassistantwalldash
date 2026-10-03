@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type { DepartureBriefingPayload, DepartureSourceQuality, DepartureTripBriefing, DepartureVehicleSnapshot, DepartureWeatherSnapshot } from '../shared/departureBriefing';
+import { DashboardModalShell } from './DashboardModalShell';
 
 const osloTime = (value?: string): string | undefined => {
   if (!value || Number.isNaN(Date.parse(value))) return undefined;
@@ -45,13 +46,13 @@ const BriefingIcon = ({ children }: { children: string }) => <span className="ma
 
 export function DepartureBriefingModal({ payload, onClose, closeButtonRef, now = new Date() }: { payload: DepartureBriefingPayload; onClose: () => void; closeButtonRef?: RefObject<HTMLButtonElement>; now?: Date }) {
   const internalCloseRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = closeButtonRef ?? internalCloseRef;
   const briefings = [...payload.briefings].sort((left, right) => (Date.parse(left.departureAt ?? left.eventStartAt) || Number.MAX_SAFE_INTEGER) - (Date.parse(right.departureAt ?? right.eventStartAt) || Number.MAX_SAFE_INTEGER));
 
   useEffect(() => { closeRef.current?.focus(); }, [closeRef]);
 
-  const onDialogKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+  const onDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
     if (event.key !== 'Tab' || !dialogRef.current) return;
     const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(focusableSelector));
@@ -63,16 +64,16 @@ export function DepartureBriefingModal({ payload, onClose, closeButtonRef, now =
   };
 
   return <div className="departure-briefing-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className="departure-briefing-modal" role="dialog" aria-modal="true" aria-labelledby="departure-briefing-title" onKeyDown={onDialogKeyDown} tabIndex={-1}>
+    <DashboardModalShell dialogRef={dialogRef} close={onClose} closeLabel="Lukk avreisebriefingen" closeButtonRef={closeRef} labelledBy="departure-briefing-title" onKeyDown={onDialogKeyDown} tabIndex={-1} width="1040px">
+    <section className="departure-briefing-modal">
     <header className="departure-briefing-header">
         <div className="departure-briefing-brand"><span className="departure-briefing-orb"><BriefingIcon>north_east</BriefingIcon></span><div><span className="departure-briefing-eyebrow">Klara · avreise</span><h2 id="departure-briefing-title">Avreisebriefing</h2><p>{briefings.length === 1 ? 'Én kommende biltur' : `${briefings.length} samtidige bilturer`}</p></div></div>
-        <button ref={closeRef} className="departure-briefing-close" type="button" aria-label="Lukk avreisebriefingen" onClick={onClose}><BriefingIcon>close</BriefingIcon></button>
       </header>
       {payload.conflicts.length > 0 && <section className="departure-briefing-conflicts" aria-labelledby="departure-conflicts-title"><h3 id="departure-conflicts-title">Bilkonflikt</h3>{payload.conflicts.map((conflict) => <p key={conflict}>{conflict}</p>)}</section>}
       <div className="departure-briefing-scroll">
         {briefings.map((trip) => <DepartureTripCard key={trip.tripId} trip={trip} now={now} />)}
       </div>
-    </section>
+    </section></DashboardModalShell>
   </div>;
 }
 

@@ -634,7 +634,6 @@ body{min-width:0}
 
 .heatpump-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(5,10,10,.72);backdrop-filter:blur(4px)}
 .heatpump-modal{position:relative;width:min(720px,100%);max-height:min(90vh,560px);overflow:visible}
-.heatpump-modal-close{position:absolute;top:-52px;right:0;display:grid;place-items:center;width:42px;min-width:42px;height:42px;min-height:42px;padding:0;background:rgba(255,255,255,.07)}
 .heatpump-modal>.heatpump-card{max-height:min(90vh,560px);overflow:auto;padding:18px 18px 20px;border:1px solid rgba(127,227,178,.32);border-radius:16px;background:var(--surface);box-shadow:0 24px 70px rgba(0,0,0,.5)}
 .heatpump-modal .hvac-modes button{min-height:76px;padding:12px 8px;border-radius:10px;gap:8px}
 .heatpump-modal .hvac-modes button .material-symbols-outlined{font-size:30px}
@@ -643,7 +642,6 @@ body{min-width:0}
 /* Roborock modal follows the dashboard's dark, compact control language. */
 .vacuum-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(5,10,10,.72);backdrop-filter:blur(4px)}
 .vacuum-modal-shell{position:relative;width:min(760px,100%)}.vacuum-modal{width:100%;padding:18px;border-color:rgba(103,199,151,.32);box-shadow:0 24px 70px rgba(0,0,0,.5)}
-.vacuum-modal-close{position:absolute;top:-52px;right:0;z-index:1;display:grid;place-items:center;width:42px;min-width:42px;height:42px;min-height:42px;padding:0;background:rgba(255,255,255,.07)}
 .vacuum-modal>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.vacuum-modal>header h2{display:flex;align-items:center;gap:9px}.vacuum-modal>header h2 .material-symbols-outlined{color:var(--mint)}.vacuum-modal>header p{margin-top:4px;color:var(--text-muted);font-size:14px}
 .vacuum-overview{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:16px}.vacuum-overview img{width:100%;height:190px;object-fit:cover;border:1px solid #263b35;border-radius:10px;background:var(--surface-deep)}.vacuum-overview>div{display:flex;flex-direction:column;justify-content:center;gap:6px}.vacuum-overview strong{font-size:36px;font-weight:500}.vacuum-overview>div>span,.vacuum-overview p{color:var(--text-muted);font-size:13px}.vacuum-progress{height:8px;margin:8px 0 2px;overflow:hidden;border-radius:5px;background:#26302e}.vacuum-progress i{display:block;height:100%;border-radius:inherit;background:var(--mint)}
 .vacuum-modal section{margin-top:15px}.vacuum-modal h3{margin-bottom:8px;font-size:14px}.vacuum-actions,.vacuum-routines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vacuum-actions button,.vacuum-routines button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:62px;padding:8px;border:1px solid #26302e;border-radius:10px;background:var(--surface-raised);font-size:13px}.vacuum-actions .material-symbols-outlined,.vacuum-routines .material-symbols-outlined{color:var(--mint)}.vacuum-kitchen{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:52px;margin-top:15px;background:var(--mint);color:#092018;font-weight:700}.vacuum-kitchen .material-symbols-outlined{color:inherit}.vacuum-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.vacuum-settings label{display:grid;gap:5px;color:var(--text-muted);font-size:12px}.vacuum-settings select,.vacuum-settings input{width:100%;min-height:38px;border:1px solid #26302e;border-radius:8px;background:var(--surface-raised);color:var(--text);font:inherit;padding:0 9px}.vacuum-settings input{padding:0}
@@ -655,7 +653,6 @@ body{min-width:0}
 .dashboard-mode-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(5,10,10,.72);backdrop-filter:blur(4px)}
 .dashboard-mode-modal-shell{position:relative;width:min(560px,100%)}
 .dashboard-mode-modal{width:100%;padding:18px;border-color:rgba(103,199,151,.32);box-shadow:0 24px 70px rgba(0,0,0,.5)}
-.dashboard-mode-modal-close{position:absolute;top:-52px;right:0;z-index:1;display:grid;place-items:center;width:42px;min-width:42px;height:42px;min-height:42px;padding:0;background:rgba(255,255,255,.07)}
 .dashboard-mode-modal>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.dashboard-mode-modal>header h2{display:flex;align-items:center;gap:9px}.dashboard-mode-modal>header h2 .material-symbols-outlined{color:var(--mint)}.dashboard-mode-modal>header p{margin-top:4px;color:var(--text-muted);font-size:14px}
 .dashboard-mode-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dashboard-mode-options button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0;min-height:94px;padding:12px 8px;border:1px solid #26302e;border-radius:10px;background:var(--surface-raised);color:#c7c3bd;font-size:14px;font-weight:500}.dashboard-mode-options button .material-symbols-outlined:first-child{color:var(--mint);font-size:28px}.dashboard-mode-options button .material-symbols-outlined:last-child{font-size:17px}.dashboard-mode-options button.selected{border-color:#ffad97;background:linear-gradient(135deg,#ff9678,#f47f68);color:#21130f;box-shadow:0 4px 13px rgba(239,128,106,.16)}.dashboard-mode-options button.selected .material-symbols-outlined{color:inherit}
 @media(max-width:600px){.dashboard-mode-backdrop{padding:10px}.dashboard-mode-modal{padding:14px}.dashboard-mode-options button{min-height:82px;padding:9px 6px;font-size:13px}}
@@ -1444,3 +1441,23 @@ body.prototype-active{min-width:0;background:#07100f}
   .ppf-weather-j-metric-value{font-size:14px}
   .ppf-weather-j-metric-label,.ppf-weather-j-metric-note{font-size:8px}
 }
+
+/* Every dialog shares the climate modal's floating close control. */
+.dashboard-modal-shell{position:relative;width:min(var(--dashboard-modal-width,720px),100%);max-width:100%;overflow:visible}
+.dashboard-modal-close{position:absolute;top:-52px;right:0;z-index:5;display:grid;place-items:center;width:42px;min-width:42px;height:42px;min-height:42px;padding:0;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.07);color:var(--text);cursor:pointer}
+.dashboard-modal-close .material-symbols-outlined{font-size:20px}
+.dashboard-modal-close:focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+.dashboard-modal-shell>:not(.dashboard-modal-close){border:1px solid rgba(127,227,178,.32);border-radius:16px;background:var(--surface);box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.repair-modal{width:100%;height:min(850px,calc(100dvh - 104px))}
+.klara-ai-modal,.departure-briefing-modal,.weekly-plan-detail-modal,.lights-modal{max-height:calc(100dvh - 104px)}
+.heatpump-modal,.heatpump-modal>.heatpump-card{max-height:min(560px,calc(100dvh - 104px))}
+.vacuum-modal{max-height:calc(100dvh - 104px);overflow:auto}
+.ppf-modal{max-height:calc(100dvh - 104px)}
+.ppf-modal>header{grid-template-columns:auto minmax(0,1fr)}
+.ppf-recording-modal{width:min(1120px,calc(100vw - 36px),calc((100dvh - 104px)*16/9));aspect-ratio:16/9}
+.ppf-family-modal{height:min(820px,calc(100dvh - 104px));max-height:calc(100dvh - 104px)}
+.weekly-plan-detail-shell{width:min(1060px,100%)}
+.mykid-detail-shell{width:min(760px,100%)}
+@media(min-width:1100px){.weekly-plan-detail-shell,.mykid-detail-shell{width:min(1100px,calc(100vw - 48px))}}
+@media(max-width:1024px){.weekly-plan-detail-shell,.mykid-detail-shell{width:100%}}
+@media(max-width:700px){.departure-briefing-modal,.weekly-plan-detail-modal,.ppf-modal{max-height:calc(100dvh - 104px)}.ppf-family-modal{height:calc(100dvh - 104px);max-height:calc(100dvh - 104px)}}

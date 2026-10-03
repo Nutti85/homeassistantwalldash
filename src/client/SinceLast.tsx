@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { ActivityEvent, ActivityPayload, AwayCapture } from '../shared/activity';
 import { formatFamilyMessageDate, type FamilyMessage, type FamilyReadReceipt } from './familyInbox';
 import { ResizableCard } from './ResizableCard';
+import { DashboardModalShell } from './DashboardModalShell';
 
 const Icon = ({ children }: { children: string }) => <span className="material-symbols-outlined" aria-hidden="true">{children}</span>;
 const validTime = (value?: string) => value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : undefined;
@@ -23,7 +24,7 @@ function Loading({ rows = 1, label = 'Henter hendelser' }: { rows?: number; labe
 
 function RecordingDialog({ path, label, failed, onClose, onFailed }: { path: string; label: string; failed: boolean; onClose: () => void; onFailed: () => void }) {
   const id = useId();
-  const ref = useRef<HTMLElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
@@ -44,7 +45,7 @@ function RecordingDialog({ path, label, failed, onClose, onFailed }: { path: str
     document.addEventListener('keydown', keydown, true);
     return () => { active = false; document.removeEventListener('keydown', keydown, true); if (invoker?.isConnected) invoker.focus(); };
   }, [failed, onClose]);
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={ref} className="ppf-modal ppf-recording-modal" role="dialog" aria-modal="true" aria-labelledby={id}><header><span><Icon>videocam</Icon></span><h2 id={id}>Opptak fra {label}</h2><button ref={closeRef} type="button" aria-label="Lukk opptak" onClick={onClose}><Icon>close</Icon></button></header><div>{failed ? <p className="ppf-since-state" role="status">{expiredCopy}</p> : <><video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onPlay={() => setPlaybackBlocked(false)} onError={onFailed}/>{playbackBlocked && <p className="ppf-since-state" role="status">Avspillingen startet ikke. Prøv avspillingsknappen i videoen.</p>}</>}</div></section></div>;
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><DashboardModalShell dialogRef={ref} close={onClose} closeLabel="Lukk opptak" closeButtonRef={closeRef} labelledBy={id} width="min(1120px, calc(100vw - 36px), calc((100dvh - 104px) * 16 / 9))"><section className="ppf-modal ppf-recording-modal"><header><span><Icon>videocam</Icon></span><h2 id={id}>Opptak fra {label}</h2></header><div>{failed ? <p className="ppf-since-state" role="status">{expiredCopy}</p> : <><video ref={video} tabIndex={0} src={path} controls playsInline preload="metadata" aria-label={`Opptak fra ${label}`} onPlay={() => setPlaybackBlocked(false)} onError={onFailed}/>{playbackBlocked && <p className="ppf-since-state" role="status">Avspillingen startet ikke. Prøv avspillingsknappen i videoen.</p>}</>}</div></section></DashboardModalShell></div>;
 }
 
 function Recording({ path, thumbnail, label }: { path: string; thumbnail?: string; label: string }) {
@@ -109,7 +110,7 @@ function TimelineRows({ events }: { events: ActivityEvent[] }) {
 
 function TimelineDialog({ events, onClose }: { events: ActivityEvent[]; onClose: () => void }) {
   const id = useId();
-  const ref = useRef<HTMLElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -128,7 +129,7 @@ function TimelineDialog({ events, onClose }: { events: ActivityEvent[]; onClose:
     document.addEventListener('keydown', keydown, true);
     return () => { document.removeEventListener('focusin', contain); document.removeEventListener('keydown', keydown, true); if (invoker?.isConnected) invoker.focus(); };
   }, []);
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={ref} className="ppf-modal ppf-activity-modal" role="dialog" aria-modal="true" aria-labelledby={id}><header><span><Icon>history</Icon></span><h2 id={id}>Tidslinje</h2><button ref={closeRef} type="button" aria-label="Lukk" onClick={onClose}><Icon>close</Icon></button></header><div className="ppf-activity-modal-body" tabIndex={0}><TimelineRows events={events}/></div></section></div>;
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><DashboardModalShell dialogRef={ref} close={onClose} closeLabel="Lukk tidslinjen" closeButtonRef={closeRef} labelledBy={id} width="760px"><section className="ppf-modal ppf-activity-modal"><header><span><Icon>history</Icon></span><h2 id={id}>Tidslinje</h2></header><div className="ppf-activity-modal-body" tabIndex={0}><TimelineRows events={events}/></div></section></DashboardModalShell></div>;
 }
 
 export function ActivityTimeline({ events, loading = false }: { events: ActivityEvent[]; loading?: boolean }) {

@@ -10,6 +10,7 @@ import { WeatherChart, WeatherOverview } from './WeatherOverview';
 import { V2WeatherCard } from './V2WeatherCard';
 import { CameraCard } from './CameraCard';
 import { FamilyInboxModal, type FamilyInboxTab, type FamilyMessageFilter } from './FamilyInboxModal';
+import { DashboardModalShell } from './DashboardModalShell';
 import { familyMessages, readFamilyReceipts, setFamilyMessageRead, writeFamilyReceipts } from './familyInbox';
 import { homeworkId, isHomeworkActive, readCompletedHomework, writeCompletedHomework } from './homeworkAgenda';
 import { SinceLast, type SinceLastProps } from './SinceLast';
@@ -282,7 +283,8 @@ function PrototypeSwitcher({ scenario }: { scenario: Scenario }) {
 }
 
 function DetailModal({ detail, close, closeButtonRef }: { detail: Detail; close: () => void; closeButtonRef?: RefObject<HTMLButtonElement> }) {
-  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className={`ppf-modal ${detail.className ?? ''}`} role="dialog" aria-modal="true" aria-label={detail.title}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2><button ref={closeButtonRef} type="button" aria-label="Lukk" onClick={close}><Icon>close</Icon></button></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></div>;
+  const width = detail.className === 'ppf-camera-modal' ? '1040px' : detail.className === 'ppf-scenes-modal' ? '560px' : detail.className === 'ppf-settings-modal' ? '420px' : '640px';
+  return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><DashboardModalShell close={close} closeLabel="Lukk" closeButtonRef={closeButtonRef} ariaLabel={detail.title} width={width}><section className={`ppf-modal ${detail.className ?? ''}`}><header><span><Icon>{detail.icon}</Icon></span><h2>{detail.title}</h2></header><div>{detail.body}{detail.onComplete && <button type="button" className="ppf-homework-complete" onClick={() => { detail.onComplete?.(); close(); }}><Icon>check</Icon>Ferdig</button>}</div></section></DashboardModalShell></div>;
 }
 
 export function MainDashboardPrototype(props: PrototypeProps) {
@@ -351,6 +353,6 @@ export function MainDashboardPrototype(props: PrototypeProps) {
     {query.showScenarioControls && <PrototypeSwitcher scenario={query.scenario}/>}
     {detail && <DetailModal detail={detail} close={closeDetail}/>}
     {familyOpen && <FamilyInboxModal messages={messages} receipts={receipts} jacob={jacobWeeklyPlan(props.states.jacobWeeklyPlan)} nicolai={mykidKindergarten(props.states.mykidKindergarten)} openTab={familyTab} onTabChange={setFamilyTab} messageFilter={messageFilter} onFilterChange={setMessageFilter} selectedMessageId={selectedMessageId} onSelectMessage={setSelectedMessageId} onReadChange={(id, read) => setReceipts((current) => writeFamilyReceipts(setFamilyMessageRead(current, id, read)))} onClose={() => setFamilyOpen(false)}/>}
-    {doorbellOpen && <div className="ppf-doorbell-backdrop"><section className="ppf-doorbell-modal" role="dialog" aria-modal="true" aria-label="Noen ringer på"><header><span><i/>Ringeklokke · nå</span><button type="button" aria-label="Lukk kamera" onClick={() => setDoorbellOpen(false)}><Icon>close</Icon></button></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></div>}
+    {doorbellOpen && <div className="ppf-doorbell-backdrop"><DashboardModalShell close={() => setDoorbellOpen(false)} closeLabel="Lukk kamera" ariaLabel="Noen ringer på" width="980px"><section className="ppf-doorbell-modal"><header><span><i/>Ringeklokke · nå</span></header><img src="/api/camera/stream" alt="Direktevideo fra ringeklokke"/><footer><Icon>doorbell</Icon><span><strong>Noen ringer på</strong><small>Direkte fra Reolink</small></span></footer></section></DashboardModalShell></div>}
   </div>;
 }

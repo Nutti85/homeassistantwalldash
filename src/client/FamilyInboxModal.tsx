@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, type KeyboardEvent } from 'react';
 import type { JacobWeeklyPlanSnapshot, MyKidKindergartenSnapshot } from '../shared/entities';
 import { formatFamilyMessageDate, type FamilyMessage, type FamilyMessageSource, type FamilyReadReceipt } from './familyInbox';
+import { DashboardModalShell } from './DashboardModalShell';
 const dayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Oslo' });
 type FamilyMessageFreshness = 'today' | 'dated' | 'persistent';
 const osloWeekday = (date: Date): string => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', weekday: 'short' }).format(date);
@@ -116,7 +117,7 @@ function moveTab<Value extends string>(event: KeyboardEvent<HTMLButtonElement>, 
 // modal share one read state; person snapshots never pass through that filter.
 export function FamilyInboxModal({ messages, receipts, jacob, nicolai, openTab, onTabChange, messageFilter, onFilterChange, selectedMessageId, onSelectMessage, onReadChange, onClose }: FamilyInboxModalProps) {
   const id = useId();
-  const dialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeCallback = useRef(onClose);
   closeCallback.current = onClose;
@@ -165,8 +166,9 @@ export function FamilyInboxModal({ messages, receipts, jacob, nicolai, openTab, 
   }, [openTab, messageFilter, selected, messages]);
 
   return <div className="ppf-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className="ppf-modal ppf-family-modal" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} tabIndex={-1}>
-      <header><span className="material-symbols-outlined" aria-hidden="true">mark_email_unread</span><h2 id={`${id}-title`}>Beskjeder</h2><button ref={closeRef} type="button" aria-label="Lukk" onClick={onClose}><span className="material-symbols-outlined" aria-hidden="true">close</span></button></header>
+    <DashboardModalShell className="ppf-family-shell" dialogRef={dialogRef} close={onClose} closeLabel="Lukk" closeButtonRef={closeRef} labelledBy={`${id}-title`} tabIndex={-1} width="1100px">
+    <section className="ppf-modal ppf-family-modal">
+      <header><span className="material-symbols-outlined" aria-hidden="true">mark_email_unread</span><h2 id={`${id}-title`}>Beskjeder</h2></header>
       <div className="ppf-family-tabs" role="tablist" aria-label="Familie">
         {familyTabs.map((tab) => <button key={tab.value} type="button" role="tab" id={`${id}-tab-${tab.value}`} aria-controls={`${id}-panel-${tab.value}`} aria-selected={openTab === tab.value} tabIndex={openTab === tab.value ? 0 : -1} onClick={() => onTabChange(tab.value)} onKeyDown={(event) => moveTab(event, familyTabs.map((item) => item.value), tab.value, onTabChange)}><span>{tab.label}</span>{tab.source && <small>{tab.source}</small>}</button>)}
       </div>
@@ -191,6 +193,6 @@ export function FamilyInboxModal({ messages, receipts, jacob, nicolai, openTab, 
           </div>)}
         </> : <><p className="ppf-family-person-title">{familyDetailTitle(tab.value, jacob)}</p><FamilyDetailBody source={tab.value} jacob={jacob} nicolai={nicolai}/></>)}
       </div>)}
-    </section>
+    </section></DashboardModalShell>
   </div>;
 }
